@@ -122,9 +122,9 @@ jobs:
       - name: Telefon emulatorunde kur, cihaz sahibi yap, ekran goruntusu al
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
+          api-level: 30
           arch: x86_64
-          target: google_apis
+          target: default
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
@@ -138,7 +138,7 @@ jobs:
             adb shell am start -n app.orbit/.ui.MainActivity
             sleep 15
             adb exec-out screencap -p > shots/1-eslestirme.png
-            adb shell am start -n app.orbit/.ui.LockActivity --es reason "Günlük süren bitti" --es pkg com.android.chrome
+            adb shell am start -n app.orbit/.ui.LockActivity --es reason "'Günlük süren bitti'" --es pkg com.android.settings
             sleep 5
             adb exec-out screencap -p > shots/2-kilit.png
             adb shell dumpsys device_policy | grep -iE "Device Owner|admin=" | head -5 >> shots/owner.txt || true

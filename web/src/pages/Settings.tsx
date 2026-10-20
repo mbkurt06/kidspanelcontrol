@@ -3,6 +3,7 @@ import { useFamily } from "../lib/family";
 import { errorText, localDevice, supabase } from "../lib/supabase";
 import { relTime } from "../lib/util";
 import type { Device, ParentDevice } from "../lib/types";
+import { currentSubscription, disablePush, enablePush, isStandalone, pushSupported } from "../lib/push";
 
 type Parent = { user_id: string; email: string; display_name: string };
 type Invite = { email: string; display_name: string | null };
@@ -18,6 +19,12 @@ export default function Settings() {
   const [code, setCode] = useState("");
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
+
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  useEffect(() => {
+    currentSubscription().then((s) => setPushOn(!!s));
+  }, []);
 
   const load = useCallback(async () => {
     const [d, p, i, v] = await Promise.all([
@@ -69,6 +76,71 @@ export default function Settings() {
       </header>
       {err && <p className="error">{err}</p>}
       {msg && <p className="ok">{msg}</p>}
+
+      <div className="card">
+        <h2>Bildirimler</h2>
+        {!pushSupported() || (/iPhone|iPad/.test(navigator.userAgent) && !isStandalone()) ? (
+          <p className="muted small">
+            iPhone'da bildirim için paneli önce ana ekrana ekle (Safari → Paylaş → Ana Ekrana Ekle), sonra ana ekrandaki Orbit'ten aç ve
+            buradan bildirimleri aç.
+          </p>
+        ) : (
+          <>
+            <p className="muted small">
+              Görev tamamlanınca, süre istenince, yeni uygulama yüklenince ve telefon uzun süre çevrimdışı kalınca bu cihaza bildirim gelir.
+            </p>
+            <div className="row gap-s wrap">
+              {pushOn ? (
+                <>
+                  <span className="pill">Bu cihazda açık</span>
+                  <button
+                    className="btn small"
+                    disabled={pushBusy}
+                    onClick={async () => {
+                      const { data: u } = await supabase.auth.getUser();
+                      await supabase.from("events").insert({ family_id: fam.familyId, type: "push_test", payload: { by: u.user?.email } });
+                      setMsg("Deneme bildirimi gönderildi");
+                    }}
+                  >
+                    Deneme gönder
+                  </button>
+                  <button
+                    className="btn small ghost"
+                    disabled={pushBusy}
+                    onClick={async () => {
+                      setPushBusy(true);
+                      await disablePush();
+                      setPushOn(false);
+                      setPushBusy(false);
+                    }}
+                  >
+                    Kapat
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="btn primary"
+                  disabled={pushBusy}
+                  onClick={async () => {
+                    setPushBusy(true);
+                    setErr("");
+                    try {
+                      await enablePush(fam.familyId!);
+                      setPushOn(true);
+                      setMsg("Bildirimler açıldı");
+                    } catch (e) {
+                      setErr(errorText(e));
+                    }
+                    setPushBusy(false);
+                  }}
+                >
+                  Bildirimleri aç
+                </button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
 
       <div className="card">
         <h2>Ebeveyn cihazları</h2>

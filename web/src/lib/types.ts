@@ -148,3 +148,88 @@ export const GROUP_HINT: Record<AppGroup, string> = {
 
 export const WEEKDAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 export const WEEKDAYS_LONG = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi", "Pazar"];
+
+// --- Aşama 2: görevler ---
+
+export type ProofType = "none" | "photo" | "video" | "photo_or_video";
+export type RewardValidity = "today" | "tomorrow" | "date" | "wallet";
+
+export type TaskTemplate = {
+  id: string;
+  family_id: string;
+  title: string;
+  description: string | null;
+  proof: ProofType;
+  before_after: boolean;
+  reward_minutes: number | null;
+  reward_text: string | null;
+  reward_validity: RewardValidity;
+  reward_expires_days: number | null;
+  mandatory: boolean;
+};
+
+export type Task = TaskTemplate & {
+  template_id: string | null;
+  child_ids: string[];
+  assign_mode: "each" | "first";
+  recurrence: "once" | "days";
+  days: number[];
+  start_date: string;
+  end_date: string | null;
+  due_date: string | null;
+  due_time: string | null;
+  reward_date: string | null;
+  active: boolean;
+  created_at: string;
+};
+
+export type RunStatus = "open" | "started" | "submitted" | "approved" | "rejected" | "claimed" | "expired";
+
+export type TaskRun = {
+  id: string;
+  task_id: string;
+  child_id: string;
+  day: string;
+  status: RunStatus;
+  submitted_at: string | null;
+  decided_at: string | null;
+  reject_note: string | null;
+  attempts: number;
+  granted_minutes: number | null;
+  reward_text: string | null;
+  reward_delivered_at: string | null;
+};
+
+export type TaskProof = {
+  id: string;
+  run_id: string;
+  stage: "before" | "after" | "single";
+  media: "photo" | "video";
+  path: string;
+  attempt: number;
+  removed_at: string | null;
+};
+
+export const PROOF_LABEL: Record<ProofType, string> = {
+  none: "Kanıt yok",
+  photo: "Foto",
+  video: "Video",
+  photo_or_video: "Foto veya video",
+};
+
+export const VALIDITY_LABEL: Record<RewardValidity, string> = {
+  today: "Bugün",
+  tomorrow: "Yarın",
+  date: "Belirli gün",
+  wallet: "Çocuk istediği gün kullanır",
+};
+
+export const STATUS_LABEL: Record<RunStatus, string> = {
+  open: "Bekliyor",
+  started: "Başladı",
+  submitted: "Onay bekliyor",
+  approved: "Onaylandı",
+  rejected: "Tekrar yapmalı",
+  claimed: "Kardeşi yaptı",
+  expired: "Süresi doldu",
+};

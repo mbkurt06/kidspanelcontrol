@@ -36,6 +36,8 @@ function text(type: string, child: string, p: Record<string, unknown>): { title:
       return { title: `${child} telefonu çevrimdışı`, body: "1 saattir bağlantı yok (kapalı veya internetsiz olabilir)", url: "/#/" };
     case "device_paired":
       return { title: "Cihaz eşleşti", body: `${child ? child + " — " : ""}${s("label") || s("model")}`, url: "/#/" };
+    case "push_test":
+      return { title: "Orbit", body: "Bildirimler bu cihazda çalışıyor.", url: "/#/settings" };
     default:
       return { title: "Orbit", body: type, url: "/#/events" };
   }

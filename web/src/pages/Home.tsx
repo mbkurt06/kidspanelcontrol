@@ -20,7 +20,12 @@ export default function Home() {
     <div className="page">
       <header className="page-head">
         <h1>Orbit</h1>
-        {fam.unreadEvents > 0 && (
+        {fam.pendingApprovals > 0 && (
+          <Link to="/tasks" className="pill accent">
+            {fam.pendingApprovals} görev onay bekliyor
+          </Link>
+        )}
+        {fam.pendingApprovals === 0 && fam.unreadEvents > 0 && (
           <Link to="/events" className="pill accent">
             {fam.unreadEvents} yeni olay
           </Link>

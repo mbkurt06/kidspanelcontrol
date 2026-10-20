@@ -11,6 +11,8 @@ import ProfileEdit from "./pages/ProfileEdit";
 import ModeEdit from "./pages/ModeEdit";
 import Events from "./pages/Events";
 import Settings from "./pages/Settings";
+import Tasks from "./pages/Tasks";
+import TaskEdit from "./pages/TaskEdit";
 import { Icon } from "./components/Icon";
 import { consumeKeyFromUrl, hasAccess, rememberAccess, tryKey } from "./lib/accessKey";
 
@@ -170,6 +172,9 @@ function Shell() {
           <Route path="/rules" element={<Rules />} />
           <Route path="/rules/profile/:id" element={<ProfileEdit />} />
           <Route path="/rules/mode/:id" element={<ModeEdit />} />
+          <Route path="/tasks" element={<Tasks />} />
+          <Route path="/tasks/new" element={<TaskEdit />} />
+          <Route path="/tasks/:id" element={<TaskEdit />} />
           <Route path="/events" element={<Events />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
@@ -178,6 +183,10 @@ function Shell() {
         <NavLink to="/" end>
           <Icon name="home" />
           <span>Ana sayfa</span>
+        </NavLink>
+        <NavLink to="/tasks">
+          <Icon name="tasks" />
+          <span>Görevler</span>
         </NavLink>
         <NavLink to="/rules">
           <Icon name="rules" />

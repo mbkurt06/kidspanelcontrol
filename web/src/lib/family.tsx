@@ -10,6 +10,7 @@ type FamilyData = {
   slots: ModeSlot[];
   statuses: Record<string, DeviceStatus>;
   unreadEvents: number;
+  pendingApprovals: number;
   loading: boolean;
   reload: () => Promise<void>;
 };
@@ -25,12 +26,13 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
     slots: [],
     statuses: {},
     unreadEvents: 0,
+    pendingApprovals: 0,
     loading: true,
   });
 
   const reload = useCallback(async () => {
     supabase.rpc("touch_parent_device").then(() => {});
-    const [fam, ch, pr, mo, sl, st, ev] = await Promise.all([
+    const [fam, ch, pr, mo, sl, st, ev, ap] = await Promise.all([
       supabase.from("families").select("id").limit(1).maybeSingle(),
       supabase.from("children").select("*").order("sort_order").order("created_at"),
       supabase.from("rule_profiles").select("*").order("created_at"),
@@ -38,6 +40,7 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
       supabase.from("mode_slots").select("*").order("start_time"),
       supabase.from("device_status").select("*"),
       supabase.from("events").select("id", { count: "exact", head: true }).is("read_at", null),
+      supabase.from("task_runs").select("id", { count: "exact", head: true }).eq("status", "submitted"),
     ]);
     const statuses: Record<string, DeviceStatus> = {};
     for (const s of (st.data ?? []) as DeviceStatus[]) statuses[s.child_id] = s;
@@ -49,6 +52,7 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
       slots: (sl.data ?? []) as ModeSlot[],
       statuses,
       unreadEvents: ev.count ?? 0,
+      pendingApprovals: ap.count ?? 0,
       loading: false,
     });
   }, []);

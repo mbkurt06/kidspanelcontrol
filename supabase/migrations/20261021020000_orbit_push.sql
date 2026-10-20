@@ -72,7 +72,7 @@ language plpgsql security definer set search_path = ''
 as $$
 begin
   if new.type in ('task_submitted', 'time_request', 'app_installed', 'parent_device_pending',
-                  'device_owner_lost', 'offline_long', 'device_paired') then
+                  'device_owner_lost', 'offline_long', 'device_paired', 'push_test') then
     perform orbit.call_function('orbit-push', jsonb_build_object('event_id', new.id));
   end if;
   return new;

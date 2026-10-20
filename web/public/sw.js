@@ -1,6 +1,6 @@
-// Orbit ebeveyn paneli — basit service worker.
-// Uygulama kabuğunu ağdan alır, ağ yoksa son önbelleğe düşer. Veri (Supabase) asla önbelleğe alınmaz.
-const CACHE = "orbit-shell-v1";
+// Orbit ebeveyn paneli — service worker: uygulama kabuğu + bildirimler.
+// Veri (Supabase) asla önbelleğe alınmaz.
+const CACHE = "orbit-shell-v2";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => {
   e.waitUntil(
@@ -18,5 +18,39 @@ self.addEventListener("fetch", (e) => {
         return res;
       })
       .catch(() => caches.match(e.request).then((r) => r || caches.match("/")))
+  );
+});
+
+self.addEventListener("push", (e) => {
+  let d = {};
+  try {
+    d = e.data ? e.data.json() : {};
+  } catch (_) {
+    d = { title: "Orbit", body: e.data ? e.data.text() : "" };
+  }
+  e.waitUntil(
+    self.registration.showNotification(d.title || "Orbit", {
+      body: d.body || "",
+      tag: d.tag,
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      data: { url: d.url || "/" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  const target = new URL((e.notification.data && e.notification.data.url) || "/", self.location.origin).href;
+  e.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if ("focus" in c) {
+          c.navigate(target).catch(() => {});
+          return c.focus();
+        }
+      }
+      return self.clients.openWindow(target);
+    })
   );
 });

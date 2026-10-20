@@ -21,7 +21,7 @@ export default function Settings() {
 
   const load = useCallback(async () => {
     const [d, p, i, v] = await Promise.all([
-      supabase.from("parent_devices").select("*").order("created_at", { ascending: false }),
+      supabase.from("parent_devices").select("*").is("removed_at", null).order("created_at", { ascending: false }),
       supabase.from("parents").select("user_id, email, display_name"),
       supabase.from("allowed_parents").select("email, display_name"),
       supabase.from("devices").select("*").eq("kind", "viewer").order("created_at", { ascending: false }),

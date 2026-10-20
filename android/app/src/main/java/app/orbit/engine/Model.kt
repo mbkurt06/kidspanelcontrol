@@ -106,6 +106,8 @@ data class Rules(
     val overrides: List<DayOverride> = emptyList(),
     val grants: List<Grant> = emptyList(),
     val commands: List<Command> = emptyList(),
+    /** Bugün yapılmamış zorunlu görevler (başlıkları). Bitmeden süreli uygulamalar açılmaz. */
+    val mandatoryOpen: List<String> = emptyList(),
 )
 
 /** Telefonda gün boyunca tutulan sayaçlar (saniye). Gece yarısı sıfırlanır. */

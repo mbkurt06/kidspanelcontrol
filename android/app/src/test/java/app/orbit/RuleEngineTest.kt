@@ -238,4 +238,17 @@ class RuleEngineTest {
         val e = RuleEngine(rules().copy(assignments = emptyMap()))
         assertEquals(60, e.snapshot(at(12), DayUsage(day)).allowanceMinutes)
     }
+
+    @Test
+    fun mandatoryTaskBlocksTimedApps() {
+        val e = RuleEngine(rules().copy(mandatoryOpen = listOf("Ödevini yap")))
+        val u = DayUsage(day)
+        val s = e.snapshot(at(15), u)
+        val v = e.verdict("com.insta", s, u)
+        assertFalse(v.allowed)
+        assertEquals("Önce görevini yap: Ödevini yap", v.reason)
+        // Sınırsız ve her zaman açık uygulamalar etkilenmez
+        assertTrue(e.verdict("com.wa", s, u).allowed)
+        assertTrue(e.verdict("com.phone", s, u).allowed)
+    }
 }

@@ -24,6 +24,8 @@ object Sync {
         val child = enc(c.childId)
         return runCatching {
             val fam = Api.get("families?select=timezone&limit=1")
+            val tz = fam.optJSONObject(0)?.optString("timezone") ?: "Europe/Berlin"
+            val today = java.time.LocalDate.now(java.time.ZoneId.of(tz)).toString()
             val kid = Api.get("children?select=name&id=eq.$child")
             val bundle = JSONObject()
                 .put("timezone", fam.optJSONObject(0)?.optString("timezone") ?: "Europe/Berlin")
@@ -35,6 +37,7 @@ object Sync {
                 .put("overrides", Api.get("day_overrides?child_id=eq.$child&select=*"))
                 .put("grants", Api.get("time_grants?child_id=eq.$child&select=*&order=created_at.desc&limit=100"))
                 .put("commands", Api.get("commands?child_id=eq.$child&select=*&order=created_at.desc&limit=60"))
+                .put("tasks", runCatching { JSONArray(Api.rpc("device_tasks", JSONObject().put("p_day", today))) }.getOrElse { JSONArray() })
             Store.rulesJson = bundle.toString()
             kid.optJSONObject(0)?.optString("name")?.let { Store.childName = it }
             Store.lastSync = System.currentTimeMillis()
@@ -105,6 +108,19 @@ object Sync {
             )
         }
         Api.post("usage_daily?on_conflict=child_id,day,package", arr, upsert = true)
+    }
+
+    /** Kanıt dosyasını yükler ve görev kaydına ekler. */
+    fun uploadProof(runId: String, stage: String, media: String, bytes: ByteArray, contentType: String) {
+        val c = Store.creds ?: throw Api.ApiError(401, "Eşleşmemiş")
+        val ext = if (media == "video") "mp4" else "jpg"
+        val path = "${c.familyId}/$runId/${stage}-${System.currentTimeMillis()}.$ext"
+        Api.upload("orbit-proofs", path, bytes, contentType)
+        Api.rpc("device_add_proof", JSONObject().put("p_run", runId).put("p_stage", stage).put("p_media", media).put("p_path", path))
+    }
+
+    fun submitTask(runId: String) {
+        Api.rpc("device_submit_run", JSONObject().put("p_run", runId))
     }
 
     fun activateGrant(id: String, day: String): Boolean =

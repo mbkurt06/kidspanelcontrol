@@ -114,5 +114,23 @@ object Api {
         exec(rest(path).header("Prefer", "return=minimal").patch(body.toString().toRequestBody(JSON)).build())
     }
 
+    /** Storage'a dosya yükler (çocuk telefonu sadece kendi görev klasörüne yazabilir). */
+    fun upload(bucket: String, path: String, bytes: ByteArray, contentType: String) {
+        val req = Request.Builder()
+            .url("$base/storage/v1/object/$bucket/$path")
+            .header("apikey", key)
+            .header("Authorization", "Bearer ${token()}")
+            .header("x-upsert", "false")
+            .post(bytes.toRequestBody(contentType.toMediaType()))
+            .build()
+        uploadClient.newCall(req).execute().use { r ->
+            if (!r.isSuccessful) throw ApiError(r.code, "Yükleme başarısız (${r.code})")
+        }
+    }
+
+    private val uploadClient: OkHttpClient by lazy {
+        http.newBuilder().writeTimeout(120, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS).build()
+    }
+
     fun rpc(fn: String, body: JSONObject): String = exec(rest("rpc/$fn").post(body.toString().toRequestBody(JSON)).build())
 }

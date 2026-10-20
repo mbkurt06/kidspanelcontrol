@@ -58,9 +58,11 @@ object Policy {
         // Saat her zaman ağdan alınsın (saati geri alarak süre kazanılamasın)
         if (Build.VERSION.SDK_INT >= 30) runCatching { d.setAutoTimeEnabled(a, true) }
         else @Suppress("DEPRECATION") runCatching { d.setAutoTimeRequired(a, true) }
-        // Bildirim izni kendiliğinden verilsin
-        if (Build.VERSION.SDK_INT >= 33) runCatching {
-            d.setPermissionGrantState(a, ctx.packageName, "android.permission.POST_NOTIFICATIONS", DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED)
+        // Bildirim, kamera ve mikrofon (görev kanıtı) izinleri kendiliğinden verilsin
+        val perms = mutableListOf("android.permission.CAMERA", "android.permission.RECORD_AUDIO")
+        if (Build.VERSION.SDK_INT >= 33) perms += "android.permission.POST_NOTIFICATIONS"
+        for (perm in perms) runCatching {
+            d.setPermissionGrantState(a, ctx.packageName, perm, DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED)
         }
     }
 

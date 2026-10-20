@@ -118,6 +118,13 @@ private fun LockScreen(reason: String, pkg: String?, onHome: () -> Unit) {
             modifier = Modifier.fillMaxWidth().height(52.dp),
             colors = ButtonDefaults.buttonColors(containerColor = C.accent),
         ) { Text(if (sent) "İstek gönderildi" else "Ebeveynden süre iste") }
+        if (reason.startsWith("Önce görevini yap")) {
+            Button(
+                onClick = { ctx.startActivity(android.content.Intent(ctx, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) },
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = C.blue),
+            ) { Text("Görevlerime git") }
+        }
         OutlinedButton(onClick = onHome, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Ana ekrana dön") }
     }
 }

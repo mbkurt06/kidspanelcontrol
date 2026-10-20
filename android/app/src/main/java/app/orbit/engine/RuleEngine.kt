@@ -149,6 +149,8 @@ class RuleEngine(private val rules: Rules) {
         )
     }
 
+    private fun mandatoryReason() = "Önce görevini yap: ${rules.mandatoryOpen.first()}"
+
     private fun inWindows(ws: List<TimeWindow>, t: LocalTime) = ws.isEmpty() || ws.any { it.contains(t) }
 
     fun verdict(pkg: String, s: Snapshot, usage: DayUsage): AppVerdict {
@@ -169,6 +171,7 @@ class RuleEngine(private val rules: Rules) {
                 val budgetLeft = s.modeRemainingSeconds?.let { it > 0 } ?: true
                 if (budgetLeft) {
                     val countsDaily = mode.countsTowardDaily && group != Group.UNLIMITED
+                    if (countsDaily && rules.mandatoryOpen.isNotEmpty()) return AppVerdict(false, mandatoryReason())
                     if (countsDaily && s.remainingSeconds <= 0) return AppVerdict(false, "Günlük süren bitti")
                     return AppVerdict(true, countsDaily = countsDaily, countsMode = if (mode.budgetMinutes != null) mode.id else null)
                 }
@@ -187,6 +190,7 @@ class RuleEngine(private val rules: Rules) {
                 else AppVerdict(false, "Bu saatlerde kapalı")
             Group.TIMED -> {
                 if (!inWindows(s.profile.timedWindows, s.now)) return AppVerdict(false, "Bu saatlerde kapalı")
+                if (rules.mandatoryOpen.isNotEmpty()) return AppVerdict(false, mandatoryReason())
                 if (s.remainingSeconds <= 0) return AppVerdict(false, "Günlük süren bitti")
                 val limit = app?.dailyLimitMinutes
                 if (limit != null && (usage.perAppCounted[pkg] ?: 0) >= limit * 60L) return AppVerdict(false, "Bu uygulamanın günlük sınırı doldu")

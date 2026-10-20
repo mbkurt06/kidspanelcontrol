@@ -45,6 +45,7 @@ import app.orbit.BuildConfig
 import app.orbit.data.Api
 import app.orbit.data.Store
 import app.orbit.data.Sync
+import app.orbit.data.Tasks
 import app.orbit.device.Policy
 import app.orbit.service.Live
 import app.orbit.service.OrbitService
@@ -191,6 +192,9 @@ private fun HomeScreen() {
                 }
             }
         }
+
+        val tasks = remember(live.lastSync, live.snapshot?.now?.minute) { Tasks.current() }
+        if (tasks.isNotEmpty() || Store.rulesJson != null) TasksCard(tasks)
 
         if (s.walletGrants.isNotEmpty()) {
             Card {

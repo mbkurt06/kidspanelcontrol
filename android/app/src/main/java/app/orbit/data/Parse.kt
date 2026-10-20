@@ -111,6 +111,7 @@ object Parse {
         overrides = overrides(b.optJSONArray("overrides") ?: JSONArray()),
         grants = grants(b.optJSONArray("grants") ?: JSONArray()),
         commands = commands(b.optJSONArray("commands") ?: JSONArray()),
+        mandatoryOpen = Tasks.parse(b.optJSONArray("tasks")).filter { it.blocking }.map { it.title },
     )
 
     // --- Gün sayaçları ---

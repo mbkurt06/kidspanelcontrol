@@ -57,7 +57,8 @@ object C {
 fun OrbitTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
-            primary = C.accent, background = C.bg, surface = C.surface, onSurface = C.text, onBackground = C.text,
+            primary = C.accent, onPrimary = Color.White, background = C.bg, surface = C.surface, onSurface = C.text, onBackground = C.text,
+            surfaceVariant = C.surface2, onSurfaceVariant = C.muted, outline = C.line,
         ),
         content = content,
     )

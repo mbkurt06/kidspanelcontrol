@@ -24,7 +24,9 @@ export default function ChildPage() {
           <Icon name="back" />
         </Link>
         <h1>{child.name}</h1>
-        <span />
+        <Link to={`/child/${child.id}/vault`} className="btn small">
+          <Icon name="key" size={16} /> Şifreler
+        </Link>
       </header>
       <div className="segmented">
         {(

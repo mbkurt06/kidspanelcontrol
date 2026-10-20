@@ -15,6 +15,7 @@ const PATHS: Record<string, string> = {
   clock: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2",
   play: "M8 5v14l11-7z",
   stop: "M7 7h10v10H7z",
+  key: "M14 10a4 4 0 1 0-3.5 3.97L9 15.5V18H6.5v2.5H4V18l6.03-6.03A4 4 0 0 0 14 10zM15.5 8.5h.01",
   tasks: "M9 6h11M9 12h11M9 18h11M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2",
 };
 

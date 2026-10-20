@@ -13,6 +13,7 @@ import Events from "./pages/Events";
 import Settings from "./pages/Settings";
 import Tasks from "./pages/Tasks";
 import TaskEdit from "./pages/TaskEdit";
+import Vault from "./pages/Vault";
 import { Icon } from "./components/Icon";
 import { consumeKeyFromUrl, hasAccess, rememberAccess, tryKey } from "./lib/accessKey";
 
@@ -169,6 +170,7 @@ function Shell() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/child/:id" element={<ChildPage />} />
+          <Route path="/child/:id/vault" element={<Vault />} />
           <Route path="/rules" element={<Rules />} />
           <Route path="/rules/profile/:id" element={<ProfileEdit />} />
           <Route path="/rules/mode/:id" element={<ModeEdit />} />

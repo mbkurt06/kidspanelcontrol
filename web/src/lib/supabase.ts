@@ -44,13 +44,11 @@ export function selectDeviceFor(userId: string): LocalDevice {
   const m = readMap();
   let d = m[userId];
   if (!d) {
-    // Eski sürümden kalan tek cihaz kaydı varsa ilk giriş yapan hesap onu devralır.
+    // Eski sürümden kalan tek cihaz kaydı varsa önce onu dene; sunucu bu hesaba ait olduğunu
+    // doğrularsa (confirmDevice) devralınır, başka hesaba aitse sıradaki hesap için bekler.
     try {
       const legacy = localStorage.getItem(LEGACY_KEY);
-      if (legacy) {
-        d = JSON.parse(legacy) as LocalDevice;
-        localStorage.removeItem(LEGACY_KEY);
-      }
+      if (legacy) d = JSON.parse(legacy) as LocalDevice;
     } catch {
       /* boş */
     }
@@ -60,6 +58,16 @@ export function selectDeviceFor(userId: string): LocalDevice {
   }
   current = d;
   return d;
+}
+
+/** Sunucu cihazı bu hesap için kabul etti: eski tekil kayıt artık bu hesaba ait. */
+export function confirmDevice(userId: string) {
+  try {
+    const legacy = localStorage.getItem(LEGACY_KEY);
+    if (legacy && (JSON.parse(legacy) as LocalDevice).id === readMap()[userId]?.id) localStorage.removeItem(LEGACY_KEY);
+  } catch {
+    /* boş */
+  }
 }
 
 /** Bu cihaz kimliği başka bir hesaba aitse yenisini üretir. */

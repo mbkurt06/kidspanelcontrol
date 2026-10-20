@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
-import { deviceLabel, errorText, renewDeviceFor, selectDeviceFor, supabase } from "./lib/supabase";
+import { confirmDevice, deviceLabel, errorText, renewDeviceFor, selectDeviceFor, supabase } from "./lib/supabase";
 import { FamilyProvider } from "./lib/family";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
@@ -102,6 +102,7 @@ function DeviceGate({ userId, email }: { userId: string; email: string }) {
         setGate("error");
         return;
       }
+      confirmDevice(userId);
       setGate(data as Gate);
       if (data === "approved") {
         supabase.rpc("touch_parent_device");

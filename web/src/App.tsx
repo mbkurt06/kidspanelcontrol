@@ -105,7 +105,7 @@ function DeviceGate({ userId, email }: { userId: string; email: string }) {
       confirmDevice(userId);
       setGate(data as Gate);
       if (data === "approved") {
-        supabase.rpc("touch_parent_device");
+        supabase.rpc("touch_parent_device").then(() => {});
       } else if (data === "pending") {
         t = setTimeout(check, 5000);
       }

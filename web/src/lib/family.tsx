@@ -29,6 +29,7 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
   });
 
   const reload = useCallback(async () => {
+    supabase.rpc("touch_parent_device").then(() => {});
     const [fam, ch, pr, mo, sl, st, ev] = await Promise.all([
       supabase.from("families").select("id").limit(1).maybeSingle(),
       supabase.from("children").select("*").order("sort_order").order("created_at"),

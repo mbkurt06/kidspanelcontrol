@@ -89,6 +89,7 @@ class OrbitService : Service() {
     private var lastPull = 0L
     private var lastPush = 0L
     private var firstRun = true
+    @Volatile private var lastVault = 0L
     private val netBusy = java.util.concurrent.atomic.AtomicBoolean(false)
     private val pushBusy = java.util.concurrent.atomic.AtomicBoolean(false)
     private var lastLockLaunch = 0L
@@ -182,6 +183,11 @@ class OrbitService : Service() {
                 try {
                     if (report) Sync.reportApps(this@OrbitService, initial = true)
                     Sync.pullRules()
+                    // Şifre kasası: sahip kaydı ve yeni ebeveyn cihazlarına anahtar paylaşımı (10 dk'da bir)
+                    if (System.currentTimeMillis() - lastVault > 10 * 60_000L) {
+                        lastVault = System.currentTimeMillis()
+                        runCatching { app.orbit.data.Vault.open() }
+                    }
                 } finally {
                     netBusy.set(false)
                 }

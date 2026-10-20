@@ -217,6 +217,12 @@ private fun HomeScreen() {
             }
         }
 
+        Button(
+            onClick = { ctx.startActivity(Intent(ctx, VaultActivity::class.java)) },
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = C.surface2),
+        ) { Text("Şifrelerim", color = C.text) }
+
         Card {
             Title("Şu an açık")
             if (live.allowedApps.isEmpty()) Muted("Şu an açık uygulama yok.")

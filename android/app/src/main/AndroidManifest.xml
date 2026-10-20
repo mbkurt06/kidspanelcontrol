@@ -47,6 +47,12 @@
             android:taskAffinity="app.orbit.lock" />
 
         <activity
+            android:name=".ui.VaultActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".ui.CaptureActivity"
             android:exported="false"
             android:screenOrientation="portrait"

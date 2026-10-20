@@ -27,9 +27,9 @@ object Parse {
 
     fun time(s: String): LocalTime = LocalTime.parse(if (s.length == 5) s else s.substring(0, 8))
     fun date(s: String?): LocalDate? = s?.takeIf { it.isNotBlank() }?.let { LocalDate.parse(it.substring(0, 10)) }
-    fun ts(s: String?): Long? = s?.takeIf { it.isNotBlank() }?.let {
-        runCatching { OffsetDateTime.parse(it).toInstant().toEpochMilli() }
-            .getOrElse { Instant.parse(it).toEpochMilli() }
+    fun ts(s: String?): Long? = s?.takeIf { it.isNotBlank() }?.let { v ->
+        runCatching { OffsetDateTime.parse(v).toInstant().toEpochMilli() }
+            .getOrElse { Instant.parse(v).toEpochMilli() }
     }
 
     private fun strings(a: JSONArray?): List<String> = (0 until (a?.length() ?: 0)).map { a!!.optString(it) }

@@ -42,6 +42,13 @@ export default function Settings() {
     load();
   }
 
+  async function removeDevice(id: string) {
+    if (!confirm("Bu cihaz listeden tamamen silinsin mi?")) return;
+    const { error } = await supabase.rpc("delete_parent_device", { p_device_id: id });
+    if (error) setErr(errorText(error));
+    load();
+  }
+
   async function invite() {
     setErr("");
     setMsg("");
@@ -88,9 +95,14 @@ export default function Settings() {
               </button>
             )}
             {d.status === "revoked" && (
-              <button className="btn small" onClick={() => setStatus(d.id, "approved")}>
-                Geri ver
-              </button>
+              <>
+                <button className="btn small" onClick={() => setStatus(d.id, "approved")}>
+                  Geri ver
+                </button>
+                <button className="btn small danger-text" onClick={() => removeDevice(d.id)}>
+                  Sil
+                </button>
+              </>
             )}
           </div>
         ))}

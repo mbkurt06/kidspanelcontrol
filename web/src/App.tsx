@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import { deviceLabel, errorText, localDevice, supabase } from "./lib/supabase";
@@ -12,21 +12,59 @@ import ModeEdit from "./pages/ModeEdit";
 import Events from "./pages/Events";
 import Settings from "./pages/Settings";
 import { Icon } from "./components/Icon";
+import { consumeKeyFromUrl, hasAccess, rememberAccess, tryKey } from "./lib/accessKey";
 
 type Gate = "loading" | "pending" | "revoked" | "approved" | "error";
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
+  const [access, setAccess] = useState(hasAccess());
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
+    consumeKeyFromUrl().then((ok) => ok && setAccess(true));
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        rememberAccess();
+        setAccess(true);
+      }
+      setSession(data.session);
+    });
     const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => data.subscription.unsubscribe();
   }, []);
 
-  if (session === undefined) return <Splash />;
-  if (!session) return <Login />;
+  if (session === undefined) return access ? <Splash /> : <Blank onUnlock={() => setAccess(true)} />;
+  if (!session) return access ? <Login /> : <Blank onUnlock={() => setAccess(true)} />;
   return <DeviceGate key={session.user.id} email={session.user.email ?? ""} />;
+}
+
+// Anahtarı bilmeyen ziyaretçi sadece boş bir sayfa görür.
+// Gizli giriş: ekranın sol üst köşesine 3 saniye basılı tut → anahtar alanı açılır.
+function Blank({ onUnlock }: { onUnlock: () => void }) {
+  const [show, setShow] = useState(false);
+  const [k, setK] = useState("");
+  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const start = () => {
+    timer.current = setTimeout(() => setShow(true), 3000);
+  };
+  const stop = () => timer.current && clearTimeout(timer.current);
+  return (
+    <div className="blank">
+      <div className="blank-corner" onPointerDown={start} onPointerUp={stop} onPointerLeave={stop} onContextMenu={(e) => e.preventDefault()} />
+      {show && (
+        <form
+          className="blank-form"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (await tryKey(k)) onUnlock();
+            else setK("");
+          }}
+        >
+          <input type="password" value={k} onChange={(e) => setK(e.target.value)} autoFocus autoComplete="off" aria-label="Anahtar" />
+        </form>
+      )}
+    </div>
+  );
 }
 
 function Splash() {

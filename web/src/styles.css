@@ -529,3 +529,26 @@ select:focus {
   color: var(--good);
   font-size: 14px;
 }
+
+/* Anahtarsız ziyaretçi için boş sayfa */
+.blank {
+  min-height: 100dvh;
+  background: var(--bg);
+  position: relative;
+}
+.blank-corner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 96px;
+  height: 96px;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+.blank-form {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 220px;
+}

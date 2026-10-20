@@ -225,7 +225,10 @@ class OrbitService : Service() {
         val maintenance = rules.commands.any {
             it.type == CommandType.RESYNC && it.maintenance && !it.cancelled && (it.untilAt ?: 0) > nowMs
         }
-        if (firstRun || nowMs - lastPush > 60_000) Policy.applyBase(this, maintenance)
+        if (firstRun || nowMs - lastPush > 60_000) {
+            Policy.applyBase(this, maintenance)
+            checkOwner()
+        }
         val launchables = Policy.launchables(this)
         val allowed = mutableListOf<Pair<String, String>>()
         val suspend = mutableSetOf<String>()
@@ -277,6 +280,18 @@ class OrbitService : Service() {
             scope.launch(Dispatchers.IO) { Updater.check(this@OrbitService) }
         }
         firstRun = false
+    }
+
+    /** Orbit yönetici yetkisini kaybederse ebeveyne bir kez haber ver. */
+    private fun checkOwner() {
+        val owner = Policy.isOwner(this)
+        val prefs = Store.prefs()
+        val was = prefs.getBoolean("wasOwner", false)
+        if (owner && !was) prefs.edit().putBoolean("wasOwner", true).apply()
+        if (!owner && was) {
+            prefs.edit().putBoolean("wasOwner", false).apply()
+            scope.launch(Dispatchers.IO) { Sync.event("device_owner_lost", org.json.JSONObject()) }
+        }
     }
 
     private fun updateForeground(nowMs: Long) {

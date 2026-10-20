@@ -7,7 +7,7 @@ import { dateText, minutesText, relTime, todayISO } from "../lib/util";
 import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type DayOverride, type Device, type TimeGrant } from "../lib/types";
 import { Icon } from "../components/Icon";
 
-type Tab = "apps" | "program" | "time" | "device";
+type Tab = "apps" | "program" | "time" | "report" | "device";
 
 export default function ChildPage() {
   const { id } = useParams();
@@ -32,6 +32,7 @@ export default function ChildPage() {
             ["apps", "Uygulamalar"],
             ["program", "Program"],
             ["time", "Süre"],
+            ["report", "Rapor"],
             ["device", "Telefon"],
           ] as [Tab, string][]
         ).map(([k, l]) => (
@@ -43,6 +44,7 @@ export default function ChildPage() {
       {tab === "apps" && <AppsTab childId={child.id} />}
       {tab === "program" && <ProgramTab childId={child.id} />}
       {tab === "time" && <TimeTab childId={child.id} />}
+      {tab === "report" && <ReportTab childId={child.id} />}
       {tab === "device" && <DeviceTab childId={child.id} />}
     </div>
   );
@@ -540,6 +542,38 @@ function DeviceTab({ childId }: { childId: string }) {
         )}
       </div>
       <div className="card">
+        <h2>Bakım</h2>
+        <p className="muted small">
+          Telefonu bilgisayara bağlayıp bakım yapman gerekirse geliştirici seçeneklerini ve USB hata ayıklamayı geçici olarak açar.
+          Süre bitince kendiliğinden kapanır.
+        </p>
+        <div className="row gap-s wrap">
+          <button
+            className="btn"
+            onClick={async () => {
+              try {
+                await sendCommand(childId, "resync", { maintenance: true }, new Date(Date.now() + 60 * 60000).toISOString());
+                setErr("");
+                alert("Bakım modu 1 saatliğine açılıyor (telefon 30 sn içinde alır).");
+              } catch (e) {
+                setErr(errorText(e));
+              }
+            }}
+          >
+            Bakım modu (1 saat)
+          </button>
+          <button
+            className="btn ghost"
+            onClick={async () => {
+              await sendCommand(childId, "resync", { maintenance: false }).catch(() => {});
+            }}
+          >
+            Kuralları hemen gönder
+          </button>
+        </div>
+      </div>
+
+      <div className="card">
         <h2>Eşleşen telefonlar</h2>
         {!devices.length && <p className="muted small">Henüz telefon yok.</p>}
         {devices.map((d) => (
@@ -601,6 +635,73 @@ function DeviceTab({ childId }: { childId: string }) {
         >
           Çocuğu sil
         </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+type UsageRow = { day: string; package: string; minutes: number; counted_minutes: number };
+
+function ReportTab({ childId }: { childId: string }) {
+  const [rows, setRows] = useState<UsageRow[]>([]);
+  const [labels, setLabels] = useState<Record<string, string>>({});
+  const [day, setDay] = useState(todayISO());
+
+  useEffect(() => {
+    (async () => {
+      const since = todayISO("Europe/Berlin", -6);
+      const [u, a] = await Promise.all([
+        supabase.from("usage_daily").select("day, package, minutes, counted_minutes").eq("child_id", childId).gte("day", since),
+        supabase.from("child_apps").select("package, label").eq("child_id", childId),
+      ]);
+      setRows((u.data ?? []) as UsageRow[]);
+      setLabels(Object.fromEntries(((a.data ?? []) as { package: string; label: string }[]).map((x) => [x.package, x.label])));
+    })();
+  }, [childId]);
+
+  const days = Array.from({ length: 7 }, (_, i) => todayISO("Europe/Berlin", i - 6));
+  const totals = days.map((d) => ({
+    d,
+    total: rows.filter((r) => r.day === d).reduce((a, r) => a + r.minutes, 0),
+    counted: rows.filter((r) => r.day === d).reduce((a, r) => a + r.counted_minutes, 0),
+  }));
+  const max = Math.max(60, ...totals.map((t) => t.total));
+  const dayRows = rows.filter((r) => r.day === day && r.minutes > 0).sort((a, b) => b.minutes - a.minutes);
+  const short = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("tr-TR", { weekday: "short" });
+
+  return (
+    <div className="stack">
+      <div className="card">
+        <h2>Son 7 gün</h2>
+        <p className="muted tiny">Koyu kısım günlük süreden düşen kullanım, açık kısım süre dışı (sınırsız, her zaman açık, durumlar).</p>
+        <div className="bars">
+          {totals.map((t) => (
+            <button key={t.d} className={`bar ${t.d === day ? "on" : ""}`} onClick={() => setDay(t.d)}>
+              <span className="bar-val">{t.total ? minutesText(t.total) : ""}</span>
+              <span className="bar-track">
+                <span className="bar-all" style={{ height: `${(t.total / max) * 100}%` }}>
+                  <span className="bar-counted" style={{ height: t.total ? `${(t.counted / t.total) * 100}%` : 0 }} />
+                </span>
+              </span>
+              <span className="bar-day">{short(t.d)}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="card">
+        <h2>{dateText(day)}</h2>
+        {!dayRows.length && <p className="muted small">Bu gün için kayıt yok.</p>}
+        {dayRows.map((r) => (
+          <div className="app-row" key={r.package}>
+            <div className="grow">
+              <b>{labels[r.package] ?? r.package}</b>
+              <div className="muted tiny">{r.counted_minutes ? `${minutesText(r.counted_minutes)} süreden düştü` : "süreden düşmedi"}</div>
+            </div>
+            <b>{minutesText(r.minutes)}</b>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -3,9 +3,11 @@ import { createClient } from "@supabase/supabase-js";
 const URL = import.meta.env.VITE_SUPABASE_URL as string;
 const KEY = import.meta.env.VITE_SUPABASE_KEY as string;
 
-// Bu tarayıcının (PWA kurulumunun) kalıcı cihaz kimliği ve sırrı.
+// Bu tarayıcının cihaz kimliği ve sırrı — her ebeveyn hesabı için ayrı.
+// (Aynı tarayıcıda iki ebeveyn sırayla giriş yapabilir; her biri kendi cihaz kaydını kullanır.)
 // Sır sadece bu cihazda durur; veritabanında sadece SHA-256 özeti tutulur.
-const DEVICE_KEY = "orbit.device.v1";
+const LEGACY_KEY = "orbit.device.v1";
+const MAP_KEY = "orbit.devices.v2";
 
 export type LocalDevice = { id: string; secret: string };
 
@@ -15,23 +17,62 @@ function randomHex(bytes: number) {
   return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 }
 
-export function localDevice(): LocalDevice {
+function readMap(): Record<string, LocalDevice> {
   try {
-    const raw = localStorage.getItem(DEVICE_KEY);
-    if (raw) {
-      const d = JSON.parse(raw) as LocalDevice;
-      if (d.id && d.secret) return d;
+    return JSON.parse(localStorage.getItem(MAP_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function writeMap(m: Record<string, LocalDevice>) {
+  try {
+    localStorage.setItem(MAP_KEY, JSON.stringify(m));
+  } catch {
+    /* boş */
+  }
+}
+
+function newDevice(): LocalDevice {
+  return { id: crypto.randomUUID(), secret: randomHex(32) };
+}
+
+let current: LocalDevice | null = null;
+
+/** Giriş yapan kullanıcının bu tarayıcıdaki cihazını seçer (yoksa oluşturur). */
+export function selectDeviceFor(userId: string): LocalDevice {
+  const m = readMap();
+  let d = m[userId];
+  if (!d) {
+    // Eski sürümden kalan tek cihaz kaydı varsa ilk giriş yapan hesap onu devralır.
+    try {
+      const legacy = localStorage.getItem(LEGACY_KEY);
+      if (legacy) {
+        d = JSON.parse(legacy) as LocalDevice;
+        localStorage.removeItem(LEGACY_KEY);
+      }
+    } catch {
+      /* boş */
     }
-  } catch {
-    /* boş */
+    d = d && d.id && d.secret ? d : newDevice();
+    m[userId] = d;
+    writeMap(m);
   }
-  const d = { id: crypto.randomUUID(), secret: randomHex(32) };
-  try {
-    localStorage.setItem(DEVICE_KEY, JSON.stringify(d));
-  } catch {
-    /* boş */
-  }
+  current = d;
   return d;
+}
+
+/** Bu cihaz kimliği başka bir hesaba aitse yenisini üretir. */
+export function renewDeviceFor(userId: string): LocalDevice {
+  const m = readMap();
+  m[userId] = newDevice();
+  writeMap(m);
+  current = m[userId];
+  return current;
+}
+
+export function localDevice(): LocalDevice {
+  return current ?? { id: "", secret: "" };
 }
 
 export function deviceLabel() {
@@ -46,12 +87,17 @@ export function deviceLabel() {
   return `${name}${standalone ? " (uygulama)" : " (Safari/tarayıcı)"}`;
 }
 
-const dev = localDevice();
+// Her isteğe o anki cihaz başlığını ekler.
+const fetchWithDevice: typeof fetch = (input, init) => {
+  const headers = new Headers(init?.headers);
+  if (current) headers.set("x-orbit-device", `${current.id}.${current.secret}`);
+  return fetch(input, { ...init, headers });
+};
 
 export const supabase = createClient(URL, KEY, {
   db: { schema: "orbit" },
   auth: { persistSession: true, autoRefreshToken: true, storageKey: "orbit.auth" },
-  global: { headers: { "x-orbit-device": `${dev.id}.${dev.secret}` } },
+  global: { fetch: fetchWithDevice },
 });
 
 export function errorText(e: unknown): string {
@@ -64,6 +110,7 @@ export function errorText(e: unknown): string {
     "User already registered": "Bu e-posta zaten kayıtlı. Giriş yap.",
     "Database error saving new user": "Bu e-posta ile hesap açılamaz.",
     signup_not_allowed: "Bu e-posta ile hesap açılamaz.",
+    device_conflict: "Cihaz kaydı çakıştı, sayfayı yenile.",
   };
   for (const k of Object.keys(map)) if (m.includes(k)) return map[k];
   return m;

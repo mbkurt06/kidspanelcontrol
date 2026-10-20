@@ -2,9 +2,8 @@ import { useState } from "react";
 import { errorText, supabase } from "../lib/supabase";
 
 // E-posta + şifre. iPhone'da şifre iCloud Anahtar Zinciri'ne kaydedilir ve sonraki girişlerde Face ID ile dolar.
-// Kayıt sadece davet listesindeki e-postalar için işe yarar; diğerleri giriş yapsa bile veri göremez.
+// Yeni hesap açma kapalı: hesaplar sadece veritabanındaki davet listesiyle açılabilir.
 export default function Login() {
-  const [mode, setMode] = useState<"login" | "signup">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -16,23 +15,8 @@ export default function Login() {
     setBusy(true);
     setErr("");
     setMsg("");
-    if (mode === "login") {
-      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
-      if (error) setErr(errorText(error));
-    } else {
-      if (password.length < 10) {
-        setErr("Şifre en az 10 karakter olmalı.");
-        setBusy(false);
-        return;
-      }
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: { emailRedirectTo: window.location.origin },
-      });
-      if (error) setErr(errorText(error));
-      else if (!data.session) setMsg("Doğrulama e-postası gönderildi. Bağlantıya dokun, sonra buradan giriş yap.");
-    }
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (error) setErr(errorText(error));
     setBusy(false);
   }
 
@@ -60,7 +44,7 @@ export default function Login() {
           <span>Şifre</span>
           <input
             type="password"
-            autoComplete={mode === "login" ? "current-password" : "new-password"}
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
@@ -69,18 +53,11 @@ export default function Login() {
         {err && <p className="error">{err}</p>}
         {msg && <p className="ok">{msg}</p>}
         <button className="btn primary wide" disabled={busy}>
-          {mode === "login" ? "Giriş yap" : "Hesap oluştur"}
+          Giriş yap
         </button>
-        <div className="row between small">
-          <button type="button" className="link" onClick={() => setMode(mode === "login" ? "signup" : "login")}>
-            {mode === "login" ? "İlk kez mi? Hesap oluştur" : "Hesabın var mı? Giriş yap"}
-          </button>
-          {mode === "login" && (
-            <button type="button" className="link" onClick={reset}>
-              Şifremi unuttum
-            </button>
-          )}
-        </div>
+        <button type="button" className="link" onClick={reset}>
+          Şifremi unuttum
+        </button>
       </form>
     </div>
   );

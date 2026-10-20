@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
-import { deviceLabel, errorText, localDevice, supabase } from "./lib/supabase";
+import { deviceLabel, errorText, renewDeviceFor, selectDeviceFor, supabase } from "./lib/supabase";
 import { FamilyProvider } from "./lib/family";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
@@ -35,7 +35,7 @@ export default function App() {
 
   if (session === undefined) return access ? <Splash /> : <Blank onUnlock={() => setAccess(true)} />;
   if (!session) return access ? <Login /> : <Blank onUnlock={() => setAccess(true)} />;
-  return <DeviceGate key={session.user.id} email={session.user.email ?? ""} />;
+  return <DeviceGate key={session.user.id} userId={session.user.id} email={session.user.email ?? ""} />;
 }
 
 // Anahtarı bilmeyen ziyaretçi sadece boş bir sayfa görür.
@@ -75,14 +75,15 @@ function Splash() {
   );
 }
 
-function DeviceGate({ email }: { email: string }) {
+function DeviceGate({ userId, email }: { userId: string; email: string }) {
   const [gate, setGate] = useState<Gate>("loading");
   const [err, setErr] = useState("");
 
   useEffect(() => {
     let stop = false;
     let t: ReturnType<typeof setTimeout> | undefined;
-    const dev = localDevice();
+    let dev = selectDeviceFor(userId);
+    let renewed = false;
     async function check() {
       const { data, error } = await supabase.rpc("register_parent_device", {
         p_device_id: dev.id,
@@ -90,6 +91,12 @@ function DeviceGate({ email }: { email: string }) {
         p_label: deviceLabel(),
       });
       if (stop) return;
+      if (error && error.message.includes("device_conflict") && !renewed) {
+        // Bu tarayıcı daha önce başka bir ebeveyn hesabıyla kaydedilmiş: bu hesap için yeni cihaz kaydı aç.
+        renewed = true;
+        dev = renewDeviceFor(userId);
+        return check();
+      }
       if (error) {
         setErr(errorText(error));
         setGate("error");
@@ -107,7 +114,7 @@ function DeviceGate({ email }: { email: string }) {
       stop = true;
       if (t) clearTimeout(t);
     };
-  }, []);
+  }, [userId]);
 
   if (gate === "loading") return <Splash />;
   if (gate === "approved")

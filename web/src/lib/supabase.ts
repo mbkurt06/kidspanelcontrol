@@ -62,6 +62,8 @@ export function errorText(e: unknown): string {
     "Invalid login credentials": "E-posta veya şifre hatalı.",
     "Email not confirmed": "E-posta adresin henüz doğrulanmadı. Gelen kutundaki bağlantıya dokun.",
     "User already registered": "Bu e-posta zaten kayıtlı. Giriş yap.",
+    "Database error saving new user": "Bu e-posta ile hesap açılamaz.",
+    signup_not_allowed: "Bu e-posta ile hesap açılamaz.",
   };
   for (const k of Object.keys(map)) if (m.includes(k)) return map[k];
   return m;

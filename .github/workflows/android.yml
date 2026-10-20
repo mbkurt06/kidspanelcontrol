@@ -1,0 +1,151 @@
+name: Orbit Android
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android
+  cancel-in-progress: false
+
+defaults:
+  run:
+    working-directory: android
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.surum.outputs.code }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+      - id: surum
+        run: echo "code=$((100 + ${{ github.run_number }}))" >> "$GITHUB_OUTPUT"
+
+      - name: Testler ve derleme
+        shell: bash
+        env:
+          ORBIT_VERSION_CODE: ${{ steps.surum.outputs.code }}
+        run: |
+          set -o pipefail
+          gradle --no-daemon --console=plain :app:testDebugUnitTest :app:assembleDebug 2>&1 | tee gradle.log
+
+      - name: Imzali surum
+        id: imza
+        if: success()
+        shell: bash
+        env:
+          ORBIT_VERSION_CODE: ${{ steps.surum.outputs.code }}
+          ORBIT_SIGNING_PASSWORD: ${{ secrets.ORBIT_SIGNING_PASSWORD }}
+        run: |
+          if [ -z "$ORBIT_SIGNING_PASSWORD" ]; then echo "imza=yok" >> "$GITHUB_OUTPUT"; echo "Imza sifresi tanimli degil"; exit 0; fi
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in signing/orbit.jks.enc -out "$RUNNER_TEMP/orbit.jks" -pass env:ORBIT_SIGNING_PASSWORD
+          export ORBIT_KEYSTORE="$RUNNER_TEMP/orbit.jks"
+          set -o pipefail
+          gradle --no-daemon --console=plain :app:assembleRelease 2>&1 | tee -a gradle.log
+          cp app/build/outputs/apk/release/app-release.apk "orbit-$ORBIT_VERSION_CODE.apk"
+          echo "imza=var" >> "$GITHUB_OUTPUT"
+
+      - name: GitHub surumu (Release)
+        if: steps.imza.outputs.imza == 'var'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          C=${{ steps.surum.outputs.code }}
+          gh release create "orbit-v$C" "orbit-$C.apk" --title "Orbit $C" --notes "Otomatik derleme ${GITHUB_SHA::7}" --latest
+
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Rapor
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          mkdir -p ../rapor
+          {
+            echo "commit ${GITHUB_SHA::7} surum ${{ steps.surum.outputs.code }} sonuc ${{ job.status }} imza ${{ steps.imza.outputs.imza }}"
+            echo "== Derleme hatalari"
+            grep -E "^e: |error:|FAILED|What went wrong|BUILD (SUCCESSFUL|FAILED)|Could not|> Task .*FAILED" gradle.log | head -80 || true
+            echo "== Uyarilar"
+            grep -E "^w: " gradle.log | head -40 || true
+            echo "== Son satirlar"
+            tail -40 gradle.log || true
+            echo "== Testler"
+            for f in app/build/test-results/testDebugUnitTest/*.xml; do
+              [ -f "$f" ] && python3 - "$f" <<'PY'
+          import sys, xml.etree.ElementTree as ET
+          r = ET.parse(sys.argv[1]).getroot()
+          print(r.get('name'), 'test', r.get('tests'), 'hata', r.get('failures'), r.get('errors'))
+          for tc in r.iter('testcase'):
+              for f in list(tc.findall('failure')) + list(tc.findall('error')):
+                  print('  BASARISIZ', tc.get('name'), (f.get('message') or '')[:300])
+          PY
+            done
+          } > ../rapor/build.txt 2>&1
+          cd ../rapor && git init -q -b ci-android && git add . && git -c user.name=ci -c user.email=ci@orbit commit -qm "build ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-android
+
+  emulator:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: apk
+      - name: KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Telefon emulatorunde kur, cihaz sahibi yap, ekran goruntusu al
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            mkdir -p shots
+            adb install -r app-debug.apk
+            adb shell dpm set-device-owner app.orbit/.device.AdminReceiver > shots/owner.txt 2>&1 || true
+            adb shell appops set app.orbit GET_USAGE_STATS allow
+            adb shell appops set app.orbit SYSTEM_ALERT_WINDOW allow
+            adb logcat -c
+            adb shell am start -n app.orbit/.ui.MainActivity
+            sleep 15
+            adb exec-out screencap -p > shots/1-eslestirme.png
+            adb shell am start -n app.orbit/.ui.LockActivity --es reason "Günlük süren bitti" --es pkg com.android.chrome
+            sleep 5
+            adb exec-out screencap -p > shots/2-kilit.png
+            adb shell dumpsys device_policy | grep -iE "Device Owner|admin=" | head -5 >> shots/owner.txt || true
+            adb logcat -d -s OrbitService OrbitPolicy OrbitSync OrbitApi AndroidRuntime:E > shots/logcat.txt || true
+      - name: Sonuclari yaz
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p shots && cd shots && git init -q -b ci-android-emu && git add . && git -c user.name=ci -c user.email=ci@orbit commit -qm "emu" --allow-empty
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-android-emu

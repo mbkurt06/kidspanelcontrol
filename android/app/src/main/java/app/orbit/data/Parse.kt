@@ -1,0 +1,138 @@
+package app.orbit.data
+
+import app.orbit.engine.AppRule
+import app.orbit.engine.Command
+import app.orbit.engine.CommandType
+import app.orbit.engine.DayOverride
+import app.orbit.engine.DayUsage
+import app.orbit.engine.Grant
+import app.orbit.engine.Group
+import app.orbit.engine.Mode
+import app.orbit.engine.ModeSlot
+import app.orbit.engine.Profile
+import app.orbit.engine.Rules
+import app.orbit.engine.TimeWindow
+import org.json.JSONArray
+import org.json.JSONObject
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.OffsetDateTime
+
+/** Supabase (PostgREST) cevaplarını kural modeline çevirir. Telefonda da aynı biçimde saklanır. */
+object Parse {
+
+    private fun JSONObject.str(k: String): String? = if (isNull(k)) null else optString(k)
+    private fun JSONObject.intOrNull(k: String): Int? = if (isNull(k) || !has(k)) null else optInt(k)
+
+    fun time(s: String): LocalTime = LocalTime.parse(if (s.length == 5) s else s.substring(0, 8))
+    fun date(s: String?): LocalDate? = s?.takeIf { it.isNotBlank() }?.let { LocalDate.parse(it.substring(0, 10)) }
+    fun ts(s: String?): Long? = s?.takeIf { it.isNotBlank() }?.let {
+        runCatching { OffsetDateTime.parse(it).toInstant().toEpochMilli() }
+            .getOrElse { Instant.parse(it).toEpochMilli() }
+    }
+
+    private fun strings(a: JSONArray?): List<String> = (0 until (a?.length() ?: 0)).map { a!!.optString(it) }
+    private fun ints(a: JSONArray?): List<Int> = (0 until (a?.length() ?: 0)).map { a!!.optInt(it) }
+
+    private fun windows(a: JSONArray?): List<TimeWindow> = (0 until (a?.length() ?: 0)).mapNotNull {
+        val o = a!!.optJSONObject(it) ?: return@mapNotNull null
+        runCatching { TimeWindow(time(o.getString("start")), time(o.getString("end"))) }.getOrNull()
+    }
+
+    fun apps(a: JSONArray): Map<String, AppRule> = (0 until a.length()).associate {
+        val o = a.getJSONObject(it)
+        val p = o.getString("package")
+        p to AppRule(p, o.optString("label", p), Group.of(o.str("app_group")), o.optBoolean("approved"), o.intOrNull("daily_limit_minutes"))
+    }
+
+    fun profiles(a: JSONArray): Map<String, Profile> = (0 until a.length()).associate {
+        val o = a.getJSONObject(it)
+        val id = o.getString("id")
+        id to Profile(
+            id, o.optString("name"), o.optInt("daily_minutes", 60), o.intOrNull("max_total_minutes"),
+            windows(o.optJSONArray("timed_windows")), windows(o.optJSONArray("unlimited_windows")),
+            ints(o.optJSONArray("warn_minutes")),
+        )
+    }
+
+    fun modes(a: JSONArray): Map<String, Mode> = (0 until a.length()).associate {
+        val o = a.getJSONObject(it)
+        val id = o.getString("id")
+        id to Mode(
+            id, o.optString("name"), o.optString("color", "#7C5CFF"),
+            strings(o.optJSONArray("allowed_packages")).toSet(),
+            strings(o.optJSONArray("allowed_groups")).map { g -> Group.of(g) }.toSet(),
+            o.intOrNull("budget_minutes"), o.optBoolean("counts_toward_daily"), o.optBoolean("others_blocked", true),
+            o.optBoolean("extra_time_allowed"), ints(o.optJSONArray("warn_minutes")), o.optInt("priority", 50),
+        )
+    }
+
+    fun slots(a: JSONArray): List<ModeSlot> = (0 until a.length()).map {
+        val o = a.getJSONObject(it)
+        ModeSlot(o.getString("profile_id"), o.getString("mode_id"), ints(o.optJSONArray("days")).toSet(), time(o.getString("start_time")), time(o.getString("end_time")))
+    }
+
+    fun assignments(a: JSONArray): Map<Int, String> = (0 until a.length()).associate {
+        val o = a.getJSONObject(it)
+        o.getInt("weekday") to o.getString("profile_id")
+    }
+
+    fun overrides(a: JSONArray): List<DayOverride> = (0 until a.length()).map {
+        val o = a.getJSONObject(it)
+        DayOverride(date(o.getString("day"))!!, o.str("profile_id"), o.intOrNull("daily_minutes"), o.str("note"))
+    }
+
+    fun grants(a: JSONArray): List<Grant> = (0 until a.length()).map {
+        val o = a.getJSONObject(it)
+        Grant(o.getString("id"), o.optInt("minutes"), date(o.str("valid_on")), date(o.str("expires_on")), date(o.str("activated_on")), o.str("note"))
+    }
+
+    fun commands(a: JSONArray): List<Command> = (0 until a.length()).mapNotNull {
+        val o = a.getJSONObject(it)
+        val type = CommandType.of(o.str("type")) ?: return@mapNotNull null
+        val p = o.optJSONObject("payload") ?: JSONObject()
+        Command(
+            o.getString("id"), type, ts(o.str("created_at")) ?: 0L, ts(o.str("until_at")),
+            p.str("mode_id"), if (p.has("minutes")) p.optInt("minutes") else null, p.optBoolean("free"),
+            !o.isNull("cancelled_at"),
+            p.optBoolean("maintenance"),
+        )
+    }
+
+    /** Sunucudan gelen ham parçaları tek bir JSON'da saklar. */
+    fun rulesFromBundle(b: JSONObject): Rules = Rules(
+        timezone = b.optString("timezone", "Europe/Berlin"),
+        apps = apps(b.optJSONArray("apps") ?: JSONArray()),
+        profiles = profiles(b.optJSONArray("profiles") ?: JSONArray()),
+        modes = modes(b.optJSONArray("modes") ?: JSONArray()),
+        slots = slots(b.optJSONArray("slots") ?: JSONArray()),
+        assignments = assignments(b.optJSONArray("assignments") ?: JSONArray()),
+        overrides = overrides(b.optJSONArray("overrides") ?: JSONArray()),
+        grants = grants(b.optJSONArray("grants") ?: JSONArray()),
+        commands = commands(b.optJSONArray("commands") ?: JSONArray()),
+    )
+
+    // --- Gün sayaçları ---
+
+    private fun longMap(o: JSONObject?): Map<String, Long> = o?.keys()?.asSequence()?.associateWith { o.optLong(it) } ?: emptyMap()
+    private fun JSONObject.putMap(k: String, m: Map<String, Long>) = put(k, JSONObject().apply { m.forEach { (a, b) -> put(a, b) } })
+
+    fun usageToJson(u: DayUsage): String = JSONObject().apply {
+        put("day", u.day.toString())
+        put("counted", u.countedSeconds)
+        putMap("perAppCounted", u.perAppCounted)
+        putMap("perAppTotal", u.perAppTotal)
+        putMap("perMode", u.perMode)
+        put("warned", JSONArray(u.warned.toList()))
+    }.toString()
+
+    fun usageFromJson(s: String): DayUsage {
+        val o = JSONObject(s)
+        return DayUsage(
+            LocalDate.parse(o.getString("day")), o.optLong("counted"),
+            longMap(o.optJSONObject("perAppCounted")), longMap(o.optJSONObject("perAppTotal")), longMap(o.optJSONObject("perMode")),
+            strings(o.optJSONArray("warned")).toSet(),
+        )
+    }
+}

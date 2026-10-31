@@ -55,6 +55,44 @@ export default function ChildPage() {
 
 // ---------------------------------------------------------------------------
 
+/** Telefondaki Orbit'i hemen güncelle: telefon komutu alınca (≤30 sn) kurulum/version.json'a bakar ve yeni sürümü sessizce kurar. */
+function UpdateCard({ childId, current }: { childId: string; current: string | null }) {
+  const [latest, setLatest] = useState<number | null>(null);
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    fetch("/kurulum/version.json", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => setLatest(j?.version ?? null))
+      .catch(() => {});
+  }, []);
+  const cur = current ? Number(current.split(".").pop()) : null;
+  const behind = latest != null && cur != null && latest > cur;
+  return (
+    <div className="card">
+      <h2>Orbit güncellemesi</h2>
+      <p className="muted small">
+        Telefondaki sürüm: {current ?? "?"}
+        {latest != null && ` · en yeni: ${latest}`}
+        {behind ? " — güncelleme var." : latest != null && cur != null ? " — güncel." : ""} Telefon saatte bir kendisi de bakar.
+      </p>
+      <button
+        className="btn"
+        onClick={async () => {
+          try {
+            await sendCommand(childId, "resync", { update: true });
+            setMsg("Gönderildi. Telefon 30 sn içinde kontrol eder; varsa 1–2 dk içinde kurulur ve sürüm burada değişir.");
+          } catch (e) {
+            setMsg(errorText(e));
+          }
+        }}
+      >
+        Güncellemeyi şimdi kontrol et
+      </button>
+      {msg && <p className="muted small">{msg}</p>}
+    </div>
+  );
+}
+
 /**
  * Ebeveyn modu: ebeveyn telefonda işlem yaparken bütün sınırlamalar kalkar
  * (tüm uygulamalar açık, süre sayılmaz, kilit yok, uygulama yükleme/ayar/izinler serbest, USB hata ayıklama açık).
@@ -642,6 +680,8 @@ function DeviceTab({ childId }: { childId: string }) {
           </button>
         )}
       </div>
+      <UpdateCard childId={childId} current={devices[0]?.app_version ?? null} />
+
       <div className="card">
         <h2>Kuralları gönder</h2>
         <p className="muted small">Telefon kuralları zaten 30 saniyede bir alır; beklemek istemezsen hemen gönderir.</p>

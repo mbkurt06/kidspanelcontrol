@@ -47,8 +47,11 @@ object Sync {
     }
 
     private fun ackCommands(a: JSONArray) {
-        val ids = (0 until a.length()).map { a.getJSONObject(it) }.filter { it.isNull("acked_at") }.map { it.getString("id") }
+        val fresh = (0 until a.length()).map { a.getJSONObject(it) }.filter { it.isNull("acked_at") }
+        val ids = fresh.map { it.getString("id") }
         if (ids.isEmpty()) return
+        // Ebeveyn panelden "güncellemeyi şimdi kontrol et" dediyse bir sonraki turda hemen kontrol edilir
+        if (fresh.any { it.optJSONObject("payload")?.optBoolean("update") == true }) Store.lastUpdateCheck = 0
         runCatching {
             Api.patch("commands?id=in.(${ids.joinToString(",")})", JSONObject().put("acked_at", Instant.now().toString()))
         }

@@ -174,9 +174,41 @@ object Policy {
         prefs.edit().putStringSet("suspended", (shouldSuspend - failed)).apply()
     }
 
+    /**
+     * Ana ekrana içerik veren uygulamalar (sola kaydırınca açılan haber akışı). Askıya alınsalar bile akış ana ekranda
+     * görünmeye devam ettiği için, kapalı oldukları saatlerde tamamen gizlenirler; açık olduklarında geri gelirler.
+     */
+    val HIDE_WHEN_CLOSED = mapOf(
+        "com.google.android.googlequicksearchbox" to "Google",
+        "com.mi.globalminusscreen" to "App vault",
+    )
+
+    private fun installed(ctx: Context, pkg: String): Boolean = runCatching {
+        @Suppress("DEPRECATION")
+        ctx.packageManager.getApplicationInfo(pkg, PackageManager.MATCH_UNINSTALLED_PACKAGES); true
+    }.getOrDefault(false)
+
+    fun isHidden(ctx: Context, pkg: String): Boolean =
+        isOwner(ctx) && runCatching { dpm(ctx).isApplicationHidden(admin(ctx), pkg) }.getOrDefault(false)
+
+    /** Gizlenmiş ama yüklü olan akış uygulamaları (uygulama listesinde görünmezler, panele yine bildirilir). */
+    fun hiddenFeedApps(ctx: Context): List<Launchable> =
+        HIDE_WHEN_CLOSED.filter { (p, _) -> installed(ctx, p) && isHidden(ctx, p) }.map { (p, l) -> Launchable(p, l, true) }
+
+    /** Akış uygulamalarını kurala göre gizle / göster. Sadece değişince işlem yapar. */
+    fun syncHidden(ctx: Context, shouldHide: Map<String, Boolean>) {
+        if (!isOwner(ctx)) return
+        for ((pkg, hide) in shouldHide) {
+            if (!installed(ctx, pkg)) continue
+            if (isHidden(ctx, pkg) == hide) continue
+            runCatching { dpm(ctx).setApplicationHidden(admin(ctx), pkg, hide) }.onFailure { Log.w(TAG, "gizleme $pkg", it) }
+        }
+    }
+
     /** Eşleşme kaldırılırsa veya Orbit devre dışı kalırsa her şeyi serbest bırak. */
     fun releaseAll(ctx: Context) {
         setSuspended(ctx, launchables(ctx).map { it.pkg }, false)
+        syncHidden(ctx, HIDE_WHEN_CLOSED.keys.associateWith { false })
         Store.prefs().edit().remove("suspended").apply()
     }
 }

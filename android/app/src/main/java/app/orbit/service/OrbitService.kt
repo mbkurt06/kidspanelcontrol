@@ -252,6 +252,8 @@ class OrbitService : Service() {
             if (v.allowed) allowed += a.pkg to a.label else suspend += a.pkg
         }
         Policy.syncSuspended(this, suspend, full = firstRun, all = launchables.map { it.pkg })
+        // Ana ekran haber akışı (Google vb.): kapalıyken gizle, açıkken göster — normal uygulama kuralıyla
+        Policy.syncHidden(this, Policy.HIDE_WHEN_CLOSED.keys.associateWith { p -> !(verdicts[p] ?: engine.verdict(p, snap, usage)).allowed })
 
         // 6) Ön plandaki uygulama kapalıysa kilit ekranını göster
         var lockReason: String? = when {

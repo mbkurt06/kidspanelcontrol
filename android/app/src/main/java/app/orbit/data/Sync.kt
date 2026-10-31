@@ -66,7 +66,7 @@ object Sync {
     fun reportApps(ctx: Context, initial: Boolean) {
         val essentials = Policy.essentials(ctx)
         val arr = JSONArray()
-        for (a in Policy.launchables(ctx)) {
+        for (a in Policy.launchables(ctx) + Policy.hiddenFeedApps(ctx)) {
             val o = JSONObject().put("package", a.pkg).put("label", a.label).put("system", a.system)
             a.category?.let { o.put("category", it) }
             if (a.pkg in essentials) o.put("default_group", "always_open").put("preapproved", true)

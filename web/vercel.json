@@ -1,6 +1,15 @@
 {
   "headers": [
     {
+      "source": "/kurulum/orbit.apk",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/vnd.android.package-archive"
+        }
+      ]
+    },
+    {
       "source": "/sw.js",
       "headers": [
         {

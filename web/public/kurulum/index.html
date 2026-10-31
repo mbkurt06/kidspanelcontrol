@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Orbit kurulum</title>
+<style>
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #0f1224; color: #eef0ff; display: grid; place-items: center; min-height: 100vh; }
+  main { text-align: center; padding: 24px; max-width: 560px; }
+  #qr { background: #fff; padding: 20px; border-radius: 16px; display: inline-block; margin: 16px 0; }
+  ol { text-align: left; line-height: 1.6; color: #c9cdea; }
+  h1 { margin: 0 0 4px; }
+  p { color: #9aa0c3; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Orbit — telefon kurulumu</h1>
+  <p>Sıfırlanmış telefonun karşılama ekranında okutun.</p>
+  <div id="qr"></div>
+  <ol>
+    <li>Telefon fabrika ayarlarında, ilk "Hoş geldiniz" ekranında olsun.</li>
+    <li>Ekranda boş bir yere arka arkaya <b>6 kez</b> dokunun → QR okuyucu açılır.</li>
+    <li>Wi-Fi sorulursa bağlanın, sonra bu kodu okutun.</li>
+    <li>Telefon Orbit'i indirip yönetici olarak kurar; hesap eklemeden devam edin.</li>
+  </ol>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+  var data = {
+    "android.app.extra.PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME": "app.orbit/app.orbit.device.AdminReceiver",
+    "android.app.extra.PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM": "GhhS79GQ-tXywkyfeSwlE-ID9W5n-PFvYbwL32PZbPo",
+    "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION": "https://orbit-panel-nu.vercel.app/kurulum/orbit.apk",
+    "android.app.extra.PROVISIONING_LEAVE_ALL_SYSTEM_APPS_ENABLED": true,
+    "android.app.extra.PROVISIONING_SKIP_ENCRYPTION": true
+  };
+  new QRCode(document.getElementById("qr"), { text: JSON.stringify(data), width: 360, height: 360, correctLevel: QRCode.CorrectLevel.M });
+</script>
+</body>
+</html>

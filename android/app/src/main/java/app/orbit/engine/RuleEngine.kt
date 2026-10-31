@@ -60,6 +60,8 @@ data class Snapshot(
     val poolLeftSeconds: Long = 0,
     /** Günlük üst sınırdan kalan; sınır yoksa null */
     val capLeftSeconds: Long? = null,
+    /** Bölümde açık ya da süreli hiçbir şey yok (Uyku / Kapalı gibi) */
+    val sectionClosed: Boolean = false,
 )
 
 /** "Sınırsız" kalan süre (bölüm süresi ve günlük sınır yok) */
@@ -256,8 +258,11 @@ class RuleEngine(private val rules: Rules) {
         }
         val poolLeft = (poolMin * 60L - poolUsed).coerceAtLeast(0)
         val capLeft = profile.maxTotalMinutes?.let { ((it + allExtra) * 60L - usage.countedSeconds).coerceAtLeast(0) }
-        val sectionPart = if (cur == null) 0L else (curLeft ?: UNLIMITED_SECONDS)
-        var remaining = (sectionPart + poolLeft).coerceAtMost(UNLIMITED_SECONDS)
+        // Bölümde süreli hiçbir şey yoksa (ör. "Kapalı" / "Uyku") kalan süre 0 gösterilir
+        val timedPossible = cur != null && (cur.section.defaultRule == SecRule.TIMED ||
+            rules.sectionRules.any { it.sectionId == cur.section.id && it.rule == SecRule.TIMED })
+        val sectionPart = if (!timedPossible) 0L else (curLeft ?: UNLIMITED_SECONDS)
+        var remaining = if (!timedPossible) 0L else (sectionPart + poolLeft).coerceAtMost(UNLIMITED_SECONDS)
         if (capLeft != null) remaining = minOf(remaining, capLeft)
 
         val allowance = when {
@@ -272,6 +277,8 @@ class RuleEngine(private val rules: Rules) {
             modeRemainingSeconds = modeRemaining, extraMinutesToday = allExtra, walletGrants = wallet,
             parentMode = parentUntil != null, parentModeUntil = parentUntil,
             sectionMode = true, section = cur, sectionLeftSeconds = curLeft, poolLeftSeconds = poolLeft, capLeftSeconds = capLeft,
+            sectionClosed = cur != null && !timedPossible && cur.section.defaultRule == SecRule.BLOCKED &&
+                rules.sectionRules.none { it.sectionId == cur.section.id && it.rule == SecRule.OPEN },
         )
     }
 

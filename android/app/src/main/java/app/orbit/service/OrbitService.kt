@@ -259,6 +259,7 @@ class OrbitService : Service() {
             snap.locked -> "Telefon ebeveyn tarafından kilitlendi"
             snap.activeMode != null && snap.activeMode.othersBlocked -> "Şu an ${snap.activeMode.name}"
             snap.sectionMode && snap.section == null -> "Bu saatlerde kapalı"
+            snap.sectionMode && snap.sectionClosed -> "Şu an ${snap.section!!.section.name}"
             snap.sectionMode && snap.remainingSeconds <= 0 -> "${snap.section!!.section.name} süren bitti"
             snap.remainingSeconds <= 0 -> "Günlük süren bitti"
             else -> null
@@ -313,7 +314,9 @@ class OrbitService : Service() {
             s.sectionMode && s.section != null -> {
                 val sec = s.section
                 val end = sec.endsAt.toString().take(5)
-                if (s.remainingSeconds <= 0)
+                if (s.sectionClosed)
+                    "Şu an ${sec.section.name} — telefon $end'e kadar kapalı. Açık uygulamalar Orbit'te."
+                else if (s.remainingSeconds <= 0)
                     "⏰ ${sec.section.name} süren bitti (${sec.section.name} $end'te biter). Orbit'ten ebeveyninden süre isteyebilirsin."
                 else
                     "Şu an ${sec.section.name} ($end'e kadar). Bu uygulama bu bölümde kapalı, süresi dolmuş ya da onay bekliyor. Açık uygulamalar Orbit'te."

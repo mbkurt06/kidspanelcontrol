@@ -98,8 +98,7 @@ fun OrbitHome() {
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                                 .background(if (on) C.surface2 else Color.Transparent)
                                 .clickable {
-                                    if (s == Screen.VAULT) ctx.startActivity(Intent(ctx, VaultActivity::class.java))
-                                    else screen = s
+                                    screen = s
                                     scope.launch { drawer.close() }
                                 }
                                 .padding(horizontal = 12.dp, vertical = 14.dp),
@@ -143,7 +142,7 @@ fun OrbitHome() {
                     Screen.WALLET -> WalletScreen()
                     Screen.ASK -> AskScreen()
                     Screen.ABOUT -> AboutScreen()
-                    Screen.VAULT -> TodayScreen { screen = it }
+                    Screen.VAULT -> VaultScreen(onCancel = { screen = Screen.TODAY })
                 }
             }
         }

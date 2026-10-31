@@ -264,6 +264,9 @@ class OrbitService : Service() {
             }
         }
 
+        // 7) Kapalı uygulamaya dokununca çıkan sistem penceresinin ("Blocked by work policy") altındaki açıklama
+        Policy.setBlockedMessage(this, blockedMessage(snap, rules.mandatoryOpen))
+
         Live.set(LiveState(snap, usage, allowed, lockReason, online, Store.lastSync))
         updateNotification(snap)
 
@@ -288,6 +291,20 @@ class OrbitService : Service() {
             scope.launch(Dispatchers.IO) { Updater.check(this@OrbitService) }
         }
         firstRun = false
+    }
+
+    /** Kapalı uygulama penceresinde çocuğun göreceği açıklama (o anki duruma göre). */
+    private fun blockedMessage(s: app.orbit.engine.Snapshot, mandatory: List<String>): String {
+        val until = s.modeEndsAt?.toString()?.take(5)
+        return when {
+            s.parentMode -> "Orbit: Ebeveyn modu açık."
+            s.locked -> "🔒 Telefon ebeveynin tarafından kilitlendi. Açılınca tekrar kullanabilirsin."
+            s.activeMode != null && s.activeMode.othersBlocked ->
+                "Şu an ${s.activeMode.name}" + (until?.let { " — $it'te biter." } ?: ".") + " Açık uygulamalar Orbit'te."
+            mandatory.isNotEmpty() -> "Önce görevini yap: ${mandatory.first()}. Görev onaylanınca açılır."
+            s.remainingSeconds <= 0 -> "⏰ Bugünkü süren bitti. Yarın tekrar açılır; Orbit'ten ebeveyninden süre isteyebilirsin."
+            else -> "Bu uygulama şu an kapalı: ebeveyn onayı bekliyor ya da bu saatlerde kapalı. Açık uygulamalar Orbit'te."
+        }
     }
 
     /** Orbit yönetici yetkisini kaybederse ebeveyne bir kez haber ver. */

@@ -78,6 +78,18 @@ object Policy {
         }
     }
 
+    private var lastBlockedMessage: String? = null
+
+    /** Askıya alınmış uygulamaya dokununca çıkan sistem penceresindeki açıklama. Sadece değişince yazılır. */
+    fun setBlockedMessage(ctx: Context, text: String) {
+        if (!isOwner(ctx) || text == lastBlockedMessage) return
+        runCatching {
+            dpm(ctx).setShortSupportMessage(admin(ctx), text.take(200))
+            dpm(ctx).setLongSupportMessage(admin(ctx), text)
+            lastBlockedMessage = text
+        }.onFailure { Log.w(TAG, "destek mesajı", it) }
+    }
+
     /** Kullanım erişimi (hangi uygulamanın açık olduğunu görmek için) verilmiş mi? */
     fun hasUsageAccess(ctx: Context): Boolean {
         val ops = ctx.getSystemService(AppOpsManager::class.java)

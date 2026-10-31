@@ -70,6 +70,41 @@ data class Grant(
     val expiresOn: LocalDate?,
     val activatedOn: LocalDate?,
     val note: String?,
+    /** Belirli bir bölüme verilen süre; null = gün boyu havuz */
+    val sectionId: String? = null,
+)
+
+/** Bölüm kuralı: açık (süre saymaz) / süreli / kapalı */
+enum class SecRule(val key: String) {
+    OPEN("open"), TIMED("timed"), BLOCKED("blocked");
+
+    companion object {
+        fun of(k: String?): SecRule = entries.firstOrNull { it.key == k } ?: BLOCKED
+    }
+}
+
+/** Gün tipinin bir bölümü (ör. Serbest 16:00–19:00, 60 dk). */
+data class Section(
+    val id: String,
+    val profileId: String,
+    val name: String,
+    val start: LocalTime,
+    val end: LocalTime,
+    val budgetMinutes: Int?,
+    val carryOver: Boolean,
+    val defaultRule: SecRule,
+    val order: Int = 0,
+) {
+    val crossesMidnight get() = start > end
+}
+
+/** Bir bölümde bir grup (groupId) ya da tek uygulama (pkg) için kural. */
+data class SectionRule(
+    val sectionId: String,
+    val groupId: String?,
+    val pkg: String?,
+    val rule: SecRule,
+    val limitMinutes: Int?,
 )
 
 enum class CommandType(val key: String) {
@@ -108,6 +143,15 @@ data class Rules(
     val commands: List<Command> = emptyList(),
     /** Bugün yapılmamış zorunlu görevler (başlıkları). Bitmeden süreli uygulamalar açılmaz. */
     val mandatoryOpen: List<String> = emptyList(),
+    /** Gün bölümleri (bir gün tipinde bölüm varsa yeni kural motoru kullanılır) */
+    val sections: List<Section> = emptyList(),
+    val sectionRules: List<SectionRule> = emptyList(),
+    /** paket → grup id */
+    val groupOf: Map<String, String> = emptyMap(),
+    /** grup id → ad */
+    val groupNames: Map<String, String> = emptyMap(),
+    /** gün tipi id → (grup id → günlük dk sınırı) */
+    val groupLimits: Map<String, Map<String, Int>> = emptyMap(),
 )
 
 /** Telefonda gün boyunca tutulan sayaçlar (saniye). Gece yarısı sıfırlanır. */
@@ -123,4 +167,8 @@ data class DayUsage(
     val perMode: Map<String, Long> = emptyMap(),
     /** Gönderilen uyarılar (tekrar gösterilmesin) */
     val warned: Set<String> = emptySet(),
+    /**
+     * Bölüm sayaçları (saniye): "s:<bölüm>@<tarih>", "g:<grup>", "sg:<bölüm>@<tarih>|<grup>", "sa:<bölüm>@<tarih>|<paket>"
+     */
+    val buckets: Map<String, Long> = emptyMap(),
 )

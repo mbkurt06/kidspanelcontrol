@@ -115,7 +115,7 @@ object Policy {
         )).toSet()
     }
 
-    data class Launchable(val pkg: String, val label: String, val system: Boolean)
+    data class Launchable(val pkg: String, val label: String, val system: Boolean, val category: String? = null)
 
     fun launchables(ctx: Context): List<Launchable> {
         val pm = ctx.packageManager
@@ -123,11 +123,26 @@ object Policy {
         return pm.queryIntentActivities(intent, PackageManager.MATCH_ALL)
             .map {
                 val ai = it.activityInfo.applicationInfo
-                Launchable(it.activityInfo.packageName, it.loadLabel(pm).toString(), (ai.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0)
+                Launchable(
+                    it.activityInfo.packageName, it.loadLabel(pm).toString(), (ai.flags and android.content.pm.ApplicationInfo.FLAG_SYSTEM) != 0,
+                    categoryKey(ai.category),
+                )
             }
             .filter { it.pkg != ctx.packageName }
             .distinctBy { it.pkg }
             .sortedBy { it.label.lowercase() }
+    }
+
+    private fun categoryKey(c: Int): String? = when (c) {
+        android.content.pm.ApplicationInfo.CATEGORY_GAME -> "game"
+        android.content.pm.ApplicationInfo.CATEGORY_AUDIO -> "audio"
+        android.content.pm.ApplicationInfo.CATEGORY_VIDEO -> "video"
+        android.content.pm.ApplicationInfo.CATEGORY_IMAGE -> "image"
+        android.content.pm.ApplicationInfo.CATEGORY_SOCIAL -> "social"
+        android.content.pm.ApplicationInfo.CATEGORY_NEWS -> "news"
+        android.content.pm.ApplicationInfo.CATEGORY_MAPS -> "maps"
+        android.content.pm.ApplicationInfo.CATEGORY_PRODUCTIVITY -> "productivity"
+        else -> null
     }
 
     /** İlk eşleşmede telefon, rehber, mesaj, saat ve hesap makinesi "her zaman açık" ve onaylı gelir. */

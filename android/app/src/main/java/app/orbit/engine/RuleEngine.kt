@@ -14,7 +14,19 @@ data class AppVerdict(
     val countsDaily: Boolean = false,
     /** Kullanılırsa hangi durumun süresinden düşsün */
     val countsMode: String? = null,
+    /** Kullanılırsa artacak bölüm/grup sayaçları */
+    val buckets: List<String> = emptyList(),
 )
+
+/** O an geçerli bölüm (bugünün ya da gece yarısını geçen dünkü bölümün) örneği. */
+data class SectionNow(
+    val section: Section,
+    /** Bölümün başladığı gün (sayaç anahtarı için) */
+    val startDay: LocalDate,
+    val endsAt: LocalTime,
+) {
+    val key get() = "${section.id}@$startDay"
+}
 
 /** Belirli bir an için hesaplanmış tablo. */
 data class Snapshot(
@@ -38,7 +50,20 @@ data class Snapshot(
     /** Ebeveyn modu: ebeveyn telefonda işlem yapıyor, bütün sınırlamalar kalktı */
     val parentMode: Boolean = false,
     val parentModeUntil: Long? = null,
+    /** Bugünün gün tipinde bölüm var mı (yeni kural motoru) */
+    val sectionMode: Boolean = false,
+    /** Şu anki bölüm (bölümler arası boşlukta null) */
+    val section: SectionNow? = null,
+    /** Bölümde kalan (bölüm süresi + devreden + bölüme verilen ekstra); bölüm süresi yoksa null */
+    val sectionLeftSeconds: Long? = null,
+    /** Gün boyu havuzda kalan ekstra süre */
+    val poolLeftSeconds: Long = 0,
+    /** Günlük üst sınırdan kalan; sınır yoksa null */
+    val capLeftSeconds: Long? = null,
 )
+
+/** "Sınırsız" kalan süre (bölüm süresi ve günlük sınır yok) */
+const val UNLIMITED_SECONDS = 24 * 3600L
 
 /**
  * Kural motoru — telefonun "ne açık, ne kapalı" kararını verir. Tamamen saf, test edilebilir.
@@ -150,6 +175,14 @@ class RuleEngine(private val rules: Rules) {
             it.validOn == null && it.activatedOn == null && (it.expiresOn == null || !it.expiresOn.isBefore(day))
         }
 
+        val todaySections = rules.sections.filter { it.profileId == profile.id }
+        if (todaySections.isNotEmpty()) {
+            return sectionSnapshot(
+                now, day, t, profile, todaySections, usage, dayStart, dayEnd, wallet,
+                manual, active, modeEnds, modeRemaining, locked, lockUntil, free, parentUntil,
+            )
+        }
+
         return Snapshot(
             day = day, now = t, profile = profile, activeMode = active, modeIsManual = manual != null,
             modeEndsAt = modeEnds, locked = locked, lockUntil = lockUntil, free = free,
@@ -157,6 +190,121 @@ class RuleEngine(private val rules: Rules) {
             modeRemainingSeconds = modeRemaining, extraMinutesToday = extra, walletGrants = wallet,
             parentMode = parentUntil != null, parentModeUntil = parentUntil,
         )
+    }
+
+    // --- Bölümler ---
+
+    /** Şu anki bölüm: bugünün bölümleri önce; yoksa dünden taşan (gece yarısını geçen) bölüm. */
+    fun currentSection(day: LocalDate, t: LocalTime): SectionNow? {
+        val today = profileFor(day).id
+        val todays = rules.sections.filter { it.profileId == today }
+        todays.firstOrNull { !it.crossesMidnight && t >= it.start && t < it.end }?.let { return SectionNow(it, day, it.end) }
+        todays.firstOrNull { it.crossesMidnight && t >= it.start }?.let { return SectionNow(it, day, it.end) }
+        val yesterday = profileFor(day.minusDays(1)).id
+        rules.sections.firstOrNull { it.profileId == yesterday && it.crossesMidnight && t < it.end }
+            ?.let { return SectionNow(it, day.minusDays(1), it.end) }
+        // Dünkü gün tipinde bölüm yoksa bugünün gece bölümü sabahı da kapsar
+        if (rules.sections.none { it.profileId == yesterday }) {
+            todays.firstOrNull { it.crossesMidnight && t < it.end }?.let { return SectionNow(it, day.minusDays(1), it.end) }
+        }
+        return null
+    }
+
+    private fun bucket(usage: DayUsage, k: String) = usage.buckets[k] ?: 0L
+
+    private fun sectionSnapshot(
+        now: ZonedDateTime, day: LocalDate, t: LocalTime, profile: Profile, todaySections: List<Section>, usage: DayUsage,
+        dayStart: Long, dayEnd: Long, wallet: List<Grant>,
+        manual: Pair<Mode, Long?>?, active: Mode?, modeEnds: LocalTime?, modeRemaining: Long?,
+        locked: Boolean, lockUntil: Long?, free: Boolean, parentUntil: Long?,
+    ): Snapshot {
+        val cur = currentSection(day, t)
+        val todayIds = todaySections.map { it.id }.toSet()
+        val dayGrants = rules.grants.filter { it.validOn == day || it.activatedOn == day }
+        fun sectionExtra(id: String) = dayGrants.filter { it.sectionId == id && it.activatedOn == null }.sumOf { it.minutes }
+        val adjust = rules.commands
+            .filter { !it.cancelled && it.type == CommandType.ADJUST && it.createdAt in dayStart until dayEnd }
+            .sumOf { it.minutes ?: 0 }
+        // Havuz: bölümü olmayan (ya da bugün olmayan bir bölüme verilmiş) süreler + cüzdandan bugün kullanılanlar + düzeltmeler
+        val poolMin = dayGrants.filter { it.activatedOn == day || it.sectionId == null || it.sectionId !in todayIds }.sumOf { it.minutes } + adjust
+        val allExtra = dayGrants.sumOf { it.minutes } + adjust
+
+        // Bölüm zinciri: sırayla etkin süre, devreden, havuzdan taşan
+        var carry = 0L
+        var poolUsed = 0L
+        var curLeft: Long? = null
+        var curEff = 0L
+        for (sec in todaySections.sortedWith(compareBy({ it.start }, { it.order }))) {
+            val key = "${sec.id}@$day"
+            val used = bucket(usage, "s:$key")
+            if (sec.budgetMinutes == null) {
+                if (cur?.key == key) curLeft = null
+                continue
+            }
+            val eff = (sec.budgetMinutes + sectionExtra(sec.id)) * 60L + carry
+            poolUsed += (used - eff).coerceAtLeast(0)
+            val left = (eff - used).coerceAtLeast(0)
+            if (cur?.key == key) { curLeft = left; curEff = eff }
+            carry = if (sec.carryOver) left else 0
+        }
+        // Dünden taşan gece bölümü: kendi süresi (devretme yok)
+        if (cur != null && cur.section.id !in todayIds && cur.section.budgetMinutes != null) {
+            val eff = cur.section.budgetMinutes * 60L
+            val used = bucket(usage, "s:${cur.key}")
+            poolUsed += (used - eff).coerceAtLeast(0)
+            curLeft = (eff - used).coerceAtLeast(0); curEff = eff
+        }
+        val poolLeft = (poolMin * 60L - poolUsed).coerceAtLeast(0)
+        val capLeft = profile.maxTotalMinutes?.let { ((it + allExtra) * 60L - usage.countedSeconds).coerceAtLeast(0) }
+        val sectionPart = if (cur == null) 0L else (curLeft ?: UNLIMITED_SECONDS)
+        var remaining = (sectionPart + poolLeft).coerceAtMost(UNLIMITED_SECONDS)
+        if (capLeft != null) remaining = minOf(remaining, capLeft)
+
+        val allowance = when {
+            cur != null && curLeft != null -> ((curEff / 60) + poolMin).toInt()
+            profile.maxTotalMinutes != null -> profile.maxTotalMinutes + allExtra
+            else -> (UNLIMITED_SECONDS / 60).toInt()
+        }
+        return Snapshot(
+            day = day, now = t, profile = profile, activeMode = active, modeIsManual = manual != null,
+            modeEndsAt = modeEnds, locked = locked, lockUntil = lockUntil, free = free,
+            allowanceMinutes = allowance, usedMinutes = (usage.countedSeconds / 60).toInt(), remainingSeconds = remaining,
+            modeRemainingSeconds = modeRemaining, extraMinutesToday = allExtra, walletGrants = wallet,
+            parentMode = parentUntil != null, parentModeUntil = parentUntil,
+            sectionMode = true, section = cur, sectionLeftSeconds = curLeft, poolLeftSeconds = poolLeft, capLeftSeconds = capLeft,
+        )
+    }
+
+    private fun sectionVerdict(pkg: String, app: AppRule?, s: Snapshot, usage: DayUsage): AppVerdict {
+        if (app == null || !app.approved) return AppVerdict(false, "Ebeveyn onayı bekliyor")
+        if (app.group == Group.BLOCKED) return AppVerdict(false, "Bu uygulama kapalı")
+        val cur = s.section ?: return AppVerdict(false, "Bu saatlerde kapalı")
+        val sec = cur.section
+        val appRule = rules.sectionRules.firstOrNull { it.sectionId == sec.id && it.pkg == pkg }
+        val grp = rules.groupOf[pkg]
+        val grpRule = if (appRule == null && grp != null) rules.sectionRules.firstOrNull { it.sectionId == sec.id && it.groupId == grp } else null
+        val rule = appRule?.rule ?: grpRule?.rule ?: sec.defaultRule
+        return when (rule) {
+            SecRule.OPEN -> AppVerdict(true)
+            SecRule.BLOCKED -> AppVerdict(false, "${sec.name}: bu uygulama şu an kapalı")
+            SecRule.TIMED -> {
+                if (rules.mandatoryOpen.isNotEmpty()) return AppVerdict(false, mandatoryReason())
+                if (s.remainingSeconds <= 0) {
+                    return AppVerdict(false, if (s.capLeftSeconds == 0L) "Bugünkü süren bitti" else "${sec.name} süren bitti")
+                }
+                val k = cur.key
+                appRule?.limitMinutes?.let { if (bucket(usage, "sa:$k|$pkg") >= it * 60L) return AppVerdict(false, "Bu uygulamanın ${sec.name} sınırı doldu") }
+                if (appRule == null && grp != null) {
+                    val gName = rules.groupNames[grp] ?: "Grup"
+                    grpRule?.limitMinutes?.let { if (bucket(usage, "sg:$k|$grp") >= it * 60L) return AppVerdict(false, "$gName için ${sec.name} süresi doldu") }
+                    rules.groupLimits[s.profile.id]?.get(grp)?.let { if (bucket(usage, "g:$grp") >= it * 60L) return AppVerdict(false, "$gName için bugünkü süre doldu") }
+                }
+                app.dailyLimitMinutes?.let { if ((usage.perAppCounted[pkg] ?: 0) >= it * 60L) return AppVerdict(false, "Bu uygulamanın günlük sınırı doldu") }
+                val b = mutableListOf("s:$k", "sa:$k|$pkg")
+                if (grp != null) { b += "g:$grp"; b += "sg:$k|$grp" }
+                AppVerdict(true, countsDaily = true, buckets = b)
+            }
+        }
     }
 
     private fun mandatoryReason() = "Önce görevini yap: ${rules.mandatoryOpen.first()}"
@@ -192,6 +340,7 @@ class RuleEngine(private val rules: Rules) {
             }
         }
 
+        if (s.sectionMode) return sectionVerdict(pkg, app, s, usage)
         if (!approved) return AppVerdict(false, "Ebeveyn onayı bekliyor")
         return when (group) {
             Group.ALWAYS_OPEN -> AppVerdict(true)
@@ -220,6 +369,11 @@ class RuleEngine(private val rules: Rules) {
                 perAppCounted = u.perAppCounted + (pkg to ((u.perAppCounted[pkg] ?: 0) + seconds)),
             )
         }
+        if (v.allowed && v.countsDaily && v.buckets.isNotEmpty()) {
+            val m = u.buckets.toMutableMap()
+            for (k in v.buckets) m[k] = (m[k] ?: 0) + seconds
+            u = u.copy(buckets = m)
+        }
         if (v.allowed && v.countsMode != null) {
             u = u.copy(perMode = u.perMode + (v.countsMode to ((u.perMode[v.countsMode] ?: 0) + seconds)))
         }
@@ -230,7 +384,16 @@ class RuleEngine(private val rules: Rules) {
     fun dueWarnings(s: Snapshot, usage: DayUsage): List<Pair<String, String>> {
         val out = mutableListOf<Pair<String, String>>()
         val remMin = s.remainingSeconds / 60.0
+        val sec = s.section
         for (w in s.profile.warnMinutes.sortedDescending()) {
+            if (s.sectionMode) {
+                if (sec == null || s.remainingSeconds >= UNLIMITED_SECONDS) continue
+                val key = "sec-${sec.key}-$w-${s.allowanceMinutes}"
+                if (s.remainingSeconds > 0 && remMin <= w && key !in usage.warned) {
+                    out += key to "${sec.section.name} süresinin bitmesine $w dakika kaldı"
+                }
+                continue
+            }
             val key = "daily-$w-${s.allowanceMinutes}"
             if (s.remainingSeconds > 0 && remMin <= w && key !in usage.warned) {
                 out += key to "Günlük sürenin bitmesine $w dakika kaldı"

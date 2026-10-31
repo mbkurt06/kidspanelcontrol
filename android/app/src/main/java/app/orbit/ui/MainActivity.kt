@@ -179,18 +179,31 @@ private fun HomeScreen() {
 
         Card {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                val frac = if (s.allowanceMinutes > 0) s.remainingSeconds / (s.allowanceMinutes * 60f) else 0f
-                Ring(frac, if (s.remainingSeconds > 600) C.blue else C.warn, 120.dp) {
+                val unlimited = s.remainingSeconds >= app.orbit.engine.UNLIMITED_SECONDS
+                val frac = if (unlimited) 1f else if (s.allowanceMinutes > 0) s.remainingSeconds / (s.allowanceMinutes * 60f) else 0f
+                Ring(frac, if (unlimited || s.remainingSeconds > 600) C.blue else C.warn, 120.dp) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(minutesText(s.remainingSeconds / 60), color = C.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        Muted("kaldı", 12)
+                        Text(if (unlimited) "∞" else minutesText(s.remainingSeconds / 60), color = C.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                        Muted(if (unlimited) "sınırsız" else "kaldı", 12)
                     }
                 }
                 Spacer(Modifier.width(16.dp))
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Muted("Bugünkü hak: ${minutesText(s.allowanceMinutes.toLong())}")
-                    Muted("Kullanılan: ${minutesText(s.usedMinutes.toLong())}")
-                    if (s.extraMinutesToday != 0) Muted("Ekstra: ${minutesText(s.extraMinutesToday.toLong())}")
+                    if (s.sectionMode) {
+                        val sec = s.section
+                        if (sec != null) {
+                            Text("Şu an: ${sec.section.name}", color = C.text, fontWeight = FontWeight.SemiBold)
+                            Muted("${sec.endsAt.toString().take(5)}'e kadar")
+                            s.sectionLeftSeconds?.let { Muted("Bölüm süresi: ${minutesText(it / 60)}") }
+                        } else Muted("Şu an kapalı saatler")
+                        if (s.poolLeftSeconds > 0) Muted("Ekstra süre: ${minutesText(s.poolLeftSeconds / 60)}")
+                        s.capLeftSeconds?.let { Muted("Bugün en fazla: ${minutesText(it / 60)} daha") }
+                        Muted("Bugün kullanılan: ${minutesText(s.usedMinutes.toLong())}")
+                    } else {
+                        Muted("Bugünkü hak: ${minutesText(s.allowanceMinutes.toLong())}")
+                        Muted("Kullanılan: ${minutesText(s.usedMinutes.toLong())}")
+                        if (s.extraMinutesToday != 0) Muted("Ekstra: ${minutesText(s.extraMinutesToday.toLong())}")
+                    }
                     s.activeMode?.let { m ->
                         Text(
                             m.name + (s.modeEndsAt?.let { " · ${it.toString().take(5)}'e kadar" } ?: ""),

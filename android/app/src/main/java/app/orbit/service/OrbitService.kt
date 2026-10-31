@@ -179,10 +179,15 @@ class OrbitService : Service() {
         if ((firstRun || Live.syncRequested || nowMs - lastPull > 30_000) && netBusy.compareAndSet(false, true)) {
             lastPull = nowMs
             Live.syncRequested = false
-            val report = !Store.prefs().getBoolean("appsReported", false)
+            // İlk kez ya da yeni sürümde uygulama listesini (kategorilerle) yeniden bildir
+            val report = !Store.prefs().getBoolean("appsReported", false) ||
+                (firstRun && Store.prefs().getInt("appsReportedVersion", 0) != app.orbit.BuildConfig.VERSION_CODE)
             scope.launch(Dispatchers.IO) {
                 try {
-                    if (report) Sync.reportApps(this@OrbitService, initial = true)
+                    if (report) {
+                        Sync.reportApps(this@OrbitService, initial = true)
+                        Store.prefs().edit().putInt("appsReportedVersion", app.orbit.BuildConfig.VERSION_CODE).apply()
+                    }
                     Sync.pullRules()
                     // Şifre kasası: sahip kaydı ve yeni ebeveyn cihazlarına anahtar paylaşımı (10 dk'da bir)
                     if (System.currentTimeMillis() - lastVault > 10 * 60_000L) {
@@ -253,6 +258,8 @@ class OrbitService : Service() {
             snap.parentMode -> null
             snap.locked -> "Telefon ebeveyn tarafından kilitlendi"
             snap.activeMode != null && snap.activeMode.othersBlocked -> "Şu an ${snap.activeMode.name}"
+            snap.sectionMode && snap.section == null -> "Bu saatlerde kapalı"
+            snap.sectionMode && snap.remainingSeconds <= 0 -> "${snap.section!!.section.name} süren bitti"
             snap.remainingSeconds <= 0 -> "Günlük süren bitti"
             else -> null
         }
@@ -302,6 +309,15 @@ class OrbitService : Service() {
             s.activeMode != null && s.activeMode.othersBlocked ->
                 "Şu an ${s.activeMode.name}" + (until?.let { " — $it'te biter." } ?: ".") + " Açık uygulamalar Orbit'te."
             mandatory.isNotEmpty() -> "Önce görevini yap: ${mandatory.first()}. Görev onaylanınca açılır."
+            s.sectionMode && s.section == null -> "Şu an telefon kapalı saatlerde. Açık uygulamalar Orbit'te."
+            s.sectionMode && s.section != null -> {
+                val sec = s.section
+                val end = sec.endsAt.toString().take(5)
+                if (s.remainingSeconds <= 0)
+                    "⏰ ${sec.section.name} süren bitti (${sec.section.name} $end'te biter). Orbit'ten ebeveyninden süre isteyebilirsin."
+                else
+                    "Şu an ${sec.section.name} ($end'e kadar). Bu uygulama bu bölümde kapalı, süresi dolmuş ya da onay bekliyor. Açık uygulamalar Orbit'te."
+            }
             s.remainingSeconds <= 0 -> "⏰ Bugünkü süren bitti. Yarın tekrar açılır; Orbit'ten ebeveyninden süre isteyebilirsin."
             else -> "Bu uygulama şu an kapalı: ebeveyn onayı bekliyor ya da bu saatlerde kapalı. Açık uygulamalar Orbit'te."
         }
@@ -361,9 +377,12 @@ class OrbitService : Service() {
     private fun updateNotification(s: Snapshot) {
         val rem = s.remainingSeconds / 60
         val text = buildString {
-            append("Kalan süre: ")
-            append(if (rem >= 60) "${rem / 60} sa ${rem % 60} dk" else "$rem dk")
-            s.activeMode?.let { append(" · ${it.name}") }
+            if (s.remainingSeconds >= app.orbit.engine.UNLIMITED_SECONDS) append("Süre sınırı yok")
+            else {
+                append("Kalan süre: ")
+                append(if (rem >= 60) "${rem / 60} sa ${rem % 60} dk" else "$rem dk")
+            }
+            s.activeMode?.let { append(" · ${it.name}") } ?: s.section?.let { append(" · ${it.section.name}") }
             if (s.locked) append(" · kilitli")
         }
         if (text == lastNote) return

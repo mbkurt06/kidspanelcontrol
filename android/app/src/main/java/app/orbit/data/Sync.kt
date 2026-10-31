@@ -37,6 +37,11 @@ object Sync {
                 .put("overrides", Api.get("day_overrides?child_id=eq.$child&select=*"))
                 .put("grants", Api.get("time_grants?child_id=eq.$child&select=*&order=created_at.desc&limit=100"))
                 .put("commands", Api.get("commands?child_id=eq.$child&select=*&order=created_at.desc&limit=60"))
+                .put("sections", runCatching { Api.get("profile_sections?select=*") }.getOrElse { JSONArray() })
+                .put("section_rules", runCatching { Api.get("section_rules?select=*") }.getOrElse { JSONArray() })
+                .put("groups", runCatching { Api.get("app_groups?select=id,name") }.getOrElse { JSONArray() })
+                .put("group_members", runCatching { Api.get("app_group_members?select=package,group_id") }.getOrElse { JSONArray() })
+                .put("group_limits", runCatching { Api.get("profile_group_limits?select=*") }.getOrElse { JSONArray() })
                 .put("tasks", runCatching { JSONArray(Api.rpc("device_tasks", JSONObject().put("p_day", today))) }.getOrElse { JSONArray() })
             Store.rulesJson = bundle.toString()
             kid.optJSONObject(0)?.optString("name")?.let { Store.childName = it }
@@ -63,6 +68,7 @@ object Sync {
         val arr = JSONArray()
         for (a in Policy.launchables(ctx)) {
             val o = JSONObject().put("package", a.pkg).put("label", a.label).put("system", a.system)
+            a.category?.let { o.put("category", it) }
             if (a.pkg in essentials) o.put("default_group", "always_open").put("preapproved", true)
             if (initial) o.put("initial", true)
             arr.put(o)
@@ -82,7 +88,7 @@ object Sync {
                     .put("used_minutes", s.usedMinutes).put("allowance_minutes", s.allowanceMinutes)
                     .put("remaining_minutes", (s.remainingSeconds / 60).toInt())
                     .put("current_mode_id", s.activeMode?.id ?: JSONObject.NULL)
-                    .put("current_mode_name", s.activeMode?.name ?: JSONObject.NULL)
+                    .put("current_mode_name", s.activeMode?.name ?: s.section?.section?.name ?: JSONObject.NULL)
                     .put("locked", s.locked).put("lock_reason", lockReason ?: JSONObject.NULL)
                     .put("foreground_package", foreground ?: JSONObject.NULL)
                     .put("battery", battery ?: JSONObject.NULL)

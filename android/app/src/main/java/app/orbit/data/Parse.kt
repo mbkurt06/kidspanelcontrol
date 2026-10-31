@@ -12,6 +12,9 @@ import app.orbit.engine.ModeSlot
 import app.orbit.engine.Profile
 import app.orbit.engine.Rules
 import app.orbit.engine.TimeWindow
+import app.orbit.engine.SecRule
+import app.orbit.engine.Section
+import app.orbit.engine.SectionRule
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
@@ -85,7 +88,7 @@ object Parse {
 
     fun grants(a: JSONArray): List<Grant> = (0 until a.length()).map {
         val o = a.getJSONObject(it)
-        Grant(o.getString("id"), o.optInt("minutes"), date(o.str("valid_on")), date(o.str("expires_on")), date(o.str("activated_on")), o.str("note"))
+        Grant(o.getString("id"), o.optInt("minutes"), date(o.str("valid_on")), date(o.str("expires_on")), date(o.str("activated_on")), o.str("note"), o.str("section_id"))
     }
 
     fun commands(a: JSONArray): List<Command> = (0 until a.length()).mapNotNull {
@@ -100,6 +103,26 @@ object Parse {
         )
     }
 
+    fun sections(a: JSONArray): List<Section> = (0 until a.length()).mapNotNull {
+        val o = a.getJSONObject(it)
+        runCatching {
+            Section(
+                o.getString("id"), o.getString("profile_id"), o.optString("name"),
+                time(o.getString("start_time")), time(o.getString("end_time")),
+                o.intOrNull("budget_minutes"), o.optBoolean("carry_over"), SecRule.of(o.str("default_rule")), o.optInt("sort_order"),
+            )
+        }.getOrNull()
+    }
+
+    fun sectionRules(a: JSONArray): List<SectionRule> = (0 until a.length()).map {
+        val o = a.getJSONObject(it)
+        SectionRule(o.getString("section_id"), o.str("group_id"), o.str("package"), SecRule.of(o.str("rule")), o.intOrNull("limit_minutes"))
+    }
+
+    fun groupLimits(a: JSONArray): Map<String, Map<String, Int>> = (0 until a.length()).map { a.getJSONObject(it) }
+        .groupBy { it.getString("profile_id") }
+        .mapValues { (_, l) -> l.associate { it.getString("group_id") to it.optInt("daily_minutes") } }
+
     /** Sunucudan gelen ham parçaları tek bir JSON'da saklar. */
     fun rulesFromBundle(b: JSONObject): Rules = Rules(
         timezone = b.optString("timezone", "Europe/Berlin"),
@@ -112,6 +135,11 @@ object Parse {
         grants = grants(b.optJSONArray("grants") ?: JSONArray()),
         commands = commands(b.optJSONArray("commands") ?: JSONArray()),
         mandatoryOpen = Tasks.parse(b.optJSONArray("tasks")).filter { it.blocking }.map { it.title },
+        sections = sections(b.optJSONArray("sections") ?: JSONArray()),
+        sectionRules = sectionRules(b.optJSONArray("section_rules") ?: JSONArray()),
+        groupOf = (b.optJSONArray("group_members") ?: JSONArray()).let { m -> (0 until m.length()).associate { m.getJSONObject(it).let { o -> o.getString("package") to o.getString("group_id") } } },
+        groupNames = (b.optJSONArray("groups") ?: JSONArray()).let { m -> (0 until m.length()).associate { m.getJSONObject(it).let { o -> o.getString("id") to o.optString("name") } } },
+        groupLimits = groupLimits(b.optJSONArray("group_limits") ?: JSONArray()),
     )
 
     // --- Gün sayaçları ---
@@ -126,6 +154,7 @@ object Parse {
         putMap("perAppTotal", u.perAppTotal)
         putMap("perMode", u.perMode)
         put("warned", JSONArray(u.warned.toList()))
+        putMap("buckets", u.buckets)
     }.toString()
 
     fun usageFromJson(s: String): DayUsage {
@@ -134,6 +163,7 @@ object Parse {
             LocalDate.parse(o.getString("day")), o.optLong("counted"),
             longMap(o.optJSONObject("perAppCounted")), longMap(o.optJSONObject("perAppTotal")), longMap(o.optJSONObject("perMode")),
             strings(o.optJSONArray("warned")).toSet(),
+            longMap(o.optJSONObject("buckets")),
         )
     }
 }

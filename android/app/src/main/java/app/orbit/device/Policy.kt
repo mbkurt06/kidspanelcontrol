@@ -43,14 +43,26 @@ object Policy {
         "no_add_clone_profile",
     )
 
+    /** Ebeveyn modunda bile kalan kısıtlamalar (yanlışlıkla sıfırlanıp Orbit'in yetkisi kaybolmasın). */
+    private val ALWAYS = setOf(UserManager.DISALLOW_FACTORY_RESET)
+
+    /**
+     * maintenance = ebeveyn modu: kısıtlamalar (uygulama yükleme/yönetme, geliştirici seçenekleri) kalkar,
+     * uygulamaların izin istekleri sorulmadan verilir. Süre bitince her şey geri gelir.
+     */
     fun applyBase(ctx: Context, maintenance: Boolean) {
         if (!isOwner(ctx)) return
         val d = dpm(ctx)
         val a = admin(ctx)
-        for (r in RESTRICTIONS) runCatching { d.addUserRestriction(a, r) }.onFailure { Log.w(TAG, "kısıtlama $r", it) }
+        for (r in RESTRICTIONS) runCatching {
+            if (maintenance && r !in ALWAYS) d.clearUserRestriction(a, r) else d.addUserRestriction(a, r)
+        }.onFailure { Log.w(TAG, "kısıtlama $r", it) }
         runCatching {
             if (maintenance) d.clearUserRestriction(a, UserManager.DISALLOW_DEBUGGING_FEATURES)
             else d.addUserRestriction(a, UserManager.DISALLOW_DEBUGGING_FEATURES)
+        }
+        runCatching {
+            d.setPermissionPolicy(a, if (maintenance) DevicePolicyManager.PERMISSION_POLICY_AUTO_GRANT else DevicePolicyManager.PERMISSION_POLICY_PROMPT)
         }
         runCatching { d.setUninstallBlocked(a, ctx.packageName, true) }
         // Çocuk Orbit'i "durmaya zorla" veya "verileri sil" yapamasın

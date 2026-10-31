@@ -89,6 +89,7 @@ class OrbitService : Service() {
     private var lastPull = 0L
     private var lastPush = 0L
     private var firstRun = true
+    private var lastParentMode = false
     @Volatile private var lastVault = 0L
     private val netBusy = java.util.concurrent.atomic.AtomicBoolean(false)
     private val pushBusy = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -228,10 +229,10 @@ class OrbitService : Service() {
         Store.saveUsage(usage)
 
         // 5) Kuralları uygula: kapalı olması gerekenleri askıya al
-        val maintenance = rules.commands.any {
-            it.type == CommandType.RESYNC && it.maintenance && !it.cancelled && (it.untilAt ?: 0) > nowMs
-        }
-        if (firstRun || nowMs - lastPush > 60_000) {
+        // Ebeveyn modu: bütün sınırlamalar kalkar (değiştiği anda hemen uygulanır)
+        val maintenance = snap.parentMode
+        if (firstRun || nowMs - lastPush > 60_000 || maintenance != lastParentMode) {
+            lastParentMode = maintenance
             Policy.applyBase(this, maintenance)
             checkOwner()
         }
@@ -249,6 +250,7 @@ class OrbitService : Service() {
 
         // 6) Ön plandaki uygulama kapalıysa kilit ekranını göster
         var lockReason: String? = when {
+            snap.parentMode -> null
             snap.locked -> "Telefon ebeveyn tarafından kilitlendi"
             snap.activeMode != null && snap.activeMode.othersBlocked -> "Şu an ${snap.activeMode.name}"
             snap.remainingSeconds <= 0 -> "Günlük süren bitti"
@@ -281,7 +283,7 @@ class OrbitService : Service() {
                 }
             }
         }
-        if (nowMs - Store.lastUpdateCheck > 6 * 3600_000L) {
+        if (nowMs - Store.lastUpdateCheck > 3600_000L) {
             Store.lastUpdateCheck = nowMs
             scope.launch(Dispatchers.IO) { Updater.check(this@OrbitService) }
         }

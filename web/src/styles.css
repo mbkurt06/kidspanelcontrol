@@ -657,3 +657,9 @@ select:focus {
   letter-spacing: 0.06em;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
+
+/* Ebeveyn modu açıkken kart dikkat çeksin */
+.card.parent-mode-on {
+  border-color: var(--warn, #f2b134);
+  box-shadow: 0 0 0 1px var(--warn, #f2b134) inset;
+}

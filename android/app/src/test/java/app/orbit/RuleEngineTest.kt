@@ -251,4 +251,25 @@ class RuleEngineTest {
         assertTrue(e.verdict("com.wa", s, u).allowed)
         assertTrue(e.verdict("com.phone", s, u).allowed)
     }
+
+    @Test
+    fun parentModeLiftsEverythingUntilItEnds() {
+        val lock = Command("c1", CommandType.LOCK, ms(at(14)), null, null, null, false, false)
+        val pm = Command("c2", CommandType.RESYNC, ms(at(14, 10)), ms(at(15, 10)), null, null, false, false, maintenance = true)
+        val e = RuleEngine(rules(commands = listOf(lock, pm), slots = listOf(ModeSlot("p1", "m-sleep", (1..7).toSet(), t("14:00"), t("16:00")))))
+        val u = DayUsage(day)
+        val s = e.snapshot(at(15), u)
+        assertTrue(s.parentMode)
+        // Kilitli, uyku zamanı ve onaysız/engelli uygulama olsa bile açık, süre sayılmaz
+        val v = e.verdict("com.unknown.app", s, u)
+        assertTrue(v.allowed); assertFalse(v.countsDaily)
+        assertTrue(e.verdict("com.insta", s, u).allowed)
+        // Süre bitince eski kurallar
+        val after = e.snapshot(at(15, 20), u)
+        assertFalse(after.parentMode)
+        assertFalse(e.verdict("com.unknown.app", after, u).allowed)
+        // İptal edilen ebeveyn modu geçersiz
+        val cancelled = pm.copy(cancelled = true)
+        assertFalse(RuleEngine(rules(commands = listOf(cancelled))).snapshot(at(15), u).parentMode)
+    }
 }

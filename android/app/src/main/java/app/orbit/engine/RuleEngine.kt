@@ -35,6 +35,9 @@ data class Snapshot(
     val extraMinutesToday: Int,
     /** Çocuğun kullanabileceği, bekleyen ekstra süreler */
     val walletGrants: List<Grant>,
+    /** Ebeveyn modu: ebeveyn telefonda işlem yapıyor, bütün sınırlamalar kalktı */
+    val parentMode: Boolean = false,
+    val parentModeUntil: Long? = null,
 )
 
 /**
@@ -77,6 +80,11 @@ class RuleEngine(private val rules: Rules) {
             else -> Triple(false, false, null)
         }
     }
+
+    /** Ebeveyn modu: iptal edilmemiş, süresi dolmamış "bakım" komutu varsa. En geç biteni döner. */
+    fun parentModeUntil(nowMs: Long): Long? = rules.commands
+        .filter { it.type == CommandType.RESYNC && it.maintenance && !it.cancelled && (it.untilAt ?: 0) > nowMs }
+        .maxOfOrNull { it.untilAt!! }
 
     private fun manualMode(nowMs: Long): Pair<Mode, Long?>? {
         val last = rules.commands
@@ -130,6 +138,7 @@ class RuleEngine(private val rules: Rules) {
         val active = manual?.first ?: sched?.first
         val modeEnds = if (manual != null) manual.second?.let { java.time.Instant.ofEpochMilli(it).atZone(zone).toLocalTime() } else sched?.second
 
+        val parentUntil = parentModeUntil(nowMs)
         val extra = extraMinutes(day, dayStart, dayEnd)
         var allowance = (profile.dailyMinutes + extra).coerceAtLeast(0)
         profile.maxTotalMinutes?.let { allowance = minOf(allowance, it) }
@@ -146,6 +155,7 @@ class RuleEngine(private val rules: Rules) {
             modeEndsAt = modeEnds, locked = locked, lockUntil = lockUntil, free = free,
             allowanceMinutes = allowance, usedMinutes = (used / 60).toInt(), remainingSeconds = remaining,
             modeRemainingSeconds = modeRemaining, extraMinutesToday = extra, walletGrants = wallet,
+            parentMode = parentUntil != null, parentModeUntil = parentUntil,
         )
     }
 
@@ -158,6 +168,7 @@ class RuleEngine(private val rules: Rules) {
         val group = app?.group ?: Group.BLOCKED
         val approved = app?.approved == true
 
+        if (s.parentMode) return AppVerdict(true)
         if (approved && group == Group.ALWAYS_OPEN) return AppVerdict(true)
         if (s.free) {
             return if (approved && group != Group.BLOCKED) AppVerdict(true) else AppVerdict(false, if (!approved) "Ebeveyn onayı bekliyor" else "Bu uygulama kapalı")

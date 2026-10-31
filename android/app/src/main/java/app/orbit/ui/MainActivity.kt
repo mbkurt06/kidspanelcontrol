@@ -167,6 +167,16 @@ private fun HomeScreen() {
             return@Column
         }
 
+        if (s.parentMode) {
+            Card {
+                Text("Ebeveyn modu açık", color = C.warn, fontWeight = FontWeight.SemiBold)
+                Muted(
+                    "Bütün sınırlamalar geçici olarak kalktı" +
+                        (s.parentModeUntil?.let { " · " + java.time.Instant.ofEpochMilli(it).atZone(java.time.ZoneId.systemDefault()).toLocalTime().toString().take(5) + "'e kadar" } ?: "")
+                )
+            }
+        }
+
         Card {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val frac = if (s.allowanceMinutes > 0) s.remainingSeconds / (s.allowanceMinutes * 60f) else 0f

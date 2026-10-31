@@ -25,7 +25,7 @@ object Updater {
     fun check(ctx: Context) {
         Store.init(ctx)
         val token = Store.updateToken
-        if (token.isBlank()) { msg("Güncelleme anahtarı yok"); return }
+        if (token.isBlank()) { checkPublic(ctx); return }
         try {
             val c = open("https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases/latest", token, "application/vnd.github+json")
             if (c.responseCode != 200) { msg("GitHub HTTP ${c.responseCode}"); return }
@@ -43,6 +43,36 @@ object Updater {
             install(ctx, download(url, token))
         } catch (e: Exception) {
             Log.e(TAG, "güncelleme", e)
+            msg("Hata: ${e.message}")
+        }
+    }
+
+    /**
+     * Anahtar yoksa ebeveyn panelindeki herkese açık sürüm dosyasına bakar (kurulum/version.json).
+     * APK, Orbit'in imza anahtarıyla imzalı olmak zorunda; başka imzalı dosyayı Android zaten kurmaz.
+     */
+    private const val PUBLIC_MANIFEST = "https://orbit-panel-nu.vercel.app/kurulum/version.json"
+
+    private fun checkPublic(ctx: Context) {
+        try {
+            val c = open(PUBLIC_MANIFEST, null, "application/json")
+            if (c.responseCode != 200) { msg("Sürüm dosyası HTTP ${c.responseCode}"); return }
+            val j = JSONObject(c.inputStream.bufferedReader().use { it.readText() })
+            val version = j.optInt("version")
+            if (version <= BuildConfig.VERSION_CODE) { msg("Güncel (${BuildConfig.VERSION_CODE})"); return }
+            val url = j.optString("url")
+            if (!url.startsWith("https://")) { msg("Sürüm dosyası hatalı"); return }
+            msg("Sürüm $version indiriliyor")
+            var d = open(url, null, "application/octet-stream")
+            var step = 0
+            while (d.responseCode in 300..399 && step < 5) {
+                val next = d.getHeaderField("Location") ?: break
+                d.disconnect(); d = open(next, null, "application/octet-stream"); step++
+            }
+            if (d.responseCode != 200) throw IllegalStateException("İndirme HTTP ${d.responseCode}")
+            install(ctx, d.inputStream.use { it.readBytes() })
+        } catch (e: Exception) {
+            Log.e(TAG, "güncelleme (genel)", e)
             msg("Hata: ${e.message}")
         }
     }

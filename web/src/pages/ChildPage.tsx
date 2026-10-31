@@ -28,6 +28,7 @@ export default function ChildPage() {
           <Icon name="key" size={16} /> Şifreler
         </Link>
       </header>
+      <ParentModeCard childId={child.id} />
       <div className="segmented">
         {(
           [
@@ -48,6 +49,104 @@ export default function ChildPage() {
       {tab === "time" && <TimeTab childId={child.id} />}
       {tab === "report" && <ReportTab childId={child.id} />}
       {tab === "device" && <DeviceTab childId={child.id} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+/**
+ * Ebeveyn modu: ebeveyn telefonda işlem yaparken bütün sınırlamalar kalkar
+ * (tüm uygulamalar açık, süre sayılmaz, kilit yok, uygulama yükleme/ayar/izinler serbest, USB hata ayıklama açık).
+ * Süre bitince telefon kendiliğinden normal kurallara döner.
+ */
+function ParentModeCard({ childId }: { childId: string }) {
+  const [until, setUntil] = useState<Date | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [, tick] = useState(0);
+
+  const load = useCallback(async () => {
+    const { data } = await supabase
+      .from("commands")
+      .select("until_at")
+      .eq("child_id", childId)
+      .eq("type", "resync")
+      .eq("payload->>maintenance", "true")
+      .is("cancelled_at", null)
+      .gt("until_at", new Date().toISOString())
+      .order("until_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const u = (data as { until_at: string } | null)?.until_at;
+    setUntil(u ? new Date(u) : null);
+  }, [childId]);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(() => tick((x) => x + 1), 30000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  async function start(minutes: number) {
+    setBusy(true);
+    setErr("");
+    try {
+      await sendCommand(childId, "resync", { maintenance: true }, new Date(Date.now() + minutes * 60000).toISOString());
+      await load();
+    } catch (e) {
+      setErr(errorText(e));
+    }
+    setBusy(false);
+  }
+
+  async function stop() {
+    setBusy(true);
+    try {
+      // Açık olan ebeveyn modu komutlarını iptal et, telefon hemen normal kurallara döner.
+      const { error } = await supabase
+        .from("commands")
+        .update({ cancelled_at: new Date().toISOString() })
+        .eq("child_id", childId)
+        .eq("type", "resync")
+        .eq("payload->>maintenance", "true")
+        .is("cancelled_at", null);
+      if (error) throw error;
+      await sendCommand(childId, "resync", {});
+      await load();
+    } catch (e) {
+      setErr(errorText(e));
+    }
+    setBusy(false);
+  }
+
+  const active = until && until.getTime() > Date.now();
+  return (
+    <div className={`card ${active ? "parent-mode-on" : ""}`}>
+      <div className="row gap-s wrap" style={{ alignItems: "center" }}>
+        <div className="grow">
+          <h2 style={{ margin: 0 }}>Ebeveyn modu{active ? " açık" : ""}</h2>
+          <p className="muted small" style={{ margin: "4px 0 0" }}>
+            {active
+              ? `${until!.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}'e kadar bütün sınırlamalar kalktı. Süre bitince kurallar kendiliğinden geri gelir.`
+              : "Telefonda sen işlem yaparken bütün sınırlamaları kaldırır: tüm uygulamalar açık, süre sayılmaz, uygulama yükleme, ayarlar ve izinler serbest."}
+          </p>
+        </div>
+        {active ? (
+          <button className="btn" disabled={busy} onClick={stop}>
+            Bitir
+          </button>
+        ) : (
+          <div className="row gap-s">
+            {[30, 60, 180].map((m) => (
+              <button key={m} className="btn" disabled={busy} onClick={() => start(m)}>
+                {m < 60 ? `${m} dk` : `${m / 60} sa`}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      {err && <p className="error">{err}</p>}
     </div>
   );
 }
@@ -544,35 +643,16 @@ function DeviceTab({ childId }: { childId: string }) {
         )}
       </div>
       <div className="card">
-        <h2>Bakım</h2>
-        <p className="muted small">
-          Telefonu bilgisayara bağlayıp bakım yapman gerekirse geliştirici seçeneklerini ve USB hata ayıklamayı geçici olarak açar.
-          Süre bitince kendiliğinden kapanır.
-        </p>
-        <div className="row gap-s wrap">
-          <button
-            className="btn"
-            onClick={async () => {
-              try {
-                await sendCommand(childId, "resync", { maintenance: true }, new Date(Date.now() + 60 * 60000).toISOString());
-                setErr("");
-                alert("Bakım modu 1 saatliğine açılıyor (telefon 30 sn içinde alır).");
-              } catch (e) {
-                setErr(errorText(e));
-              }
-            }}
-          >
-            Bakım modu (1 saat)
-          </button>
-          <button
-            className="btn ghost"
-            onClick={async () => {
-              await sendCommand(childId, "resync", { maintenance: false }).catch(() => {});
-            }}
-          >
-            Kuralları hemen gönder
-          </button>
-        </div>
+        <h2>Kuralları gönder</h2>
+        <p className="muted small">Telefon kuralları zaten 30 saniyede bir alır; beklemek istemezsen hemen gönderir.</p>
+        <button
+          className="btn ghost"
+          onClick={async () => {
+            await sendCommand(childId, "resync", {}).catch(() => {});
+          }}
+        >
+          Kuralları hemen gönder
+        </button>
       </div>
 
       <div className="card">

@@ -18,7 +18,14 @@ export async function sendCommand(childId: string, type: string, payload: Record
 export async function grantMinutes(
   childId: string,
   minutes: number,
-  opts: { validOn?: string | null; expiresOn?: string | null; note?: string; sectionId?: string | null } = {}
+  opts: {
+    validOn?: string | null;
+    expiresOn?: string | null;
+    note?: string;
+    sectionId?: string | null;
+    vault?: boolean;
+    window?: { start: string; end: string } | null;
+  } = {}
 ) {
   const { data: u } = await supabase.auth.getUser();
   const { error } = await supabase.from("time_grants").insert({
@@ -28,6 +35,9 @@ export async function grantMinutes(
     expires_on: opts.expiresOn ?? null,
     note: opts.note ?? null,
     section_id: opts.sectionId ?? null,
+    vault: opts.vault ?? false,
+    window_start: opts.window?.start ?? null,
+    window_end: opts.window?.end ?? null,
     source: "manual",
     created_by: u.user?.id,
   });

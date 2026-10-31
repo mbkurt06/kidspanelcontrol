@@ -36,6 +36,8 @@ export type Section = {
   default_rule: SecRule;
   color: string;
   sort_order: number;
+  icon: string | null;
+  message: string | null;
 };
 
 export type SectionRule = {
@@ -157,6 +159,9 @@ export type TimeGrant = {
   note: string | null;
   created_at: string;
   section_id: string | null;
+  vault: boolean;
+  window_start: string | null;
+  window_end: string | null;
 };
 
 export type OrbitEvent = {
@@ -188,7 +193,7 @@ export const WEEKDAYS_LONG = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "
 // --- Aşama 2: görevler ---
 
 export type ProofType = "none" | "photo" | "video" | "photo_or_video";
-export type RewardValidity = "today" | "tomorrow" | "date" | "wallet";
+export type RewardValidity = "today" | "tomorrow" | "date" | "wallet" | "vault";
 
 export type TaskTemplate = {
   id: string;
@@ -258,6 +263,7 @@ export const VALIDITY_LABEL: Record<RewardValidity, string> = {
   tomorrow: "Yarın",
   date: "Belirli gün",
   wallet: "Çocuk istediği gün kullanır",
+  vault: "Süre kasasına (sonra ben planlarım)",
 };
 
 export const STATUS_LABEL: Record<RunStatus, string> = {

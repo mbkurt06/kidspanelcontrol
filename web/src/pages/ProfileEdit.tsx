@@ -65,6 +65,16 @@ function SectionsEditor({ profile, sections }: { profile: Profile; sections: Sec
         <div className="sub-card section-edit" key={s.id} style={{ borderLeft: `4px solid ${s.color}` }}>
           <div className="row gap-s wrap">
             <input
+              className="mini"
+              style={{ width: 52, textAlign: "center", fontSize: 20 }}
+              defaultValue={s.icon ?? ""}
+              key={`i-${s.id}-${s.icon}`}
+              placeholder="🙂"
+              maxLength={4}
+              onBlur={(e) => e.target.value !== (s.icon ?? "") && patch(s, { icon: e.target.value.trim() || null })}
+              aria-label="Simge (emoji)"
+            />
+            <input
               className="grow"
               defaultValue={s.name}
               key={`n-${s.id}-${s.name}`}
@@ -96,6 +106,14 @@ function SectionsEditor({ profile, sections }: { profile: Profile; sections: Sec
               <span className="muted small">dk süre</span>
             </label>
           </div>
+          <input
+            defaultValue={s.message ?? ""}
+            key={`m-${s.id}-${s.message}`}
+            placeholder="Çocuğa mesaj (ör. İyi geceler, sabah 10'da açılır)"
+            maxLength={140}
+            onBlur={(e) => e.target.value !== (s.message ?? "") && patch(s, { message: e.target.value.trim() || null })}
+            aria-label="Çocuğa mesaj"
+          />
           <div className="row gap-s wrap">
             <label className="check">
               <input type="checkbox" checked={s.carry_over} onChange={(e) => patch(s, { carry_over: e.target.checked })} /> Kalan süre sonraki bölüme

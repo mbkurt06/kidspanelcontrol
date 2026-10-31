@@ -264,9 +264,11 @@ function ReviewCard({ run, task, childName, color, onDone }: { run: TaskRun; tas
     }
     // Süre nereye eklensin: görevin varsayılanından farklı seçildiyse verilen süreyi güncelle
     const def = (task as (Task & { reward_section_id?: string | null }) | undefined)?.reward_section_id ?? "";
-    if (approve && validity !== "wallet" && sectionId !== def) {
+    if (approve && validity !== "wallet" && validity !== "vault" && sectionId !== def) {
       await supabase.from("time_grants").update({ section_id: sectionId || null }).eq("task_run_id", run.id);
     }
+    // Kasa seçimi onayda değiştirildiyse süreyi ona göre işaretle
+    if (approve) await supabase.from("time_grants").update({ vault: validity === "vault" }).eq("task_run_id", run.id);
     // Kanıtlar karar verilince hemen silinir (sunucu da 15 dk'da bir kontrol eder).
     const paths = (data ?? []) as string[];
     if (paths.length) await supabase.storage.from("orbit-proofs").remove(paths);
@@ -333,7 +335,7 @@ function ReviewCard({ run, task, childName, color, onDone }: { run: TaskRun; tas
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </label>
           )}
-          {validity !== "wallet" && Number(minutes) > 0 && (
+          {validity !== "wallet" && validity !== "vault" && Number(minutes) > 0 && (
             <label className="field">
               <span>Nereye eklensin</span>
               <select value={sectionId} onChange={(e) => setSectionId(e.target.value)}>

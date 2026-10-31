@@ -142,7 +142,7 @@ export default function TaskEdit() {
       reward_validity: f.reward_validity,
       reward_date: f.reward_validity === "date" ? f.reward_date : null,
       reward_expires_days: f.reward_validity === "wallet" && f.reward_expires_days ? Number(f.reward_expires_days) : null,
-      reward_section_id: f.reward_validity !== "wallet" && f.reward_section_id ? f.reward_section_id : null,
+      reward_section_id: f.reward_validity !== "wallet" && f.reward_validity !== "vault" && f.reward_section_id ? f.reward_section_id : null,
       mandatory: f.mandatory,
       active: f.active,
     };
@@ -307,7 +307,10 @@ export default function TaskEdit() {
             <input type="date" value={f.reward_date} onChange={(e) => set("reward_date", e.target.value)} />
           </label>
         )}
-        {f.reward_validity !== "wallet" && (
+        {f.reward_validity === "vault" && (
+          <p className="muted small">Süre çocuğun süre kasasına kaydedilir; çocuk kendisi kullanamaz. Çocuğun Süre sekmesinden istediğin güne, bölüme ya da saat aralığına aktarırsın.</p>
+        )}
+        {f.reward_validity !== "wallet" && f.reward_validity !== "vault" && (
           <label className="field">
             <span>Kazandığı süre nereye eklensin</span>
             <select value={f.reward_section_id} onChange={(e) => set("reward_section_id", e.target.value)}>

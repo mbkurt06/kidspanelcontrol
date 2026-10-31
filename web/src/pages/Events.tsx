@@ -18,6 +18,8 @@ function describe(e: OrbitEvent, childName: string) {
       return `${childName} "${p.title}" görevini tamamladı, onay bekliyor.`;
     case "time_request":
       return `${childName} ek süre istiyor${p.label ? ` (${p.label})` : ""}${p.note ? `: "${p.note}"` : "."}`;
+    case "app_request":
+      return `${childName} "${p.label ?? p.package}" uygulamasının açılmasını istiyor${p.note ? `: "${p.note}"` : "."}`;
     case "device_boot":
       return `${childName} telefonu yeniden başlatıldı.`;
     case "device_owner_lost":

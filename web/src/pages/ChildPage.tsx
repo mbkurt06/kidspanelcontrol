@@ -551,7 +551,8 @@ function TimeTab({ childId }: { childId: string }) {
   const child = fam.children.find((c) => c.id === childId)!;
   const [grants, setGrants] = useState<TimeGrant[]>([]);
   const [minutes, setMinutes] = useState("20");
-  const [when, setWhen] = useState<"today" | "tomorrow" | "date" | "child">(child.extra_default === "wallet" ? "child" : "today");
+  const [when, setWhen] = useState<"today" | "tomorrow" | "date" | "child" | "vault">(child.extra_default === "wallet" ? "child" : "today");
+  const [plan, setPlan] = useState<TimeGrant | null>(null);
   // Nereye: "current" (şu anki bölüm), "pool" (gün boyu) ya da bölüm id
   const [target, setTarget] = useState<string>(child.extra_default === "pool" ? "pool" : "current");
   const [date, setDate] = useState(todayISO("Europe/Berlin", 1));
@@ -577,9 +578,13 @@ function TimeTab({ childId }: { childId: string }) {
 
   const today = todayISO();
   const live = useMemo(
-    () => grants.filter((g) => (g.valid_on && g.valid_on >= today) || (!g.valid_on && !g.activated_on && (!g.expires_on || g.expires_on >= today)) || g.activated_on === today),
+    () =>
+      grants.filter(
+        (g) => !g.vault && ((g.valid_on && g.valid_on >= today) || (!g.valid_on && !g.activated_on && (!g.expires_on || g.expires_on >= today)) || g.activated_on === today)
+      ),
     [grants, today]
   );
+  const vault = grants.filter((g) => g.vault);
   const profName = (pid: string) => fam.profiles.find((p) => p.id === pid)?.name ?? "";
   const sectionOptions = fam.sections.map((sec) => ({ id: sec.id, label: `${profName(sec.profile_id)} · ${sec.name} ${hhmm(sec.start_time)}–${hhmm(sec.end_time)}` }));
   const secName = (id: string | null) => (id ? fam.sections.find((x) => x.id === id)?.name ?? "bölüm" : null);
@@ -590,6 +595,17 @@ function TimeTab({ childId }: { childId: string }) {
     const m = Number(minutes);
     if (!m) return;
     const validOn = when === "today" ? today : when === "tomorrow" ? todayISO("Europe/Berlin", 1) : when === "date" ? date : null;
+    if (when === "vault") {
+      try {
+        await grantMinutes(childId, m, { validOn: null, vault: true, note: note || undefined });
+        setMsg(`${minutesText(m)} süre kasasına kaydedildi`);
+        setNote("");
+        load();
+      } catch (e) {
+        setErr(errorText(e));
+      }
+      return;
+    }
     const sectionId = when === "child" ? null : target === "current" ? (when === "today" ? cur?.id ?? null : null) : target === "pool" ? null : target;
     try {
       await grantMinutes(childId, m, { validOn, sectionId, expiresOn: when === "child" ? expires || null : null, note: note || undefined });
@@ -604,11 +620,13 @@ function TimeTab({ childId }: { childId: string }) {
 
   async function retarget(g: TimeGrant, v: string) {
     const patch =
-      v === "wallet"
-        ? { valid_on: null, section_id: null }
-        : v === "pool"
-          ? { valid_on: g.valid_on ?? today, section_id: null }
-          : { valid_on: g.valid_on ?? today, section_id: v };
+      v === "vault"
+        ? { valid_on: null, section_id: null, vault: true, window_start: null, window_end: null, expires_on: null }
+        : v === "wallet"
+          ? { valid_on: null, section_id: null, window_start: null, window_end: null }
+          : v === "pool"
+            ? { valid_on: g.valid_on ?? today, section_id: null, window_start: null, window_end: null }
+            : { valid_on: g.valid_on ?? today, section_id: v, window_start: null, window_end: null };
     const { error } = await supabase.from("time_grants").update(patch).eq("id", g.id);
     if (error) setErr(errorText(error));
     load();
@@ -638,6 +656,7 @@ function TimeTab({ childId }: { childId: string }) {
             <option value="tomorrow">Yarın</option>
             <option value="date">Belirli bir gün</option>
             <option value="child">Cüzdan: çocuk istediği gün kullansın</option>
+            <option value="vault">Süre kasası: sonra ben planlarım</option>
           </select>
         </label>
         {when === "date" && (
@@ -646,7 +665,7 @@ function TimeTab({ childId }: { childId: string }) {
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </label>
         )}
-        {when !== "child" && (
+        {when !== "child" && when !== "vault" && (
           <label className="field">
             <span>Nereye eklensin</span>
             <select value={target} onChange={(e) => setTarget(e.target.value)}>
@@ -700,6 +719,53 @@ function TimeTab({ childId }: { childId: string }) {
         </label>
       </div>
       <div className="card">
+        <h2>Süre kasası</h2>
+        <p className="muted small">Kasadaki süreyi çocuk kendisi kullanamaz. İstediğin güne, bölüme ya da saat aralığına aktar; istersen bölerek.</p>
+        {!vault.length && <p className="muted small">Kasada süre yok.</p>}
+        {vault.length > 0 && (
+          <p>
+            <b>Toplam {minutesText(vault.reduce((a, g) => a + g.minutes, 0))}</b>
+          </p>
+        )}
+        {vault.map((g) => (
+          <div className="app-row wrap" key={g.id}>
+            <div className="grow">
+              <b>{minutesText(g.minutes)}</b>
+              <div className="muted tiny">
+                {g.note ?? (g.source === "task" ? "görev ödülü" : "ekstra süre")} · {dateText(g.created_at.slice(0, 10))}
+              </div>
+            </div>
+            <button className="btn small primary" onClick={() => setPlan(g)}>
+              Planla
+            </button>
+            <button
+              className="icon-btn"
+              aria-label="Sil"
+              onClick={async () => {
+                if (!confirm("Bu süre kasadan silinsin mi?")) return;
+                await supabase.from("time_grants").delete().eq("id", g.id);
+                load();
+              }}
+            >
+              <Icon name="trash" size={18} />
+            </button>
+          </div>
+        ))}
+      </div>
+      {plan && (
+        <PlanSheet
+          grant={plan}
+          sections={sectionOptions}
+          onClose={() => setPlan(null)}
+          onDone={(t) => {
+            setPlan(null);
+            setMsg(t);
+            load();
+            fam.reload();
+          }}
+        />
+      )}
+      <div className="card">
         <h2>Verilen süreler</h2>
         {!live.length && <p className="muted small">Bekleyen ekstra süre yok.</p>}
         {live.map((g) => (
@@ -708,18 +774,21 @@ function TimeTab({ childId }: { childId: string }) {
               <b>{minutesText(g.minutes)}</b>
               <div className="muted tiny">
                 {g.valid_on ? dateText(g.valid_on) : g.activated_on ? `kullanıldı · ${dateText(g.activated_on)}` : `cüzdan${g.expires_on ? ` · son ${dateText(g.expires_on)}` : ""}`}
+                {g.window_start ? ` · ${hhmm(g.window_start)}–${hhmm(g.window_end ?? "")} arası` : ""}
                 {g.note ? ` · ${g.note}` : ""}
               </div>
             </div>
             {!g.activated_on && (
               <>
                 <select
-                  value={!g.valid_on ? "wallet" : g.section_id ?? "pool"}
-                  onChange={(e) => retarget(g, e.target.value)}
+                  value={g.window_start ? "window" : !g.valid_on ? "wallet" : g.section_id ?? "pool"}
+                  onChange={(e) => (e.target.value === "window" ? setPlan(g) : retarget(g, e.target.value))}
                   aria-label="Nereye"
                 >
                   <option value="pool">Gün boyu</option>
+                  <option value="window">Saat aralığı…</option>
                   <option value="wallet">Cüzdan</option>
+                  <option value="vault">Süre kasasına geri al</option>
                   {sectionOptions.map((o) => (
                     <option key={o.id} value={o.id}>
                       {o.label}
@@ -741,6 +810,119 @@ function TimeTab({ childId }: { childId: string }) {
             )}
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** Kasadaki (ya da verilmiş) bir süreyi bir güne / bölüme / saat aralığına / cüzdana aktar; istersen bir kısmını. */
+function PlanSheet({
+  grant,
+  sections,
+  onClose,
+  onDone,
+}: {
+  grant: TimeGrant;
+  sections: { id: string; label: string }[];
+  onClose: () => void;
+  onDone: (msg: string) => void;
+}) {
+  const [minutes, setMinutes] = useState(String(grant.minutes));
+  const [day, setDay] = useState<"today" | "tomorrow" | "date">("today");
+  const [date, setDate] = useState(todayISO("Europe/Berlin", 2));
+  const [where, setWhere] = useState<string>(grant.window_start ? "window" : "pool");
+  const [start, setStart] = useState(grant.window_start ? hhmm(grant.window_start) : "19:00");
+  const [end, setEnd] = useState(grant.window_end ? hhmm(grant.window_end) : "20:00");
+  const [err, setErr] = useState("");
+
+  async function save() {
+    setErr("");
+    const m = Math.round(Number(minutes));
+    if (!m || m < 1 || m > grant.minutes) return setErr(`1 ile ${grant.minutes} dk arası yaz.`);
+    if (where === "window" && start === end) return setErr("Saat aralığı başı ve sonu aynı olamaz.");
+    const validOn = day === "today" ? todayISO() : day === "tomorrow" ? todayISO("Europe/Berlin", 1) : date;
+    const target =
+      where === "wallet"
+        ? { valid_on: null, section_id: null, vault: false, window_start: null, window_end: null }
+        : where === "window"
+          ? { valid_on: validOn, section_id: null, vault: false, window_start: start, window_end: end }
+          : where === "pool"
+            ? { valid_on: validOn, section_id: null, vault: false, window_start: null, window_end: null }
+            : { valid_on: validOn, section_id: where, vault: false, window_start: null, window_end: null };
+    let error;
+    if (m === grant.minutes) {
+      ({ error } = await supabase.from("time_grants").update(target).eq("id", grant.id));
+    } else {
+      // Bölerek: kalan kısım kasada kalır
+      const { data: u } = await supabase.auth.getUser();
+      ({ error } = await supabase.from("time_grants").insert({
+        child_id: grant.child_id,
+        minutes: m,
+        note: grant.note,
+        source: grant.source,
+        created_by: u.user?.id,
+        ...target,
+      }));
+      if (!error) ({ error } = await supabase.from("time_grants").update({ minutes: grant.minutes - m }).eq("id", grant.id));
+    }
+    if (error) return setErr(errorText(error));
+    const whenText = where === "wallet" ? "cüzdana" : dateText(validOn);
+    const whereText =
+      where === "window" ? ` ${start}–${end} arası` : where === "pool" ? " gün boyu" : where === "wallet" ? "" : ` · ${sections.find((x) => x.id === where)?.label ?? "bölüm"}`;
+    onDone(`${minutesText(m)} → ${whenText}${whereText}`);
+  }
+
+  return (
+    <div className="sheet-backdrop" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <h2>Süreyi planla</h2>
+        <label className="field">
+          <span>Kaç dakika (en fazla {grant.minutes})</span>
+          <input type="number" min={1} max={grant.minutes} value={minutes} onChange={(e) => setMinutes(e.target.value)} />
+        </label>
+        <label className="field">
+          <span>Nereye</span>
+          <select value={where} onChange={(e) => setWhere(e.target.value)}>
+            <option value="pool">Gün boyu: süreli her bölümde</option>
+            <option value="window">Belirli saat aralığı (o saatlerde açılır)</option>
+            {sections.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+            <option value="wallet">Çocuğun cüzdanına (istediği gün kullansın)</option>
+          </select>
+        </label>
+        {where !== "wallet" && (
+          <label className="field">
+            <span>Hangi gün</span>
+            <select value={day} onChange={(e) => setDay(e.target.value as typeof day)}>
+              <option value="today">Bugün</option>
+              <option value="tomorrow">Yarın</option>
+              <option value="date">Belirli bir gün</option>
+            </select>
+          </label>
+        )}
+        {where !== "wallet" && day === "date" && <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />}
+        {where === "window" && (
+          <div className="row gap-s">
+            <input type="time" value={start} onChange={(e) => setStart(e.target.value)} aria-label="Başlangıç" />
+            <span className="muted">–</span>
+            <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} aria-label="Bitiş" />
+          </div>
+        )}
+        {where === "window" && (
+          <p className="muted tiny">Bu saatlerde, normalde kapalı olsa bile "kurallara göre" uygulamalar bu süre kadar açılır.</p>
+        )}
+        {err && <p className="error">{err}</p>}
+        <div className="row gap-s">
+          <button className="btn primary" onClick={save}>
+            Kaydet
+          </button>
+          <button className="btn ghost" onClick={onClose}>
+            Vazgeç
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -93,7 +93,8 @@ private fun LockScreen(reason: String, pkg: String?, onHome: () -> Unit) {
             val sub = when {
                 s.locked && s.lockUntil != null -> "Kilit ${java.time.Instant.ofEpochMilli(s.lockUntil).atZone(java.time.ZoneId.systemDefault()).toLocalTime().toString().take(5)}'te açılır"
                 s.activeMode != null && s.modeEndsAt != null -> "${s.activeMode.name} ${s.modeEndsAt.toString().take(5)}'te biter"
-                s.section != null -> "${s.section.section.name} ${s.section.endsAt.toString().take(5)}'te biter" +
+                s.section != null -> (s.section.section.icon?.let { "$it " } ?: "") + "${s.section.section.name} ${s.section.endsAt.toString().take(5)}'te biter" +
+                    (s.section.section.message?.let { "\n$it" } ?: "") +
                     (if (s.remainingSeconds in 1 until app.orbit.engine.UNLIMITED_SECONDS) " · kalan süren ${minutesText(s.remainingSeconds / 60)}" else "")
                 s.remainingSeconds in 1 until app.orbit.engine.UNLIMITED_SECONDS -> "Kalan süren: ${minutesText(s.remainingSeconds / 60)}"
                 else -> null

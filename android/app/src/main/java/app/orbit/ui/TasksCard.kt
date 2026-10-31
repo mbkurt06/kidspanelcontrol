@@ -52,6 +52,7 @@ private fun rewardText(t: TaskItem): String? {
         parts += "+$it dk" + when (t.rewardValidity) {
             "tomorrow" -> " (yarın)"
             "wallet" -> " (cüzdana)"
+            "vault" -> " (süre kasasına)"
             "date" -> " (belirli gün)"
             else -> ""
         }

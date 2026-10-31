@@ -72,6 +72,10 @@ data class Grant(
     val note: String?,
     /** Belirli bir bölüme verilen süre; null = gün boyu havuz */
     val sectionId: String? = null,
+    /** Süre kasasında: çocuk kullanamaz, ebeveyn sonradan bir zamana aktarır */
+    val vault: Boolean = false,
+    /** O gün bu saatler arasında geçerli ekstra süre (bölüm kapalı olsa bile) */
+    val window: TimeWindow? = null,
 )
 
 /** Bölüm kuralı: açık (süre saymaz) / süreli / kapalı */
@@ -94,6 +98,9 @@ data class Section(
     val carryOver: Boolean,
     val defaultRule: SecRule,
     val order: Int = 0,
+    /** Çocuğa gösterilen simge (emoji) ve mesaj */
+    val icon: String? = null,
+    val message: String? = null,
 ) {
     val crossesMidnight get() = start > end
 }

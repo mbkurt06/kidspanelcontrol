@@ -314,12 +314,14 @@ class OrbitService : Service() {
             s.sectionMode && s.section != null -> {
                 val sec = s.section
                 val end = sec.endsAt.toString().take(5)
+                val head = (sec.section.icon?.let { "$it " } ?: "") + sec.section.name
+                val msg = sec.section.message?.let { " $it" } ?: ""
                 if (s.sectionClosed)
-                    "Şu an ${sec.section.name} — telefon $end'e kadar kapalı. Açık uygulamalar Orbit'te."
+                    "$head ($end'e kadar).$msg Telefon bu saatlerde kapalı."
                 else if (s.remainingSeconds <= 0)
                     "⏰ ${sec.section.name} süren bitti (${sec.section.name} $end'te biter). Orbit'ten ebeveyninden süre isteyebilirsin."
                 else
-                    "Şu an ${sec.section.name} ($end'e kadar). Bu uygulama bu bölümde kapalı, süresi dolmuş ya da onay bekliyor. Açık uygulamalar Orbit'te."
+                    "Şu an $head ($end'e kadar).$msg Bu uygulama bu bölümde kapalı, süresi dolmuş ya da onay bekliyor. Açık uygulamalar Orbit'te."
             }
             s.remainingSeconds <= 0 -> "⏰ Bugünkü süren bitti. Yarın tekrar açılır; Orbit'ten ebeveyninden süre isteyebilirsin."
             else -> "Bu uygulama şu an kapalı: ebeveyn onayı bekliyor ya da bu saatlerde kapalı. Açık uygulamalar Orbit'te."

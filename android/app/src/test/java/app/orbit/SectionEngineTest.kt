@@ -207,4 +207,23 @@ class SectionEngineTest {
         assertEquals(u.buckets, back.buckets)
         assertEquals(300L, back.buckets["sg:serbest@$day|g-game"])
     }
+
+    @Test
+    fun timeWindowGrantOpensClosedHoursAndVaultIsNotUsable() {
+        val window = Grant("w1", 30, day, null, null, "Film", null, window = app.orbit.engine.TimeWindow(t("21:00"), t("22:00")))
+        val vault = Grant("v1", 45, null, null, null, "Kasada", null, vault = true)
+        val e = RuleEngine(rules(grants = listOf(window, vault)))
+        // 21:30 normalde Uyku (kapalı); ekstra süre aralığında süreli uygulamalar açık
+        val s = e.snapshot(at(21, 30), DayUsage(day))
+        assertEquals("Film", s.section?.section?.name)
+        assertEquals(30 * 60L, s.remainingSeconds)
+        assertTrue(v(e, "com.insta", at(21, 30)).allowed)
+        var u = use(e, DayUsage(day), "com.insta", at(21, 30), 30)
+        assertFalse(v(e, "com.insta", at(21, 50), u).allowed)
+        // Aralık dışında yine Uyku
+        assertEquals("Uyku", e.snapshot(at(22, 30), DayUsage(day)).section?.section?.name)
+        // Kasadaki süre çocuğun cüzdanında görünmez, bugüne eklenmez
+        assertTrue(s.walletGrants.isEmpty())
+        assertEquals(60 * 60L, e.snapshot(at(16, 5), DayUsage(day)).remainingSeconds)
+    }
 }

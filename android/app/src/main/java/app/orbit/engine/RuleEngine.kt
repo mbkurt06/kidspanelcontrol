@@ -143,7 +143,7 @@ class RuleEngine(private val rules: Rules) {
     }
 
     fun extraMinutes(day: LocalDate, dayStartMs: Long, dayEndMs: Long): Int {
-        val grants = rules.grants.filter { it.validOn == day || it.activatedOn == day }.sumOf { it.minutes }
+        val grants = rules.grants.filter { !it.vault && it.window == null && (it.validOn == day || it.activatedOn == day) }.sumOf { it.minutes }
         val adjust = rules.commands
             .filter { !it.cancelled && it.type == CommandType.ADJUST && it.createdAt in dayStartMs until dayEndMs }
             .sumOf { it.minutes ?: 0 }
@@ -174,7 +174,7 @@ class RuleEngine(private val rules: Rules) {
         val modeRemaining = active?.budgetMinutes?.let { (it * 60L - (usage.perMode[active.id] ?: 0)).coerceAtLeast(0) }
 
         val wallet = rules.grants.filter {
-            it.validOn == null && it.activatedOn == null && (it.expiresOn == null || !it.expiresOn.isBefore(day))
+            !it.vault && it.validOn == null && it.activatedOn == null && (it.expiresOn == null || !it.expiresOn.isBefore(day))
         }
 
         val todaySections = rules.sections.filter { it.profileId == profile.id }
@@ -197,7 +197,26 @@ class RuleEngine(private val rules: Rules) {
     // --- Bölümler ---
 
     /** Şu anki bölüm: bugünün bölümleri önce; yoksa dünden taşan (gece yarısını geçen) bölüm. */
+    /** Ebeveynin belirli saat aralığına verdiği ekstra süre o an geçerliyse, o aralık sanal bir bölüm olur. */
+    fun windowSection(day: LocalDate, t: LocalTime): SectionNow? {
+        val g = rules.grants.firstOrNull { !it.vault && it.validOn == day && it.window?.contains(t) == true } ?: return null
+        val w = g.window!!
+        val sec = Section(
+            "grant:${g.id}", profileFor(day).id, g.note?.takeIf { it.isNotBlank() } ?: "Ekstra süre",
+            w.start, w.end, g.minutes, false, SecRule.TIMED, 0, "🎁", "Ebeveynin verdiği ekstra süre",
+        )
+        return SectionNow(sec, day, w.end)
+    }
+
+    /** Bugünün bölümleri (saat sırasıyla) — çocuğun "Günüm" ekranı için. */
+    fun daySections(day: LocalDate): List<Section> =
+        rules.sections.filter { it.profileId == profileFor(day).id }.sortedWith(compareBy({ it.start }, { it.order }))
+
+    /** Bugün için saat aralıklı ekstra süreler. */
+    fun dayWindows(day: LocalDate): List<Grant> = rules.grants.filter { !it.vault && it.validOn == day && it.window != null }
+
     fun currentSection(day: LocalDate, t: LocalTime): SectionNow? {
+        windowSection(day, t)?.let { return it }
         val today = profileFor(day).id
         val todays = rules.sections.filter { it.profileId == today }
         todays.firstOrNull { !it.crossesMidnight && t >= it.start && t < it.end }?.let { return SectionNow(it, day, it.end) }
@@ -222,14 +241,14 @@ class RuleEngine(private val rules: Rules) {
     ): Snapshot {
         val cur = currentSection(day, t)
         val todayIds = todaySections.map { it.id }.toSet()
-        val dayGrants = rules.grants.filter { it.validOn == day || it.activatedOn == day }
+        val dayGrants = rules.grants.filter { !it.vault && it.window == null && (it.validOn == day || it.activatedOn == day) }
         fun sectionExtra(id: String) = dayGrants.filter { it.sectionId == id && it.activatedOn == null }.sumOf { it.minutes }
         val adjust = rules.commands
             .filter { !it.cancelled && it.type == CommandType.ADJUST && it.createdAt in dayStart until dayEnd }
             .sumOf { it.minutes ?: 0 }
         // Havuz: bölümü olmayan (ya da bugün olmayan bir bölüme verilmiş) süreler + cüzdandan bugün kullanılanlar + düzeltmeler
         val poolMin = dayGrants.filter { it.activatedOn == day || it.sectionId == null || it.sectionId !in todayIds }.sumOf { it.minutes } + adjust
-        val allExtra = dayGrants.sumOf { it.minutes } + adjust
+        val allExtra = dayGrants.sumOf { it.minutes } + adjust + dayWindows(day).sumOf { it.minutes }
 
         // Bölüm zinciri: sırayla etkin süre, devreden, havuzdan taşan
         var carry = 0L

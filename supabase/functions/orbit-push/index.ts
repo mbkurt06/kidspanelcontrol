@@ -26,6 +26,8 @@ function text(type: string, child: string, p: Record<string, unknown>): { title:
       return { title: `${child} görevi tamamladı`, body: `${s("title")} — onayını bekliyor`, url: "/#/tasks" };
     case "time_request":
       return { title: `${child} süre istiyor`, body: s("label") ? `${s("label")}: ${s("note")}` : s("note") || "Ek süre isteği", url: "/#/" };
+    case "app_request":
+      return { title: `${child} uygulama istiyor`, body: `${s("label") || s("package")} açılsın mı?${s("note") ? ` — ${s("note")}` : ""}`, url: "/#/" };
     case "app_installed":
       return { title: `${child} yeni uygulama yükledi`, body: `${s("label") || s("package")} onay bekliyor`, url: "/#/" };
     case "parent_device_pending":

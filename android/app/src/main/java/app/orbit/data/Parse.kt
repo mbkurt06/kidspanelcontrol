@@ -88,7 +88,9 @@ object Parse {
 
     fun grants(a: JSONArray): List<Grant> = (0 until a.length()).map {
         val o = a.getJSONObject(it)
-        Grant(o.getString("id"), o.optInt("minutes"), date(o.str("valid_on")), date(o.str("expires_on")), date(o.str("activated_on")), o.str("note"), o.str("section_id"))
+        Grant(o.getString("id"), o.optInt("minutes"), date(o.str("valid_on")), date(o.str("expires_on")), date(o.str("activated_on")), o.str("note"), o.str("section_id"),
+            o.optBoolean("vault"),
+            runCatching { if (o.isNull("window_start") || !o.has("window_start")) null else TimeWindow(time(o.getString("window_start")), time(o.getString("window_end"))) }.getOrNull())
     }
 
     fun commands(a: JSONArray): List<Command> = (0 until a.length()).mapNotNull {
@@ -110,6 +112,7 @@ object Parse {
                 o.getString("id"), o.getString("profile_id"), o.optString("name"),
                 time(o.getString("start_time")), time(o.getString("end_time")),
                 o.intOrNull("budget_minutes"), o.optBoolean("carry_over"), SecRule.of(o.str("default_rule")), o.optInt("sort_order"),
+                o.str("icon")?.takeIf { it.isNotBlank() }, o.str("message")?.takeIf { it.isNotBlank() },
             )
         }.getOrNull()
     }

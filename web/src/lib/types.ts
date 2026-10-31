@@ -2,7 +2,8 @@ export type AppGroup = "always_open" | "unlimited" | "timed" | "blocked";
 
 export type Window = { start: string; end: string };
 
-export type Child = { id: string; family_id: string; name: string; color: string; sort_order: number };
+export type ExtraTarget = "current" | "pool" | "wallet";
+export type Child = { id: string; family_id: string; name: string; color: string; sort_order: number; extra_default: ExtraTarget };
 
 export type ChildApp = {
   child_id: string;
@@ -14,7 +15,41 @@ export type ChildApp = {
   is_system: boolean;
   installed: boolean;
   first_seen_at: string;
+  category: string | null;
 };
+
+// --- Gün bölümleri ve uygulama grupları ---
+
+export type SecRule = "open" | "timed" | "blocked";
+
+export type AppGroupDef = { id: string; family_id: string; name: string; color: string; sort_order: number };
+export type GroupMember = { family_id: string; package: string; group_id: string };
+
+export type Section = {
+  id: string;
+  profile_id: string;
+  name: string;
+  start_time: string;
+  end_time: string;
+  budget_minutes: number | null;
+  carry_over: boolean;
+  default_rule: SecRule;
+  color: string;
+  sort_order: number;
+};
+
+export type SectionRule = {
+  id: string;
+  section_id: string;
+  group_id: string | null;
+  package: string | null;
+  rule: SecRule;
+  limit_minutes: number | null;
+};
+
+export type GroupLimit = { profile_id: string; group_id: string; daily_minutes: number };
+
+export const RULE_LABEL: Record<SecRule, string> = { open: "Açık", timed: "Süreli", blocked: "Kapalı" };
 
 export type Profile = {
   id: string;
@@ -121,6 +156,7 @@ export type TimeGrant = {
   source: string;
   note: string | null;
   created_at: string;
+  section_id: string | null;
 };
 
 export type OrbitEvent = {

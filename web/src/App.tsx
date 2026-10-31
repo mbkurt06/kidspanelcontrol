@@ -8,6 +8,7 @@ import Home from "./pages/Home";
 import ChildPage from "./pages/ChildPage";
 import Rules from "./pages/Rules";
 import ProfileEdit from "./pages/ProfileEdit";
+import Groups from "./pages/Groups";
 import ModeEdit from "./pages/ModeEdit";
 import Events from "./pages/Events";
 import Settings from "./pages/Settings";
@@ -174,6 +175,7 @@ function Shell() {
           <Route path="/rules" element={<Rules />} />
           <Route path="/rules/profile/:id" element={<ProfileEdit />} />
           <Route path="/rules/mode/:id" element={<ModeEdit />} />
+          <Route path="/rules/groups" element={<Groups />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/tasks/new" element={<TaskEdit />} />
           <Route path="/tasks/:id" element={<TaskEdit />} />

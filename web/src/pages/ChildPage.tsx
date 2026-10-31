@@ -3,9 +3,10 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { grantMinutes, sendCommand } from "../lib/actions";
-import { dateText, minutesText, relTime, todayISO } from "../lib/util";
-import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type DayOverride, type Device, type TimeGrant } from "../lib/types";
+import { dateText, hhmm, minutesText, relTime, todayISO } from "../lib/util";
+import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type DayOverride, type Device, type ExtraTarget, type Section, type TimeGrant } from "../lib/types";
 import { Icon } from "../components/Icon";
+import { currentSectionFor, suggestGroup } from "../lib/sections";
 
 type Tab = "apps" | "program" | "time" | "report" | "device";
 
@@ -193,11 +194,18 @@ function ParentModeCard({ childId }: { childId: string }) {
 
 const GROUPS: AppGroup[] = ["always_open", "unlimited", "timed", "blocked"];
 
+type Mode3 = "rules" | "always_open" | "blocked";
+const MODE3_LABEL: Record<Mode3, string> = { rules: "Kurallara göre", always_open: "Her zaman açık", blocked: "Hep kapalı" };
+const mode3 = (g: AppGroup): Mode3 => (g === "always_open" ? "always_open" : g === "blocked" ? "blocked" : "rules");
+const fromMode3 = (m: Mode3): AppGroup => (m === "rules" ? "timed" : m);
+
 function AppsTab({ childId }: { childId: string }) {
+  const fam = useFamily();
   const [apps, setApps] = useState<ChildApp[] | null>(null);
   const [q, setQ] = useState("");
   const [showSystem, setShowSystem] = useState(false);
   const [err, setErr] = useState("");
+  const [pendingGroup, setPendingGroup] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.from("child_apps").select("*").eq("child_id", childId).order("label");
@@ -221,6 +229,25 @@ function AppsTab({ childId }: { childId: string }) {
     }
   }
 
+  async function setGroup(pkg: string, groupId: string) {
+    const { error } = groupId
+      ? await supabase.from("app_group_members").upsert({ family_id: fam.familyId, package: pkg, group_id: groupId })
+      : await supabase.from("app_group_members").delete().eq("package", pkg);
+    if (error) setErr(errorText(error));
+    fam.reload();
+  }
+
+  async function approve(a: ChildApp, how: Mode3) {
+    const g = pendingGroup[a.package] ?? fam.members[a.package] ?? suggestedId(a);
+    if (g && g !== fam.members[a.package]) await setGroup(a.package, g);
+    await update(a, { approved: true, app_group: fromMode3(how) });
+  }
+
+  function suggestedId(a: ChildApp) {
+    const name = suggestGroup(a.package, a.label, a.category);
+    return name ? fam.groups.find((g) => g.name.toLocaleLowerCase("tr") === name.toLocaleLowerCase("tr"))?.id ?? "" : "";
+  }
+
   if (!apps) return <p className="muted">Yükleniyor…</p>;
   if (!apps.length)
     return (
@@ -237,6 +264,21 @@ function AppsTab({ childId }: { childId: string }) {
   );
   const pending = filtered.filter((a) => !a.approved);
   const approved = filtered.filter((a) => a.approved);
+  const sections = [
+    ...fam.groups.map((g) => ({ id: g.id, name: g.name, color: g.color })),
+    { id: "", name: "Gruba girmemiş", color: "#9AA0C3" },
+  ];
+
+  const groupSelect = (value: string, onChange: (v: string) => void) => (
+    <select value={value} onChange={(e) => onChange(e.target.value)} aria-label="Grup">
+      <option value="">Grupsuz</option>
+      {fam.groups.map((g) => (
+        <option key={g.id} value={g.id}>
+          {g.name}
+        </option>
+      ))}
+    </select>
+  );
 
   return (
     <div className="stack">
@@ -245,24 +287,23 @@ function AppsTab({ childId }: { childId: string }) {
       {pending.length > 0 && (
         <div className="card attention">
           <h2>Onay bekleyen ({pending.length})</h2>
-          <p className="muted small">Yeni yüklenen uygulamalar sen bir gruba atayana kadar kapalı kalır.</p>
+          <p className="muted small">
+            Grubunu seç ve onayla. "Kurallara göre" uygulamalar grubunun bölüm kurallarına uyar. Onaylanmayan uygulama kapalı kalır.
+          </p>
           {pending.map((a) => (
-            <div className="app-row" key={a.package}>
+            <div className="app-row wrap" key={a.package}>
               <div className="grow">
                 <b>{a.label}</b>
                 <div className="muted tiny">{a.package}</div>
               </div>
-              <select
-                value=""
-                onChange={(e) => update(a, { approved: true, app_group: e.target.value as AppGroup })}
-                aria-label="Grup seç"
-              >
-                <option value="" disabled>
-                  Grup seç
-                </option>
-                {GROUPS.map((g) => (
-                  <option key={g} value={g}>
-                    {GROUP_LABEL[g]}
+              {groupSelect(pendingGroup[a.package] ?? fam.members[a.package] ?? suggestedId(a), (v) =>
+                setPendingGroup((m) => ({ ...m, [a.package]: v }))
+              )}
+              <select value="" onChange={(e) => e.target.value && approve(a, e.target.value as Mode3)} aria-label="Onayla">
+                <option value="">Onayla…</option>
+                {(["rules", "always_open", "blocked"] as Mode3[]).map((m) => (
+                  <option key={m} value={m}>
+                    {MODE3_LABEL[m]}
                   </option>
                 ))}
               </select>
@@ -270,43 +311,48 @@ function AppsTab({ childId }: { childId: string }) {
           ))}
         </div>
       )}
-      {GROUPS.map((g) => {
-        const list = approved.filter((a) => a.app_group === g);
+      {sections.map((g) => {
+        const list = approved.filter((a) => (fam.members[a.package] ?? "") === g.id);
         if (!list.length) return null;
         return (
-          <div className="card" key={g}>
+          <div className="card" key={g.id || "none"}>
             <h2>
-              {GROUP_LABEL[g]} <span className="muted small">· {GROUP_HINT[g]}</span>
+              <span className="dot" style={{ background: g.color }} /> {g.name} <span className="muted small">· {list.length}</span>
             </h2>
             {list.map((a) => (
-              <div className="app-row" key={a.package}>
+              <div className="app-row wrap" key={a.package}>
                 <div className="grow">
                   <b>{a.label}</b>
                   <div className="muted tiny">{a.package}</div>
                 </div>
-                {g === "timed" && (
+                {groupSelect(fam.members[a.package] ?? "", (v) => setGroup(a.package, v))}
+                <select value={mode3(a.app_group)} onChange={(e) => update(a, { app_group: fromMode3(e.target.value as Mode3) })} aria-label="Durum">
+                  {(["rules", "always_open", "blocked"] as Mode3[]).map((m) => (
+                    <option key={m} value={m}>
+                      {MODE3_LABEL[m]}
+                    </option>
+                  ))}
+                </select>
+                {mode3(a.app_group) === "rules" && (
                   <input
                     className="mini"
                     type="number"
                     min={0}
-                    placeholder="sınır dk"
+                    placeholder="gün dk"
                     value={a.daily_limit_minutes ?? ""}
                     onChange={(e) => update(a, { daily_limit_minutes: e.target.value === "" ? null : Number(e.target.value) })}
-                    aria-label="Günlük üst sınır (dakika)"
+                    aria-label="Bu uygulama için günlük üst sınır (dakika)"
                   />
                 )}
-                <select value={a.app_group} onChange={(e) => update(a, { app_group: e.target.value as AppGroup })} aria-label="Grup">
-                  {GROUPS.map((x) => (
-                    <option key={x} value={x}>
-                      {GROUP_LABEL[x]}
-                    </option>
-                  ))}
-                </select>
               </div>
             ))}
           </div>
         );
       })}
+      <p className="muted tiny">
+        Grup kurallarını <Link to="/rules">Kurallar</Link> → gün tipi ekranında, grupları <Link to="/rules/groups">Uygulama grupları</Link> sayfasında
+        düzenlersin.
+      </p>
       <label className="check">
         <input type="checkbox" checked={showSystem} onChange={(e) => setShowSystem(e.target.checked)} /> Sistem uygulamalarını da göster
       </label>
@@ -383,15 +429,15 @@ function ProgramTab({ childId }: { childId: string }) {
       {err && <p className="error">{err}</p>}
       <div className="card">
         <h2>Haftalık program</h2>
-        <p className="muted small">Her gün için bir kural profili seç. Profilleri Kurallar sekmesinden düzenleyebilirsin.</p>
+        <p className="muted small">Her gün için bir gün tipi seç. Gün tiplerini (bölümler ve kurallar) Kurallar sekmesinden düzenleyebilirsin.</p>
         {WEEKDAYS_LONG.map((d, i) => (
           <div className="app-row" key={d}>
             <span className="grow">{d}</span>
             <select value={assign[i + 1] ?? ""} onChange={(e) => setDay(i + 1, e.target.value)}>
-              <option value="">— Profil yok —</option>
+              <option value="">— Gün tipi yok —</option>
               {fam.profiles.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} · {minutesText(p.daily_minutes)}
+                  {p.name}
                 </option>
               ))}
             </select>
@@ -502,14 +548,18 @@ function ProgramTab({ childId }: { childId: string }) {
 
 function TimeTab({ childId }: { childId: string }) {
   const fam = useFamily();
+  const child = fam.children.find((c) => c.id === childId)!;
   const [grants, setGrants] = useState<TimeGrant[]>([]);
   const [minutes, setMinutes] = useState("20");
-  const [when, setWhen] = useState<"today" | "tomorrow" | "date" | "child">("today");
+  const [when, setWhen] = useState<"today" | "tomorrow" | "date" | "child">(child.extra_default === "wallet" ? "child" : "today");
+  // Nereye: "current" (şu anki bölüm), "pool" (gün boyu) ya da bölüm id
+  const [target, setTarget] = useState<string>(child.extra_default === "pool" ? "pool" : "current");
   const [date, setDate] = useState(todayISO("Europe/Berlin", 1));
   const [expires, setExpires] = useState("");
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
+  const [cur, setCur] = useState<Section | null>(null);
 
   const load = useCallback(async () => {
     const { data } = await supabase
@@ -522,13 +572,17 @@ function TimeTab({ childId }: { childId: string }) {
   }, [childId]);
   useEffect(() => {
     load();
-  }, [load]);
+    currentSectionFor(childId, fam.sections).then(setCur);
+  }, [load, childId, fam.sections]);
 
   const today = todayISO();
   const live = useMemo(
     () => grants.filter((g) => (g.valid_on && g.valid_on >= today) || (!g.valid_on && !g.activated_on && (!g.expires_on || g.expires_on >= today)) || g.activated_on === today),
     [grants, today]
   );
+  const profName = (pid: string) => fam.profiles.find((p) => p.id === pid)?.name ?? "";
+  const sectionOptions = fam.sections.map((sec) => ({ id: sec.id, label: `${profName(sec.profile_id)} · ${sec.name} ${hhmm(sec.start_time)}–${hhmm(sec.end_time)}` }));
+  const secName = (id: string | null) => (id ? fam.sections.find((x) => x.id === id)?.name ?? "bölüm" : null);
 
   async function give() {
     setErr("");
@@ -536,15 +590,33 @@ function TimeTab({ childId }: { childId: string }) {
     const m = Number(minutes);
     if (!m) return;
     const validOn = when === "today" ? today : when === "tomorrow" ? todayISO("Europe/Berlin", 1) : when === "date" ? date : null;
+    const sectionId = when === "child" ? null : target === "current" ? (when === "today" ? cur?.id ?? null : null) : target === "pool" ? null : target;
     try {
-      await grantMinutes(childId, m, { validOn, expiresOn: when === "child" ? expires || null : null, note: note || undefined });
-      setMsg(`${minutesText(m)} verildi`);
+      await grantMinutes(childId, m, { validOn, sectionId, expiresOn: when === "child" ? expires || null : null, note: note || undefined });
+      setMsg(`${minutesText(m)} verildi${sectionId ? ` · ${secName(sectionId)}` : when === "child" ? " · cüzdana" : " · gün boyu"}`);
       setNote("");
       load();
       fam.reload();
     } catch (e) {
       setErr(errorText(e));
     }
+  }
+
+  async function retarget(g: TimeGrant, v: string) {
+    const patch =
+      v === "wallet"
+        ? { valid_on: null, section_id: null }
+        : v === "pool"
+          ? { valid_on: g.valid_on ?? today, section_id: null }
+          : { valid_on: g.valid_on ?? today, section_id: v };
+    const { error } = await supabase.from("time_grants").update(patch).eq("id", g.id);
+    if (error) setErr(errorText(error));
+    load();
+  }
+
+  async function saveDefault(v: ExtraTarget) {
+    await supabase.from("children").update({ extra_default: v }).eq("id", childId);
+    fam.reload();
   }
 
   return (
@@ -565,13 +637,27 @@ function TimeTab({ childId }: { childId: string }) {
             <option value="today">Bugün</option>
             <option value="tomorrow">Yarın</option>
             <option value="date">Belirli bir gün</option>
-            <option value="child">Çocuk istediği gün kullansın</option>
+            <option value="child">Cüzdan: çocuk istediği gün kullansın</option>
           </select>
         </label>
         {when === "date" && (
           <label className="field">
             <span>Gün</span>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </label>
+        )}
+        {when !== "child" && (
+          <label className="field">
+            <span>Nereye eklensin</span>
+            <select value={target} onChange={(e) => setTarget(e.target.value)}>
+              {when === "today" && <option value="current">Şu anki bölüm{cur ? ` (${cur.name})` : " (şu an bölüm yok → gün boyu)"}</option>}
+              <option value="pool">Gün boyu: süreli her bölümde kullanılır</option>
+              {sectionOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
           </label>
         )}
         {when === "child" && (
@@ -604,31 +690,54 @@ function TimeTab({ childId }: { childId: string }) {
         >
           Bugünden {minutes} dk düş
         </button>
+        <label className="field">
+          <span>Ana sayfadaki +15 / +30 nereye gitsin</span>
+          <select value={child.extra_default} onChange={(e) => saveDefault(e.target.value as ExtraTarget)}>
+            <option value="current">O anki bölüme</option>
+            <option value="pool">Gün boyu</option>
+            <option value="wallet">Cüzdana</option>
+          </select>
+        </label>
       </div>
       <div className="card">
-        <h2>Süre cüzdanı</h2>
+        <h2>Verilen süreler</h2>
         {!live.length && <p className="muted small">Bekleyen ekstra süre yok.</p>}
         {live.map((g) => (
-          <div className="app-row" key={g.id}>
+          <div className="app-row wrap" key={g.id}>
             <div className="grow">
               <b>{minutesText(g.minutes)}</b>
               <div className="muted tiny">
-                {g.valid_on ? dateText(g.valid_on) : g.activated_on ? `kullanıldı · ${dateText(g.activated_on)}` : `çocuk seçecek${g.expires_on ? ` · son ${dateText(g.expires_on)}` : ""}`}
+                {g.valid_on ? dateText(g.valid_on) : g.activated_on ? `kullanıldı · ${dateText(g.activated_on)}` : `cüzdan${g.expires_on ? ` · son ${dateText(g.expires_on)}` : ""}`}
                 {g.note ? ` · ${g.note}` : ""}
               </div>
             </div>
             {!g.activated_on && (
-              <button
-                className="icon-btn"
-                aria-label="Geri al"
-                onClick={async () => {
-                  await supabase.from("time_grants").delete().eq("id", g.id);
-                  load();
-                  fam.reload();
-                }}
-              >
-                <Icon name="trash" size={18} />
-              </button>
+              <>
+                <select
+                  value={!g.valid_on ? "wallet" : g.section_id ?? "pool"}
+                  onChange={(e) => retarget(g, e.target.value)}
+                  aria-label="Nereye"
+                >
+                  <option value="pool">Gün boyu</option>
+                  <option value="wallet">Cüzdan</option>
+                  {sectionOptions.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="icon-btn"
+                  aria-label="Geri al"
+                  onClick={async () => {
+                    await supabase.from("time_grants").delete().eq("id", g.id);
+                    load();
+                    fam.reload();
+                  }}
+                >
+                  <Icon name="trash" size={18} />
+                </button>
+              </>
             )}
           </div>
         ))}

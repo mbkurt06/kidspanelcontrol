@@ -4,6 +4,9 @@ import { supabase, errorText } from "../lib/supabase";
 import { daysText, hhmm, minutesText } from "../lib/util";
 import { Icon } from "../components/Icon";
 import { useState } from "react";
+import { createDefaultSections } from "./ProfileEdit";
+import { mins } from "../lib/sections";
+import type { Profile } from "../lib/types";
 
 export default function Rules() {
   const fam = useFamily();
@@ -13,10 +16,11 @@ export default function Rules() {
   async function newProfile() {
     const { data, error } = await supabase
       .from("rule_profiles")
-      .insert({ family_id: fam.familyId, name: "Yeni profil", daily_minutes: 90 })
-      .select("id")
+      .insert({ family_id: fam.familyId, name: "Yeni gün tipi", daily_minutes: 90 })
+      .select("*")
       .single();
     if (error) return setErr(errorText(error));
+    await createDefaultSections(data as Profile);
     await fam.reload();
     nav(`/rules/profile/${data.id}`);
   }
@@ -39,24 +43,49 @@ export default function Rules() {
       </header>
       {err && <p className="error">{err}</p>}
 
+      <Link to="/rules/groups" className="card link-card">
+        <div className="grow">
+          <b>Uygulama grupları</b>
+          <div className="row wrap gap-s">
+            {fam.groups.map((g) => (
+              <span className="pill" key={g.id} style={{ borderColor: g.color }}>
+                {g.name} · {Object.values(fam.members).filter((x) => x === g.id).length}
+              </span>
+            ))}
+          </div>
+        </div>
+        <Icon name="chevron" size={18} />
+      </Link>
+
       <section className="stack">
         <div className="row between">
-          <h2 className="section-title">Kural profilleri</h2>
+          <h2 className="section-title">Gün tipleri</h2>
           <button className="btn small" onClick={newProfile}>
             <Icon name="plus" size={16} /> Yeni
           </button>
         </div>
-        <p className="muted small">Bir profil bir günün kurallarıdır: günlük süre, izinli saatler ve o gün geçerli durumlar.</p>
+        <p className="muted small">Bir gün tipi (hafta içi, hafta sonu, tatil…) günün bölümlerini ve her bölümdeki kuralları tutar. Hangi güne hangisinin geçerli olduğunu çocuğun Program sekmesinden seçersin.</p>
         {fam.profiles.map((p) => {
           const slots = fam.slots.filter((s) => s.profile_id === p.id);
+          const secs = fam.sections.filter((s) => s.profile_id === p.id).sort((a, b) => mins(a.start_time) - mins(b.start_time));
           return (
             <Link to={`/rules/profile/${p.id}`} className="card link-card" key={p.id}>
               <div className="grow">
                 <b>{p.name}</b>
                 <div className="muted small">
-                  Günlük {minutesText(p.daily_minutes)}
-                  {p.max_total_minutes ? ` · en fazla ${minutesText(p.max_total_minutes)}` : ""}
+                  {secs.length ? `${secs.length} bölüm` : `Günlük ${minutesText(p.daily_minutes)} (eski düzen)`}
+                  {p.max_total_minutes ? ` · günde en fazla ${minutesText(p.max_total_minutes)}` : ""}
                 </div>
+                {secs.length > 0 && (
+                  <div className="row wrap gap-s">
+                    {secs.map((s) => (
+                      <span className="pill" key={s.id} style={{ borderColor: s.color }}>
+                        {s.name} {hhmm(s.start_time)}–{hhmm(s.end_time)}
+                        {s.budget_minutes != null ? ` · ${minutesText(s.budget_minutes)}` : ""}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 {slots.length > 0 && (
                   <div className="row wrap gap-s">
                     {slots.map((s) => {

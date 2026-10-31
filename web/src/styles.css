@@ -663,3 +663,141 @@ select:focus {
   border-color: var(--warn, #f2b134);
   box-shadow: 0 0 0 1px var(--warn, #f2b134) inset;
 }
+
+/* --- Gün bölümleri: kural tablosu --- */
+.app-row.wrap {
+  flex-wrap: wrap;
+}
+.rule-table-wrap {
+  overflow-x: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+.rule-table {
+  border-collapse: separate;
+  border-spacing: 4px;
+  min-width: 100%;
+  font-size: 13px;
+}
+.rule-table th {
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  vertical-align: middle;
+  padding: 2px 4px;
+}
+.rule-table thead th {
+  vertical-align: bottom;
+}
+.rule-table thead th span {
+  display: block;
+}
+.rule-table tbody th {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  z-index: 1;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rule-table .sec-name {
+  border-bottom: 3px solid var(--line);
+  padding-bottom: 2px;
+  margin-bottom: 2px;
+}
+.rule-table .dot {
+  margin-right: 6px;
+  vertical-align: middle;
+}
+.rule-table tr.row-default th {
+  color: var(--muted);
+  font-style: italic;
+}
+.rule-table td input.mini {
+  width: 64px;
+}
+.cell {
+  width: 100%;
+  min-width: 72px;
+  min-height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+.cell.open {
+  background: color-mix(in srgb, var(--good) 22%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--good) 55%, transparent);
+}
+.cell.timed {
+  background: color-mix(in srgb, var(--warn) 20%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--warn) 55%, transparent);
+}
+.cell.blocked {
+  background: color-mix(in srgb, var(--bad) 18%, var(--surface-2));
+  border-color: color-mix(in srgb, var(--bad) 50%, transparent);
+}
+.cell.inherit {
+  color: var(--muted);
+  border-style: dashed;
+  background: transparent;
+}
+.tiny-btn {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  vertical-align: middle;
+}
+.section-edit {
+  gap: 8px;
+}
+.section-edit input[type="time"] {
+  width: auto;
+}
+.warn-text {
+  color: var(--warn);
+  margin: 0;
+}
+
+/* Alttan açılan seçim penceresi */
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 7, 18, 0.6);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 50;
+}
+.sheet {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 20px 20px 0 0;
+  padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  width: 100%;
+  max-width: 520px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+@media (min-width: 700px) {
+  .sheet-backdrop {
+    align-items: center;
+  }
+  .sheet {
+    border-radius: 20px;
+  }
+}
+.radio-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 4px;
+  cursor: pointer;
+}

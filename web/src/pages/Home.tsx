@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { supabase, errorText } from "../lib/supabase";
-import { grantMinutes, seedDefaults, sendCommand } from "../lib/actions";
+import { quickGrant, seedDefaults, sendCommand } from "../lib/actions";
 import { minutesText, relTime } from "../lib/util";
 import { Ring } from "../components/Ring";
 import { Icon } from "../components/Icon";
@@ -48,12 +48,12 @@ function ChildCard({ child }: { child: Child }) {
   const [msg, setMsg] = useState("");
   const stale = !st || Date.now() - new Date(st.updated_at).getTime() > 15 * 60000;
 
-  async function run(key: string, fn: () => Promise<void>, ok: string) {
+  async function run(key: string, fn: () => Promise<unknown>, ok: string | ((r: unknown) => string)) {
     setBusy(key);
     setMsg("");
     try {
-      await fn();
-      setMsg(ok);
+      const r = await fn();
+      setMsg(typeof ok === "function" ? ok(r) : ok);
       await fam.reload();
     } catch (e) {
       setMsg(errorText(e));
@@ -65,7 +65,7 @@ function ChildCard({ child }: { child: Child }) {
     <div className="card child-card">
       <Link to={`/child/${child.id}`} className="child-main">
         <Ring value={st?.remaining_minutes ?? 0} max={st?.allowance_minutes || 1} color={child.color}>
-          <b>{st ? minutesText(st.remaining_minutes) : "—"}</b>
+          <b>{st ? (st.remaining_minutes >= 1440 ? "∞" : minutesText(st.remaining_minutes)) : "—"}</b>
         </Ring>
         <div className="grow">
           <div className="row between">
@@ -75,7 +75,8 @@ function ChildCard({ child }: { child: Child }) {
           {st ? (
             <>
               <p className="muted small">
-                {minutesText(st.used_minutes)} kullandı · hakkı {minutesText(st.allowance_minutes)}
+                {minutesText(st.used_minutes)} kullandı
+                {st.allowance_minutes < 1440 ? ` · hakkı ${minutesText(st.allowance_minutes)}` : " · süre sınırı yok"}
               </p>
               <div className="row wrap gap-s">
                 {st.locked && <span className="pill danger">Kilitli{st.lock_reason ? ` · ${st.lock_reason}` : ""}</span>}
@@ -98,10 +99,10 @@ function ChildCard({ child }: { child: Child }) {
             <Icon name="lock" size={18} /> Şimdi kilitle
           </button>
         )}
-        <button className="btn" disabled={!!busy} onClick={() => run("15", () => grantMinutes(child.id, 15), "+15 dk verildi")}>
+        <button className="btn" disabled={!!busy} onClick={() => run("15", () => quickGrant(child, 15, fam.sections), (r) => `+15 dk ${r} verildi`)}>
           +15 dk
         </button>
-        <button className="btn" disabled={!!busy} onClick={() => run("30", () => grantMinutes(child.id, 30), "+30 dk verildi")}>
+        <button className="btn" disabled={!!busy} onClick={() => run("30", () => quickGrant(child, 30, fam.sections), (r) => `+30 dk ${r} verildi`)}>
           +30 dk
         </button>
       </div>

@@ -222,6 +222,8 @@ function ReviewCard({ run, task, childName, color, onDone }: { run: TaskRun; tas
   const [minutes, setMinutes] = useState(String(task?.reward_minutes ?? ""));
   const [validity, setValidity] = useState<RewardValidity>(task?.reward_validity ?? "today");
   const [date, setDate] = useState(todayISO("Europe/Berlin", 1));
+  const fam = useFamily();
+  const [sectionId, setSectionId] = useState<string>((task as (Task & { reward_section_id?: string | null }) | undefined)?.reward_section_id ?? "");
   const [note, setNote] = useState("");
   const [rejecting, setRejecting] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -259,6 +261,11 @@ function ReviewCard({ run, task, childName, color, onDone }: { run: TaskRun; tas
       setErr(errorText(error));
       setBusy(false);
       return;
+    }
+    // Süre nereye eklensin: görevin varsayılanından farklı seçildiyse verilen süreyi güncelle
+    const def = (task as (Task & { reward_section_id?: string | null }) | undefined)?.reward_section_id ?? "";
+    if (approve && validity !== "wallet" && sectionId !== def) {
+      await supabase.from("time_grants").update({ section_id: sectionId || null }).eq("task_run_id", run.id);
     }
     // Kanıtlar karar verilince hemen silinir (sunucu da 15 dk'da bir kontrol eder).
     const paths = (data ?? []) as string[];
@@ -324,6 +331,19 @@ function ReviewCard({ run, task, childName, color, onDone }: { run: TaskRun; tas
             <label className="field">
               <span>Gün</span>
               <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            </label>
+          )}
+          {validity !== "wallet" && Number(minutes) > 0 && (
+            <label className="field">
+              <span>Nereye eklensin</span>
+              <select value={sectionId} onChange={(e) => setSectionId(e.target.value)}>
+                <option value="">Gün boyu</option>
+                {fam.sections.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {fam.profiles.find((p) => p.id === s.profile_id)?.name} · {s.name}
+                  </option>
+                ))}
+              </select>
             </label>
           )}
           {task?.reward_text && <p className="small">Ödül: {task.reward_text}</p>}

@@ -25,6 +25,7 @@ type Form = {
   reward_validity: RewardValidity;
   reward_date: string;
   reward_expires_days: string;
+  reward_section_id: string;
   mandatory: boolean;
   active: boolean;
 };
@@ -47,6 +48,7 @@ const empty = (childIds: string[]): Form => ({
   reward_validity: "today",
   reward_date: todayISO("Europe/Berlin", 1),
   reward_expires_days: "",
+  reward_section_id: "",
   mandatory: false,
   active: true,
 });
@@ -86,6 +88,7 @@ export default function TaskEdit() {
             reward_validity: t.reward_validity,
             reward_date: t.reward_date ?? todayISO("Europe/Berlin", 1),
             reward_expires_days: t.reward_expires_days?.toString() ?? "",
+            reward_section_id: (t as Task & { reward_section_id?: string | null }).reward_section_id ?? "",
             mandatory: t.mandatory,
             active: t.active,
           });
@@ -104,6 +107,7 @@ export default function TaskEdit() {
               reward_text: data.reward_text ?? "",
               reward_validity: data.reward_validity,
               reward_expires_days: data.reward_expires_days?.toString() ?? "",
+              reward_section_id: data.reward_section_id ?? "",
               mandatory: data.mandatory,
             }));
         }
@@ -138,6 +142,7 @@ export default function TaskEdit() {
       reward_validity: f.reward_validity,
       reward_date: f.reward_validity === "date" ? f.reward_date : null,
       reward_expires_days: f.reward_validity === "wallet" && f.reward_expires_days ? Number(f.reward_expires_days) : null,
+      reward_section_id: f.reward_validity !== "wallet" && f.reward_section_id ? f.reward_section_id : null,
       mandatory: f.mandatory,
       active: f.active,
     };
@@ -153,6 +158,7 @@ export default function TaskEdit() {
         reward_text: row.reward_text,
         reward_validity: row.reward_validity === "date" ? "today" : row.reward_validity,
         reward_expires_days: row.reward_expires_days,
+        reward_section_id: row.reward_section_id,
         mandatory: row.mandatory,
       });
     }
@@ -299,6 +305,20 @@ export default function TaskEdit() {
           <label className="field">
             <span>Gün</span>
             <input type="date" value={f.reward_date} onChange={(e) => set("reward_date", e.target.value)} />
+          </label>
+        )}
+        {f.reward_validity !== "wallet" && (
+          <label className="field">
+            <span>Kazandığı süre nereye eklensin</span>
+            <select value={f.reward_section_id} onChange={(e) => set("reward_section_id", e.target.value)}>
+              <option value="">Gün boyu: süreli her bölümde kullanılır</option>
+              {fam.sections.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {fam.profiles.find((p) => p.id === s.profile_id)?.name} · {s.name} {s.start_time.slice(0, 5)}–{s.end_time.slice(0, 5)}
+                </option>
+              ))}
+            </select>
+            <small className="muted">Onaylarken ya da sonra çocuğun Süre sekmesinden değiştirebilirsin.</small>
           </label>
         )}
         {f.reward_validity === "wallet" && (

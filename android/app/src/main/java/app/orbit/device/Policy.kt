@@ -95,6 +95,11 @@ object Policy {
         return (homes + listOfNotNull(dialer) + listOf(
             ctx.packageName, "android", "com.android.systemui", "com.android.phone", "com.android.server.telecom",
             "com.miui.home", "com.android.emergency", "com.android.providers.downloads.ui",
+            // Simgesi olmayan sistem ekranları: izin pencereleri, paket yükleyici, Xiaomi güvenlik/ayar ekranları.
+            // Bunlar engellenirse Ayarlar'ın içindeki sayfalar ve izin soruları açılamaz.
+            "com.android.permissioncontroller", "com.google.android.permissioncontroller",
+            "com.android.packageinstaller", "com.google.android.packageinstaller", "com.miui.packageinstaller",
+            "com.miui.securitycenter", "com.miui.securityadd", "com.xiaomi.misettings", "com.google.android.gms",
         )).toSet()
     }
 

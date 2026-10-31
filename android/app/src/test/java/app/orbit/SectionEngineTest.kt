@@ -95,6 +95,10 @@ class SectionEngineTest {
         assertEquals("Uyku", night.section?.section?.name)
         assertEquals(day.minusDays(1), night.section?.startDay)
         assertFalse(v(e, "com.insta", at(6, 30)).allowed)
+        // Uyku bölümünde süreli bir şey yok: kalan 0, bölüm "kapalı"
+        assertEquals(0L, night.remainingSeconds)
+        assertTrue(night.sectionClosed)
+        assertFalse(s.sectionClosed)
         // Her zaman açık uygulama uykuda da açık
         assertTrue(v(e, "com.phone", at(23)).allowed)
     }

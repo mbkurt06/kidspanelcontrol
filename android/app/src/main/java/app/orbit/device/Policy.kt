@@ -72,9 +72,48 @@ object Policy {
         else @Suppress("DEPRECATION") runCatching { d.setAutoTimeRequired(a, true) }
         // Bildirim, kamera ve mikrofon (görev kanıtı) izinleri kendiliğinden verilsin
         val perms = mutableListOf("android.permission.CAMERA", "android.permission.RECORD_AUDIO")
-        if (Build.VERSION.SDK_INT >= 33) perms += "android.permission.POST_NOTIFICATIONS"
+        if (Build.VERSION.SDK_INT >= 33) perms += listOf("android.permission.POST_NOTIFICATIONS", "android.permission.READ_MEDIA_AUDIO")
+        else perms += "android.permission.READ_EXTERNAL_STORAGE"
         for (perm in perms) runCatching {
             d.setPermissionGrantState(a, ctx.packageName, perm, DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED)
+        }
+    }
+
+    /**
+     * Tam kilit (kiosk): Orbit ekrana kilitlenebilir; ana ekran tuşu ve yeniden başlatma sonrası da Orbit açılır.
+     * Telefonun kendi kilit ekranı (PIN) ve güç menüsü çalışır; bildirim paneli ve diğer uygulamalar kapalı.
+     */
+    fun setKiosk(ctx: Context, on: Boolean, allowCalls: Boolean) {
+        if (!isOwner(ctx)) return
+        val d = dpm(ctx)
+        val a = admin(ctx)
+        val pkgs = mutableListOf(ctx.packageName)
+        if (on && allowCalls) {
+            runCatching { ctx.getSystemService(TelecomManager::class.java).defaultDialerPackage }.getOrNull()?.let { pkgs += it }
+            pkgs += listOf("com.android.server.telecom", "com.android.phone")
+        }
+        runCatching { d.setLockTaskPackages(a, pkgs.distinct().toTypedArray()) }.onFailure { Log.w(TAG, "kiosk paketleri", it) }
+        runCatching {
+            d.setLockTaskFeatures(
+                a,
+                DevicePolicyManager.LOCK_TASK_FEATURE_KEYGUARD or DevicePolicyManager.LOCK_TASK_FEATURE_GLOBAL_ACTIONS or
+                    DevicePolicyManager.LOCK_TASK_FEATURE_SYSTEM_INFO,
+            )
+        }
+        val home = ComponentName(ctx, "app.orbit.ui.KioskHome")
+        val pm = ctx.packageManager
+        if (on) {
+            runCatching { pm.setComponentEnabledSetting(home, android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED, android.content.pm.PackageManager.DONT_KILL_APP) }
+            runCatching {
+                val f = android.content.IntentFilter(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    addCategory(Intent.CATEGORY_DEFAULT)
+                }
+                d.addPersistentPreferredActivity(a, f, home)
+            }.onFailure { Log.w(TAG, "ana ekran", it) }
+        } else {
+            runCatching { d.clearPackagePersistentPreferredActivities(a, ctx.packageName) }
+            runCatching { pm.setComponentEnabledSetting(home, android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED, android.content.pm.PackageManager.DONT_KILL_APP) }
         }
     }
 

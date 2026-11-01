@@ -41,6 +41,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import app.orbit.BuildConfig
 import app.orbit.data.Api
 import app.orbit.data.Store
@@ -74,6 +77,12 @@ class MainActivity : ComponentActivity() {
         Store.init(this)
         paired = Store.creds != null
         readRequest(intent)
+        // Tam kilit: Orbit ekrana kilitlenir (cihaz sahibi izniyle, sabitleme sorusu çıkmadan)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                Live.state.collect { syncLockTask(it.kiosk != null) }
+            }
+        }
         setContent {
             OrbitTheme {
                 Column(Modifier.fillMaxSize().background(C.bg).safeDrawingPadding()) {
@@ -84,6 +93,13 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun syncLockTask(on: Boolean) {
+        val am = getSystemService(android.app.ActivityManager::class.java)
+        val inLock = am.lockTaskModeState != android.app.ActivityManager.LOCK_TASK_MODE_NONE
+        if (on && !inLock) runCatching { startLockTask() }
+        if (!on && inLock) runCatching { stopLockTask() }
     }
 
     override fun onResume() {

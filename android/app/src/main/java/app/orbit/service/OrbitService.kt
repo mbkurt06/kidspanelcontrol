@@ -51,6 +51,10 @@ data class LiveState(
     val lockReason: String? = null,
     val online: Boolean = false,
     val lastSync: Long = 0,
+    /** Tam kilit (kiosk) sürüyorsa */
+    val kiosk: app.orbit.engine.KioskNow? = null,
+    /** Ebeveyn PIN'i ile açıldıysa bitiş (ms) */
+    val pinUntil: Long? = null,
 )
 
 object Live {
@@ -96,6 +100,8 @@ class OrbitService : Service() {
     private val recBusy = java.util.concurrent.atomic.AtomicBoolean(false)
     private var lastRecPump = 0L
     private var lastRecFront = 0L
+    private var lastKioskFront = 0L
+    private var lastKioskKey: String? = null
     private val pushBusy = java.util.concurrent.atomic.AtomicBoolean(false)
     private var lastLockLaunch = 0L
     private var lastLockPkg: String? = null
@@ -261,6 +267,20 @@ class OrbitService : Service() {
         }
         Store.saveUsage(usage)
 
+        // PIN ile ebeveyn modu (telefonda ebeveyn PIN'i girildi)
+        val pinUntil = app.orbit.data.Kiosk.pinUntil()
+        if (pinUntil != null && !snap.parentMode) snap = snap.copy(parentMode = true, parentModeUntil = pinUntil)
+        // Tam kilit (kiosk)
+        val kiosk = if (snap.parentMode) null else runCatching { app.orbit.engine.Extras.kiosk(rules, engine, now) }.getOrNull()
+        val kioskKey = if (kiosk != null) "on:${rules.kiosk.calls}" else "off"
+        if (kioskKey != lastKioskKey) {
+            lastKioskKey = kioskKey
+            Policy.setKiosk(this, kiosk != null, rules.kiosk.calls == "all")
+        }
+        // Müzik: kurallar kapattıysa durdur
+        app.orbit.data.Music.blocked.value = runCatching { app.orbit.engine.Extras.musicBlocked(rules, engine, now) }.getOrNull()
+        app.orbit.data.Music.enforce()
+
         // 5) Kuralları uygula: kapalı olması gerekenleri askıya al
         // Ebeveyn modu: bütün sınırlamalar kalkar (değiştiği anda hemen uygulanır)
         val maintenance = snap.parentMode
@@ -294,7 +314,18 @@ class OrbitService : Service() {
             snap.remainingSeconds <= 0 -> "Günlük süren bitti"
             else -> null
         }
-        if (rec?.status == "recording" && interactive && fg != null && fg !in exempt && fg != packageName) {
+        if (kiosk != null) {
+            lockReason = "🔒 ${kiosk.name}"
+            val ok = mutableSetOf(packageName, "android", "com.android.systemui", "com.android.phone", "com.android.emergency", "com.android.server.telecom")
+            if (rules.kiosk.calls == "all") runCatching { getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull()?.let { ok += it }
+            if (interactive && fg != null && fg !in ok && nowMs - lastKioskFront > 2_000) {
+                lastKioskFront = nowMs
+                runCatching {
+                    startActivity(Intent(this, MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+                }
+            }
+        } else if (rec?.status == "recording" && interactive && fg != null && fg !in exempt && fg != packageName) {
             // Kayıt sürerken başka uygulamaya geçilirse kayıt ekranına dön
             if (nowMs - lastRecFront > 3_000) {
                 lastRecFront = nowMs
@@ -315,7 +346,7 @@ class OrbitService : Service() {
         // 7) Kapalı uygulamaya dokununca çıkan sistem penceresinin ("Blocked by work policy") altındaki açıklama
         Policy.setBlockedMessage(this, blockedMessage(snap, rules.mandatoryOpen))
 
-        Live.set(LiveState(snap, usage, allowed, lockReason, online, Store.lastSync))
+        Live.set(LiveState(snap, usage, allowed, lockReason, online, Store.lastSync, kiosk, pinUntil))
         updateNotification(snap)
 
         // 7) Durum gönder

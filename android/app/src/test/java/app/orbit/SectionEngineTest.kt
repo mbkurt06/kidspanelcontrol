@@ -249,6 +249,40 @@ class SectionEngineTest {
     }
 
     @Test
+    fun kioskFromSectionRuleAndManual() {
+        val secs = sections.map { if (it.id == "uyku") it.copy(kiosk = true) else if (it.id == "aksam") it.copy(music = false) else it }
+        val ms = { z: ZonedDateTime -> z.toInstant().toEpochMilli() }
+        val rule = app.orbit.engine.TimeRule("r1", "Ders", "kiosk", (1..7).toSet(), app.orbit.engine.TimeWindow(t("16:30"), t("17:00")), "Ders saati")
+        var r = rules().copy(sections = secs, timeRules = listOf(rule))
+        var e = RuleEngine(r)
+        val X = app.orbit.engine.Extras
+        assertNull(X.kiosk(r, e, at(16, 10)))
+        assertEquals("rule", X.kiosk(r, e, at(16, 40))?.source)
+        assertEquals("Ders saati", X.kiosk(r, e, at(16, 40))?.message)
+        assertEquals("section", X.kiosk(r, e, at(22))?.source)
+        assertEquals("section", X.kiosk(r, e, at(6, d = day.plusDays(1)))?.source)
+        // Ebeveyn kaldırdı: o gece biter, ertesi gece yine başlar
+        val end = app.orbit.engine.Command("c1", app.orbit.engine.CommandType.KIOSK_END, ms(at(21, 30)), null, null, null, false, false)
+        r = r.copy(commands = listOf(end)); e = RuleEngine(r)
+        assertNull(X.kiosk(r, e, at(22)))
+        assertEquals("section", X.kiosk(r, e, at(21, 30, day.plusDays(1)))?.source)
+        // Elle 1 saatlik tam kilit
+        val start = app.orbit.engine.Command("c2", app.orbit.engine.CommandType.KIOSK_START, ms(at(12)), ms(at(13)), null, null, false, false, message = "Yemek")
+        r = r.copy(commands = listOf(start)); e = RuleEngine(r)
+        assertEquals("manual", X.kiosk(r, e, at(12, 30))?.source)
+        assertEquals("Yemek", X.kiosk(r, e, at(12, 30))?.message)
+        assertNull(X.kiosk(r, e, at(13, 10)))
+        // Müzik: Akşam bölümünde kapalı, "müzik açık" kuralı açar; her zaman / asla
+        assertNull(X.musicBlocked(r, e, at(16)))
+        assertTrue(X.musicBlocked(r, e, at(19, 30)) != null)
+        val on = app.orbit.engine.TimeRule("m1", "Banyo", "music_on", (1..7).toSet(), app.orbit.engine.TimeWindow(t("19:00"), t("20:00")))
+        val r2 = r.copy(timeRules = listOf(on)); val e2 = RuleEngine(r2)
+        assertNull(X.musicBlocked(r2, e2, at(19, 30)))
+        assertNull(X.musicBlocked(r.copy(musicMode = "always"), e, at(19, 30)))
+        assertTrue(X.musicBlocked(r.copy(musicMode = "never"), e, at(16)) != null)
+    }
+
+    @Test
     fun focusOnlyRestrictsFurther() {
         val e = RuleEngine(rules().copy(focus = app.orbit.engine.Focus("Ders", setOf("g-video"), setOf("com.wa"))))
         // Serbest bölümünde: Video grubu ve WhatsApp açık kalır, diğerleri odak yüzünden kapanır

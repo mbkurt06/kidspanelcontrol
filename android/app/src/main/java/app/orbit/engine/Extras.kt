@@ -1,0 +1,82 @@
+package app.orbit.engine
+
+import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZonedDateTime
+
+/** O an geçerli tam kilit (kiosk). */
+data class KioskNow(
+    /** manual | rule | section */
+    val source: String,
+    val name: String,
+    val message: String?,
+    val screens: Set<String>,
+    /** Bitiş (epoch ms); null = süresiz */
+    val untilMs: Long?,
+)
+
+/** Tam kilit ve müzik kuralları — saf, test edilebilir. */
+object Extras {
+
+    private fun ms(engine: RuleEngine, d: LocalDate, t: LocalTime) = d.atTime(t).atZone(engine.zone()).toInstant().toEpochMilli()
+
+    /** Kural şu an geçerliyse bu geçerliliğin başlangıç ve bitişi (ms). */
+    fun ruleSpan(r: TimeRule, engine: RuleEngine, day: LocalDate, t: LocalTime): Pair<Long, Long>? {
+        val w = r.window
+        val dow = day.dayOfWeek.value
+        if (w.start < w.end) {
+            if (dow in r.days && t >= w.start && t < w.end) return ms(engine, day, w.start) to ms(engine, day, w.end)
+            return null
+        }
+        if (dow in r.days && t >= w.start) return ms(engine, day, w.start) to ms(engine, day.plusDays(1), w.end)
+        val y = day.minusDays(1)
+        if (y.dayOfWeek.value in r.days && t < w.end) return ms(engine, y, w.start) to ms(engine, day, w.end)
+        return null
+    }
+
+    fun kiosk(rules: Rules, engine: RuleEngine, nowZ: ZonedDateTime): KioskNow? {
+        val now = nowZ.withZoneSameInstant(engine.zone())
+        val day = now.toLocalDate()
+        val t = now.toLocalTime()
+        val nowMs = now.toInstant().toEpochMilli()
+        val def = rules.kiosk
+        val last = rules.commands
+            .filter { !it.cancelled && (it.type == CommandType.KIOSK_START || it.type == CommandType.KIOSK_END) }
+            .maxByOrNull { it.createdAt }
+        if (last?.type == CommandType.KIOSK_START && (last.untilAt == null || last.untilAt > nowMs)) {
+            return KioskNow("manual", "Tam kilit", last.message ?: def.message, last.screens ?: def.screens, last.untilAt)
+        }
+        // Ebeveyn "kilidi kaldır" dediyse o an süren programlı kilit biter (sonraki seferde yine başlar)
+        val endedAt = if (last?.type == CommandType.KIOSK_END) last.createdAt else 0L
+        for (r in rules.timeRules) {
+            if (r.kind != "kiosk") continue
+            val (start, end) = ruleSpan(r, engine, day, t) ?: continue
+            if (start > endedAt) return KioskNow("rule", r.name, r.message ?: def.message, r.screens ?: def.screens, end)
+        }
+        val sec = engine.regularSection(day, t)
+        if (sec != null && sec.section.kiosk) {
+            val s = sec.section
+            val start = ms(engine, sec.startDay, s.start)
+            val end = ms(engine, if (s.crossesMidnight) sec.startDay.plusDays(1) else sec.startDay, s.end)
+            if (start > endedAt) return KioskNow("section", s.name, s.message ?: def.message, def.screens, end)
+        }
+        return null
+    }
+
+    /** Müzik şu an çalamıyorsa nedeni; çalabiliyorsa null. */
+    fun musicBlocked(rules: Rules, engine: RuleEngine, nowZ: ZonedDateTime): String? {
+        when (rules.musicMode) {
+            "never" -> return "Müzik kapalı"
+            "always" -> return null
+        }
+        val now = nowZ.withZoneSameInstant(engine.zone())
+        val day = now.toLocalDate()
+        val t = now.toLocalTime()
+        val active = rules.timeRules.filter { it.kind.startsWith("music") && ruleSpan(it, engine, day, t) != null }
+        if (active.any { it.kind == "music_on" }) return null
+        active.firstOrNull { it.kind == "music_off" }?.let { return "Müzik şu an kapalı (${it.name})" }
+        val sec = engine.regularSection(day, t)
+        if (sec != null && !sec.section.music) return "${sec.section.name}: müzik kapalı"
+        return null
+    }
+}

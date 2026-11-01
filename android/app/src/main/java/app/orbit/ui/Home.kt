@@ -71,6 +71,7 @@ enum class Screen(val icon: String, val title: String) {
     MESSAGES("💬", "Mesajlar"),
     TIMER("⏱", "Sayaç"),
     ALARMS("⏰", "Alarmlarım"),
+    MUSIC("🎵", "Müzik"),
     DAY("🗓", "Günüm"),
     WALLET("⏳", "Süre cüzdanı"),
     ASK("🙋", "Ebeveynden iste"),
@@ -91,6 +92,12 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
     val unreadMsgs = messages.count { it.fromParent && !it.read }
     val live by Live.state.collectAsState()
     val openTasks = remember(live.lastSync, live.snapshot?.now?.minute) { Tasks.current().count { it.open } }
+    // Tam kilit: sadece izin verilen ekranlar
+    val kiosk = live.kiosk
+    fun visible(s: Screen) = kiosk == null || s == Screen.TODAY || (s != Screen.ABOUT && s.kioskKey() in kiosk.screens)
+    LaunchedEffect(kiosk?.screens) { if (!visible(screen)) screen = Screen.TODAY }
+    var pinOpen by remember { mutableStateOf(false) }
+    if (pinOpen) PinDialog { pinOpen = false }
 
     ModalNavigationDrawer(
         drawerState = drawer,
@@ -102,6 +109,7 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                     Spacer(Modifier.height(12.dp))
                     val focusNow = remember(live.lastSync, live.snapshot?.now?.minute) { app.orbit.data.Timers.activeFocus() }
                     for (s in Screen.entries) {
+                        if (!visible(s)) continue
                         if (s == Screen.MESSAGES && focusNow?.messagesAllowed == false) continue
                         val on = s == screen
                         Row(
@@ -121,6 +129,29 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                             if (s == Screen.MESSAGES && unreadMsgs > 0) Badge(unreadMsgs)
                         }
                     }
+                    if (live.pinUntil != null) {
+                        Spacer(Modifier.height(12.dp))
+                        Muted("🔓 Ebeveyn modu açık", 13)
+                        Text(
+                            "Kilitle",
+                            color = C.accent,
+                            modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {
+                                app.orbit.data.Kiosk.lockAgain()
+                                Live.syncRequested = true
+                                scope.launch { drawer.close() }
+                            }.padding(12.dp),
+                        )
+                    } else if (Store.rules().pinHash != null) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "🔐 Ebeveyn girişi",
+                            color = C.muted,
+                            modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {
+                                pinOpen = true
+                                scope.launch { drawer.close() }
+                            }.padding(12.dp),
+                        )
+                    }
                 }
             }
         },
@@ -135,12 +166,12 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                     if (screen == Screen.TODAY) Store.childName.ifBlank { "Orbit" } else screen.title,
                     color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
                 )
-                if (screen != Screen.MESSAGES && unreadMsgs > 0) {
+                if (screen != Screen.MESSAGES && unreadMsgs > 0 && visible(Screen.MESSAGES)) {
                     Box(Modifier.clip(RoundedCornerShape(12.dp)).clickable { screen = Screen.MESSAGES }.padding(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) { Text("💬", fontSize = 16.sp); Spacer(Modifier.width(4.dp)); Badge(unreadMsgs) }
                     }
                 }
-                if (screen != Screen.TASKS && openTasks > 0) {
+                if (screen != Screen.TASKS && openTasks > 0 && visible(Screen.TASKS)) {
                     Box(Modifier.clip(RoundedCornerShape(12.dp)).clickable { screen = Screen.TASKS }.padding(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) { Text("✅", fontSize = 16.sp); Spacer(Modifier.width(4.dp)); Badge(openTasks) }
                     }
@@ -161,7 +192,7 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 when (screen) {
-                    Screen.TODAY -> TodayScreen { screen = it }
+                    Screen.TODAY -> if (kiosk != null) KioskToday(kiosk) { screen = it } else TodayScreen { if (visible(it)) screen = it }
                     Screen.TASKS -> TasksCard(remember(live.lastSync, live.snapshot?.now?.minute) { Tasks.current() })
                     Screen.DAY -> DayScreen()
                     Screen.WALLET -> WalletScreen()
@@ -171,6 +202,7 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                     Screen.MESSAGES -> Unit
                     Screen.TIMER -> TimerScreen()
                     Screen.ALARMS -> AlarmsScreen()
+                    Screen.MUSIC -> MusicScreen()
                 }
             }
         }

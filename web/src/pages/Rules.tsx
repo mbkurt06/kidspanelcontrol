@@ -155,6 +155,15 @@ export default function Rules() {
           </div>
           <Icon name="chevron" size={18} />
         </Link>
+        <Link to="/rules/time" className="card link-card">
+          <div className="grow">
+            <b>Zaman kuralları</b>
+            <div className="muted small">
+              {fam.timeRules.length ? `${fam.timeRules.length} kural · tam kilit / müzik` : "Belirli saatlerde tam kilit, müzik kapalı / açık"}
+            </div>
+          </div>
+          <Icon name="chevron" size={18} />
+        </Link>
       </section>
 
       <section className="stack">

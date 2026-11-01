@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { supabase } from "./supabase";
-import type { ActivityDef, FocusProfile, TimerSession, AppGroupDef, Child, DeviceStatus, GroupLimit, GroupMember, Mode, ModeSlot, OrbitEvent, Profile, Section, SectionRule } from "./types";
+import type { ActivityDef, FocusProfile, TimerSession, AppGroupDef, Child, DeviceStatus, GroupLimit, GroupMember, Mode, ModeSlot, OrbitEvent, Profile, Section, SectionRule, TimeRule } from "./types";
 
 type FamilyData = {
   familyId: string | null;
@@ -17,6 +17,7 @@ type FamilyData = {
   activities: ActivityDef[];
   /** çocuk id → çalışan/moladaki sayaç */
   timers: Record<string, TimerSession>;
+  timeRules: TimeRule[];
   statuses: Record<string, DeviceStatus>;
   unreadEvents: number;
   unreadMessages: number;
@@ -42,6 +43,7 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
     focusProfiles: [],
     activities: [],
     timers: {},
+    timeRules: [],
     statuses: {},
     unreadEvents: 0,
     unreadMessages: 0,
@@ -51,7 +53,7 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
 
   const reload = useCallback(async () => {
     supabase.rpc("touch_parent_device").then(() => {});
-    const [fam, ch, pr, mo, sl, st, ev, ap, gr, gm, se, sr, gl, um, fp, ac, ts] = await Promise.all([
+    const [fam, ch, pr, mo, sl, st, ev, ap, gr, gm, se, sr, gl, um, fp, ac, ts, tr] = await Promise.all([
       supabase.from("families").select("id").limit(1).maybeSingle(),
       supabase.from("children").select("*").order("sort_order").order("created_at"),
       supabase.from("rule_profiles").select("*").order("created_at"),
@@ -69,6 +71,7 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
       supabase.from("focus_profiles").select("*").order("sort_order").order("created_at"),
       supabase.from("activities").select("*").order("sort_order").order("created_at"),
       supabase.from("timer_sessions").select("*").in("status", ["running", "paused"]),
+      supabase.from("time_rules").select("*").order("start_time"),
     ]);
     const timers: Record<string, TimerSession> = {};
     for (const t of (ts.data ?? []) as TimerSession[]) timers[t.child_id] = t;
@@ -90,6 +93,7 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
       focusProfiles: (fp.data ?? []) as FocusProfile[],
       activities: (ac.data ?? []) as ActivityDef[],
       timers,
+      timeRules: (tr.data ?? []) as TimeRule[],
       statuses,
       unreadEvents: ev.count ?? 0,
       unreadMessages: um.count ?? 0,

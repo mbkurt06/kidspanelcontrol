@@ -101,6 +101,10 @@ data class Section(
     /** Çocuğa gösterilen simge (emoji) ve mesaj */
     val icon: String? = null,
     val message: String? = null,
+    /** Bu bölümde tam kilit (kiosk) */
+    val kiosk: Boolean = false,
+    /** Bu bölümde müzik çalabilir mi */
+    val music: Boolean = true,
 ) {
     val crossesMidnight get() = start > end
 }
@@ -118,7 +122,8 @@ data class SectionRule(
 )
 
 enum class CommandType(val key: String) {
-    LOCK("lock"), UNLOCK("unlock"), START_MODE("start_mode"), END_MODE("end_mode"), ADJUST("adjust_minutes"), RESYNC("resync");
+    LOCK("lock"), UNLOCK("unlock"), START_MODE("start_mode"), END_MODE("end_mode"), ADJUST("adjust_minutes"), RESYNC("resync"),
+    KIOSK_START("kiosk_start"), KIOSK_END("kiosk_end");
 
     companion object {
         fun of(k: String?): CommandType? = entries.firstOrNull { it.key == k }
@@ -137,6 +142,9 @@ data class Command(
     val cancelled: Boolean,
     /** Bakım: geliştirici seçenekleri/adb geçici olarak açılır (ebeveyn bilgisayardan bakım yapacaksa) */
     val maintenance: Boolean = false,
+    /** Tam kilit: çocuğa mesaj ve açık Orbit ekranları (null = varsayılan) */
+    val message: String? = null,
+    val screens: Set<String>? = null,
 )
 
 /** Sunucudan alınan kuralların tamamı (telefonda saklanır, internet yokken de kullanılır). */
@@ -166,6 +174,35 @@ data class Rules(
     val focus: Focus? = null,
     /** Çocuğun cüzdandan günde en fazla kullanabileceği dakika (null = sınır yok) */
     val walletDailyMax: Int? = null,
+    /** Tam kilit varsayılanları */
+    val kiosk: KioskSettings = KioskSettings(),
+    /** Ek zaman kuralları (bu çocuğa ait olanlar) */
+    val timeRules: List<TimeRule> = emptyList(),
+    /** always | rules | never */
+    val musicMode: String = "rules",
+    /** null = çocuk seçer */
+    val musicFolder: String? = null,
+    /** Ebeveyn PIN'i (sha256(childId:pin)); kapalıysa null */
+    val pinHash: String? = null,
+)
+
+data class KioskSettings(
+    val message: String? = null,
+    val screens: Set<String> = setOf("tasks", "messages", "music", "timer", "alarms"),
+    /** emergency | all */
+    val calls: String = "emergency",
+)
+
+/** Bölümlerden bağımsız zaman kuralı: tam kilit / müzik kapalı / müzik açık */
+data class TimeRule(
+    val id: String,
+    val name: String,
+    /** kiosk | music_off | music_on */
+    val kind: String,
+    val days: Set<Int>,
+    val window: TimeWindow,
+    val message: String? = null,
+    val screens: Set<String>? = null,
 )
 
 /** Telefonda gün boyunca tutulan sayaçlar (saniye). Gece yarısı sıfırlanır. */

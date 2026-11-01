@@ -39,6 +39,7 @@ object Realtime {
     private val familyTables = listOf(
         "rule_profiles", "modes", "mode_slots", "profile_sections", "section_rules",
         "app_groups", "app_group_members", "profile_group_limits", "tasks", "vault_holders", "focus_profiles", "activities",
+        "time_rules", "children",
     )
 
     val isConnected get() = connected

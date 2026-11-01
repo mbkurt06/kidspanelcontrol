@@ -102,6 +102,8 @@ object Parse {
             p.str("mode_id"), if (p.has("minutes")) p.optInt("minutes") else null, p.optBoolean("free"),
             !o.isNull("cancelled_at"),
             p.optBoolean("maintenance"),
+            p.str("message")?.takeIf { it.isNotBlank() },
+            p.optJSONArray("screens")?.let { strings(it).toSet() },
         )
     }
 
@@ -113,6 +115,22 @@ object Parse {
                 time(o.getString("start_time")), time(o.getString("end_time")),
                 o.intOrNull("budget_minutes"), o.optBoolean("carry_over"), SecRule.of(o.str("default_rule")), o.optInt("sort_order"),
                 o.str("icon")?.takeIf { it.isNotBlank() }, o.str("message")?.takeIf { it.isNotBlank() },
+                o.optBoolean("kiosk", false), if (o.has("music")) o.optBoolean("music", true) else true,
+            )
+        }.getOrNull()
+    }
+
+    fun timeRules(a: JSONArray, childId: String): List<app.orbit.engine.TimeRule> = (0 until a.length()).mapNotNull {
+        val o = a.getJSONObject(it)
+        runCatching {
+            if (!o.optBoolean("active", true)) return@runCatching null
+            val kids = strings(o.optJSONArray("child_ids"))
+            if (kids.isNotEmpty() && childId.isNotBlank() && childId !in kids) return@runCatching null
+            app.orbit.engine.TimeRule(
+                o.getString("id"), o.optString("name"), o.getString("kind"), ints(o.optJSONArray("days")).toSet(),
+                TimeWindow(time(o.getString("start_time")), time(o.getString("end_time"))),
+                o.str("message")?.takeIf { it.isNotBlank() },
+                if (o.isNull("screens") || !o.has("screens")) null else strings(o.optJSONArray("screens")).toSet(),
             )
         }.getOrNull()
     }
@@ -144,6 +162,17 @@ object Parse {
         groupNames = (b.optJSONArray("groups") ?: JSONArray()).let { m -> (0 until m.length()).associate { m.getJSONObject(it).let { o -> o.getString("id") to o.optString("name") } } },
         groupLimits = groupLimits(b.optJSONArray("group_limits") ?: JSONArray()),
         walletDailyMax = if (b.isNull("wallet_daily_max") || !b.has("wallet_daily_max")) null else b.optInt("wallet_daily_max"),
+        kiosk = b.optJSONObject("child")?.optJSONObject("kiosk_settings")?.let { k ->
+            app.orbit.engine.KioskSettings(
+                k.str("message")?.takeIf { it.isNotBlank() },
+                k.optJSONArray("screens")?.let { strings(it).toSet() } ?: app.orbit.engine.KioskSettings().screens,
+                k.optString("calls", "emergency"),
+            )
+        } ?: app.orbit.engine.KioskSettings(),
+        timeRules = timeRules(b.optJSONArray("time_rules") ?: JSONArray(), b.optString("child_id")),
+        musicMode = b.optJSONObject("child")?.optString("music_mode", "rules") ?: "rules",
+        musicFolder = b.optJSONObject("child")?.str("music_folder")?.takeIf { it.isNotBlank() },
+        pinHash = b.optJSONObject("child")?.takeIf { it.optBoolean("parent_pin_enabled") }?.str("parent_pin_hash")?.takeIf { it.isNotBlank() },
         focus = Timers.activeFocus(b)?.let { app.orbit.engine.Focus(it.name, it.groups, it.packages) },
     )
 

@@ -3,7 +3,9 @@ export type AppGroup = "always_open" | "unlimited" | "timed" | "blocked";
 export type Window = { start: string; end: string };
 
 export type ExtraTarget = "now" | "current" | "pool" | "wallet";
-export type Child = { id: string; family_id: string; name: string; color: string; sort_order: number; extra_default: ExtraTarget; wallet_daily_max?: number | null; timer_defaults?: { allow_stop: "no" | "yes" | "notify"; pause_mode: "none" | "limit" | "child"; pause_max_minutes: number | null; focus_change: "no" | "stricter" | "free" } };
+export type Child = { id: string; family_id: string; name: string; color: string; sort_order: number; extra_default: ExtraTarget; wallet_daily_max?: number | null;
+  kiosk_settings?: KioskSettings; parent_pin_enabled?: boolean; parent_pin_hash?: string | null;
+  music_mode?: "always" | "rules" | "never"; music_folder?: string | null; music_folders?: string[]; timer_defaults?: { allow_stop: "no" | "yes" | "notify"; pause_mode: "none" | "limit" | "child"; pause_max_minutes: number | null; focus_change: "no" | "stricter" | "free" } };
 
 export type ChildApp = {
   child_id: string;
@@ -38,6 +40,36 @@ export type Section = {
   sort_order: number;
   icon: string | null;
   message: string | null;
+  kiosk?: boolean;
+  music?: boolean;
+};
+
+export type KioskScreen = "tasks" | "messages" | "music" | "timer" | "alarms" | "day" | "wallet" | "ask" | "vault";
+export const KIOSK_SCREENS: [KioskScreen, string][] = [
+  ["tasks", "✅ Görevler"],
+  ["messages", "💬 Mesajlar"],
+  ["music", "🎵 Müzik"],
+  ["timer", "⏱ Sayaç"],
+  ["alarms", "⏰ Alarmlar"],
+  ["day", "🗓 Günüm"],
+  ["wallet", "⏳ Süre cüzdanı"],
+  ["ask", "🙋 Ebeveynden iste"],
+  ["vault", "🔑 Şifreler"],
+];
+export type KioskSettings = { message: string | null; screens: KioskScreen[]; calls: "emergency" | "all" };
+
+export type TimeRule = {
+  id: string;
+  family_id: string;
+  name: string;
+  kind: "kiosk" | "music_off" | "music_on";
+  child_ids: string[];
+  days: number[];
+  start_time: string;
+  end_time: string;
+  message: string | null;
+  screens: KioskScreen[] | null;
+  active: boolean;
 };
 
 export type SectionRule = {

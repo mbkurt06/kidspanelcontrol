@@ -52,6 +52,10 @@ function describe(e: OrbitEvent, childName: string) {
           return `📹 ${childName} · ${p.title}`;
       }
     }
+    case "pin_unlock":
+      return `🔓 ${childName} telefonunda ebeveyn PIN'i girildi (${p.minutes ?? 15} dk kısıtlama yok).`;
+    case "pin_fail":
+      return `⚠️ ${childName} telefonunda yanlış ebeveyn PIN'i denendi.`;
     case "message":
       return `💬 ${childName}: ${p.body ?? ""}`;
     case "app_request":

@@ -68,6 +68,8 @@ enum class Screen(val icon: String, val title: String) {
     TODAY("🏠", "Bugün"),
     TASKS("✅", "Görevlerim"),
     MESSAGES("💬", "Mesajlar"),
+    TIMER("⏱", "Sayaç"),
+    ALARMS("⏰", "Alarmlarım"),
     DAY("🗓", "Günüm"),
     WALLET("⏳", "Süre cüzdanı"),
     ASK("🙋", "Ebeveynden iste"),
@@ -97,7 +99,9 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                     Text(Store.childName.ifBlank { "Orbit" }, color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     Muted(if (live.online) "bağlı" else "çevrimdışı", 12)
                     Spacer(Modifier.height(12.dp))
+                    val focusNow = remember(live.lastSync, live.snapshot?.now?.minute) { app.orbit.data.Timers.activeFocus() }
                     for (s in Screen.entries) {
+                        if (s == Screen.MESSAGES && focusNow?.messagesAllowed == false) continue
                         val on = s == screen
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
@@ -143,7 +147,12 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                 Box(Modifier.padding(8.dp).size(10.dp).clip(CircleShape).background(if (live.online) C.good else C.muted))
             }
             if (screen == Screen.MESSAGES) {
-                MessagesScreen()
+                val f = remember(live.lastSync) { app.orbit.data.Timers.activeFocus() }
+                if (f?.messagesAllowed == false) {
+                    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Muted("Odak: ${f.name} — mesajlar sayaç bitene kadar kapalı.")
+                    }
+                } else MessagesScreen()
                 return@Column
             }
             Column(
@@ -159,6 +168,8 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                     Screen.ABOUT -> AboutScreen()
                     Screen.VAULT -> VaultScreen(onCancel = { screen = Screen.TODAY })
                     Screen.MESSAGES -> Unit
+                    Screen.TIMER -> TimerScreen()
+                    Screen.ALARMS -> AlarmsScreen()
                 }
             }
         }
@@ -206,6 +217,18 @@ private fun TodayScreen(go: (Screen) -> Unit) {
     }
 
     NowCard(s)
+
+    val running = remember(live.lastSync) { app.orbit.data.Timers.active() }
+    if (running != null) RunningTimerCard(running, compact = true) { go(Screen.TIMER) }
+    else Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).clickable { go(Screen.TIMER) }.padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("⏱", fontSize = 22.sp)
+        Spacer(Modifier.width(12.dp))
+        Text("Çalışma sayacı başlat", color = C.text, modifier = Modifier.weight(1f))
+        Muted("›", 16)
+    }
 
     // Zorunlu görev uyarısı
     val blocking = remember(live.lastSync, s.now.minute) { Tasks.current().filter { it.blocking } }

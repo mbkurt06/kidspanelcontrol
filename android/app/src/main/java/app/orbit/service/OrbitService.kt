@@ -124,6 +124,9 @@ class OrbitService : Service() {
         if (Build.VERSION.SDK_INT >= 34) startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         else startForeground(1, n)
         app.orbit.data.Notifier.init(this)
+        app.orbit.data.Alarms.init(this)
+        AlarmReceiver.channels(this)
+        scope.launch(Dispatchers.IO) { runCatching { app.orbit.data.Alarms.reschedule(force = true) } }
         // Panelden gelen değişiklikleri anında almak için canlı bağlantı
         app.orbit.data.Realtime.start()
         registerReceiver(screenReceiver, IntentFilter().apply {
@@ -223,12 +226,19 @@ class OrbitService : Service() {
 
         var snap = engine.snapshot(now, usage)
         val fg = foreground
-        val exempt = Policy.exempt(this)
+        // Sayaç odak profili aramalara izin vermiyorsa telefon uygulaması da kapanır (acil arama hariç)
+        val focusProfile = app.orbit.data.Timers.activeFocus()
+        val dialer = if (focusProfile != null && !focusProfile.callsAllowed)
+            runCatching { getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull() else null
+        val exempt = if (dialer != null) Policy.exempt(this) - dialer else Policy.exempt(this)
         if (interactive && fg != null && fg !in exempt) {
             val v = engine.verdict(fg, snap, usage)
             usage = engine.account(usage, fg, v, dt)
             snap = engine.snapshot(now, usage)
         }
+
+        // Sayaç: odaklı/uzak süre, geri sayım bitişi, mola sınırı
+        timerTick(engine, snap, usage, fg, exempt, interactive, dt, nowMs)
 
         // Saatli görev hatırlatması (dakikada bir)
         if (nowMs - lastRemind > 60_000) {
@@ -312,6 +322,43 @@ class OrbitService : Service() {
             scope.launch(Dispatchers.IO) { Updater.check(this@OrbitService) }
         }
         firstRun = false
+    }
+
+    private var finishingTimer: String? = null
+
+    private fun timerTick(
+        engine: RuleEngine, snap: Snapshot, usage: app.orbit.engine.DayUsage, fg: String?, exempt: Set<String>,
+        interactive: Boolean, dt: Long, nowMs: Long,
+    ) {
+        val s = app.orbit.data.Timers.active() ?: return
+        if (s.running) {
+            // Ekran kapalıyken (kitap okuma gibi) ya da Orbit/izinli uygulama öndeyken odaklı sayılır
+            val onFocus = !interactive || fg == null || fg == packageName || fg in exempt || engine.verdict(fg, snap, usage).allowed
+            val counts = app.orbit.data.Timers.tick(s, dt, onFocus)
+            val left = s.remaining(nowMs)
+            if (left != null && left <= 0 && finishingTimer != s.id) {
+                finishingTimer = s.id
+                scope.launch(Dispatchers.IO) {
+                    app.orbit.data.Timers.finish(s, "auto", counts)
+                    app.orbit.data.Notifier.show(app.orbit.data.Notifier.CH_TASKS, 7300, "⏱ Süre doldu", "${s.title} bitti. Aferin! 🎉", "TIMER")
+                    Live.syncRequested = true
+                }
+                return
+            }
+            if (counts != null && app.orbit.data.Timers.shouldPush(nowMs)) {
+                scope.launch(Dispatchers.IO) { app.orbit.data.Timers.pushCounts(s.id, counts.first, counts.second) }
+            }
+        } else if (s.status == "paused" && s.pauseMode == "limit" && s.byParent && s.pausedAt != null) {
+            val max = (s.pauseMaxMinutes ?: 5) * 60_000L
+            if (nowMs - s.pausedAt > max && finishingTimer != "resume:${s.id}") {
+                finishingTimer = "resume:${s.id}"
+                scope.launch(Dispatchers.IO) {
+                    app.orbit.data.Timers.resume(s)
+                    app.orbit.data.Notifier.show(app.orbit.data.Notifier.CH_TASKS, 7301, "⏱ Mola bitti", "${s.title} devam ediyor", "TIMER")
+                    Live.syncRequested = true
+                }
+            }
+        }
     }
 
     /** Kapalı uygulama penceresinde çocuğun göreceği açıklama (o anki duruma göre). */
@@ -401,6 +448,11 @@ class OrbitService : Service() {
                 append(if (rem >= 60) "${rem / 60} sa ${rem % 60} dk" else "$rem dk")
             }
             s.activeMode?.let { append(" · ${it.name}") } ?: s.section?.let { append(" · ${it.section.name}") }
+            app.orbit.data.Timers.active()?.let { t ->
+                append(" · ⏱ ${t.title}")
+                t.remaining()?.let { r -> append(" ${r / 60} dk") }
+                if (!t.running) append(" (mola)")
+            }
             if (s.locked) append(" · kilitli")
         }
         if (text == lastNote) return

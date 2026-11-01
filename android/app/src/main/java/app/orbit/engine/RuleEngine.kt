@@ -338,6 +338,15 @@ class RuleEngine(private val rules: Rules) {
     private fun inWindows(ws: List<TimeWindow>, t: LocalTime) = ws.isEmpty() || ws.any { it.contains(t) }
 
     fun verdict(pkg: String, s: Snapshot, usage: DayUsage): AppVerdict {
+        val v = baseVerdict(pkg, s, usage)
+        if (s.parentMode || !v.allowed) return v
+        // Sayaç odak modu: kuralların açtıklarından sadece odak profilindekiler açık kalır
+        val f = rules.focus ?: return v
+        if (pkg in f.packages || rules.groupOf[pkg]?.let { it in f.groups } == true) return v
+        return AppVerdict(false, "Odak: ${f.name} — bu uygulama şu an kapalı")
+    }
+
+    private fun baseVerdict(pkg: String, s: Snapshot, usage: DayUsage): AppVerdict {
         val app = rules.apps[pkg]
         val group = app?.group ?: Group.BLOCKED
         val approved = app?.approved == true

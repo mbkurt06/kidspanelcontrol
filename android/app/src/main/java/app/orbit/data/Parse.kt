@@ -143,6 +143,7 @@ object Parse {
         groupOf = (b.optJSONArray("group_members") ?: JSONArray()).let { m -> (0 until m.length()).associate { m.getJSONObject(it).let { o -> o.getString("package") to o.getString("group_id") } } },
         groupNames = (b.optJSONArray("groups") ?: JSONArray()).let { m -> (0 until m.length()).associate { m.getJSONObject(it).let { o -> o.getString("id") to o.optString("name") } } },
         groupLimits = groupLimits(b.optJSONArray("group_limits") ?: JSONArray()),
+        focus = Timers.activeFocus(b)?.let { app.orbit.engine.Focus(it.name, it.groups, it.packages) },
     )
 
     // --- Gün sayaçları ---

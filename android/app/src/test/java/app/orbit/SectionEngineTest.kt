@@ -226,4 +226,17 @@ class SectionEngineTest {
         assertTrue(s.walletGrants.isEmpty())
         assertEquals(60 * 60L, e.snapshot(at(16, 5), DayUsage(day)).remainingSeconds)
     }
+
+    @Test
+    fun focusOnlyRestrictsFurther() {
+        val e = RuleEngine(rules().copy(focus = app.orbit.engine.Focus("Ders", setOf("g-video"), setOf("com.wa"))))
+        // Serbest bölümünde: Video grubu ve WhatsApp açık kalır, diğerleri odak yüzünden kapanır
+        assertTrue(v(e, "com.yt", at(16, 30)).allowed)
+        assertTrue(v(e, "com.wa", at(16, 30)).allowed)
+        val insta = v(e, "com.insta", at(16, 30))
+        assertFalse(insta.allowed)
+        assertTrue(insta.reason!!.startsWith("Odak"))
+        // Odak, kuralların kapattığını açmaz (Uyku'da Video kapalı)
+        assertFalse(v(e, "com.yt", at(22)).allowed)
+    }
 }

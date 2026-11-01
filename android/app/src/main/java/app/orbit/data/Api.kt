@@ -120,6 +120,10 @@ object Api {
     }
 
     /** Storage'a dosya yükler (çocuk telefonu sadece kendi görev klasörüne yazabilir). */
+    fun delete(path: String) {
+        exec(rest(path).delete().build())
+    }
+
     fun upload(bucket: String, path: String, bytes: ByteArray, contentType: String) {
         val req = Request.Builder()
             .url("$base/storage/v1/object/$bucket/$path")

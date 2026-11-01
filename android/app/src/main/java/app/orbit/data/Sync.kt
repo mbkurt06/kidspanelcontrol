@@ -42,11 +42,16 @@ object Sync {
                 .put("groups", runCatching { Api.get("app_groups?select=id,name") }.getOrElse { JSONArray() })
                 .put("group_members", runCatching { Api.get("app_group_members?select=package,group_id") }.getOrElse { JSONArray() })
                 .put("group_limits", runCatching { Api.get("profile_group_limits?select=*") }.getOrElse { JSONArray() })
+                .put("focus_profiles", runCatching { Api.get("focus_profiles?select=*&order=sort_order") }.getOrElse { JSONArray() })
+                .put("activities", runCatching { Api.get("activities?select=*&order=sort_order") }.getOrElse { JSONArray() })
+                .put("timer_sessions", runCatching { Api.get("timer_sessions?child_id=eq.$child&status=in.(running,paused)&select=*") }.getOrElse { JSONArray() })
+                .put("alarms", runCatching { Api.get("alarms?child_id=eq.$child&select=*&order=at_time") }.getOrElse { JSONArray() })
                 .put("tasks", runCatching { JSONArray(Api.rpc("device_tasks", JSONObject().put("p_day", today))) }.getOrElse { JSONArray() })
             Store.rulesJson = bundle.toString()
             kid.optJSONObject(0)?.optString("name")?.let { Store.childName = it }
             Store.lastSync = System.currentTimeMillis()
             runCatching { TaskAlerts.onTasks(Tasks.current()) }
+            runCatching { Alarms.reschedule() }
             runCatching { Messages.refresh() }
             ackCommands(bundle.getJSONArray("commands"))
             true

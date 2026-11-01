@@ -72,6 +72,38 @@ object Music {
         return out
     }
 
+    /** Report candidate directories without exposing unrelated audio to the child UI. */
+    fun availableFolders(ctx: Context): List<String> {
+        val result = mutableSetOf<String>()
+        val columns = if (Build.VERSION.SDK_INT >= 29)
+            arrayOf(MediaStore.Audio.Media.RELATIVE_PATH, MediaStore.Audio.Media.DATA)
+        else arrayOf(MediaStore.Audio.Media.DATA)
+        runCatching {
+            ctx.contentResolver.query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, columns,
+                "${MediaStore.Audio.Media.DURATION} >= 15000", null, null)?.use { c ->
+                val rel = c.getColumnIndex(MediaStore.Audio.Media.RELATIVE_PATH)
+                val data = c.getColumnIndex(MediaStore.Audio.Media.DATA)
+                while (c.moveToNext()) {
+                    val f = (if (rel >= 0) c.getString(rel) else null)?.trimEnd('/')
+                        ?: (if (data >= 0) c.getString(data)?.substringBeforeLast('/')?.substringAfter("/0/") else null)
+                        ?: ""
+                    if (f.isNotBlank()) result += f
+                }
+            }
+        }.onFailure { Log.w(TAG, "Klasör taraması başarısız", it) }
+        return result.sorted()
+    }
+
+    fun reportFolders(ctx: Context) {
+        val f = availableFolders(ctx)
+        val key = f.joinToString("|")
+        if (Store.prefs().getString("musicFoldersReported", null) == key) return
+        runCatching {
+            Api.rpc("device_report_music", JSONObject().put("p_folders", JSONArray(f)))
+            Store.prefs().edit().putString("musicFoldersReported", key).apply()
+        }.onFailure { Log.w(TAG, "Klasörler gönderilemedi", it) }
+    }
+
     fun folders(list: List<Track>): List<String> = list.map { it.folder }.filter { it.isNotBlank() }.distinct().sorted()
 
     /** Klasör listesini panele bildir (değiştiyse). IO iş parçacığında. */

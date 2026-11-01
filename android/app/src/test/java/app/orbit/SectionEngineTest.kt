@@ -284,7 +284,7 @@ class SectionEngineTest {
 
     @Test
     fun limitAndFreeRulesWithDates() {
-        val W = app.orbit.engine.TimeWindow
+        val W = { a: java.time.LocalTime, b: java.time.LocalTime -> app.orbit.engine.TimeWindow(a, b) }
         val limit = app.orbit.engine.TimeRule("l1", "Akşam", "limit", (1..7).toSet(), W(t("17:00"), t("18:00")))
         val free = app.orbit.engine.TimeRule("f1", "Bayram", "free", (1..7).toSet(), W(t("12:00"), t("23:00")), startDate = day.plusDays(1), endDate = day.plusDays(1))
         var r = rules().copy(timeRules = listOf(limit, free))

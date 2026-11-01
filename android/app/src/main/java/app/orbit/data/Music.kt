@@ -120,6 +120,7 @@ object Music {
     /** Metadata sync only. Keep removed songs as missing so the child can remove them from playlists. */
     fun syncCatalog(list: List<Track>) {
         val child = Store.creds?.childId ?: return
+        if (Store.rules().musicFolder.isNullOrBlank()) return
         runCatching {
             val existing = Api.get("music_meta?child_id=eq.$child&select=track_key,missing")
             val seen = list.map { it.id.toString() }.toSet()

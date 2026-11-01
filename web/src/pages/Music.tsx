@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
@@ -71,6 +71,7 @@ function ChildMusic({ child, onErr }: { child: Child; onErr: (e: string) => void
       <b>
         <span className="dot" style={{ background: child.color, marginTop: 0 }} /> {child.name}
       </b>
+      <MusicLibrary childId={child.id} />
       <label className="field">
         <span>Ne zaman çalabilir</span>
         <select value={child.music_mode ?? "rules"} onChange={(e) => save({ music_mode: e.target.value })}>
@@ -82,7 +83,7 @@ function ChildMusic({ child, onErr }: { child: Child; onErr: (e: string) => void
       <label className="field">
         <span>Klasör</span>
         <select value={child.music_folder ?? ""} onChange={(e) => save({ music_folder: e.target.value || null })}>
-          <option value="">Çocuk kendisi seçsin</option>
+          <option value="">Klasör seçilmedi (çalma kapalı)</option>
           {(child.music_folders ?? []).map((f) => (
             <option key={f} value={f}>
               📁 {f}
@@ -91,6 +92,55 @@ function ChildMusic({ child, onErr }: { child: Child; onErr: (e: string) => void
         </select>
       </label>
       {!(child.music_folders ?? []).length && <p className="muted tiny">Klasörler, çocuk telefonda Müzik ekranını ilk açtığında burada görünür.</p>}
+    </div>
+  );
+}
+
+/** Read-only parent view: children manage their own playlists on the phone. */
+function MusicLibrary({ childId }: { childId: string }) {
+  type Song = { track_key: string; file_name: string | null; missing: boolean };
+  type Playlist = { id: string; name: string };
+  const [songs, setSongs] = useState<Song[]>([]);
+  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      const [t, p] = await Promise.all([
+        supabase.from("music_meta").select("track_key,file_name,missing").eq("child_id", childId).order("sort"),
+        supabase.from("music_playlists").select("id,name").eq("child_id", childId).order("sort"),
+      ]);
+      if (!active) return;
+      const ts = (t.data ?? []) as Song[];
+      const ps = (p.data ?? []) as Playlist[];
+      setSongs(ts);
+      setPlaylists(ps);
+      if (ps.length) {
+        const e = await supabase.from("music_playlist_items").select("playlist_id").in("playlist_id", ps.map((x) => x.id));
+        if (!active) return;
+        const next: Record<string, number> = {};
+        for (const row of e.data ?? []) next[row.playlist_id] = (next[row.playlist_id] ?? 0) + 1;
+        setCounts(next);
+      } else setCounts({});
+    }
+    load();
+    return () => { active = false; };
+  }, [childId]);
+  return (
+    <div className="stack">
+      <div className="muted small">Müzik arşivi: {songs.length} dosya{songs.some((s) => s.missing) ? ` · ${songs.filter((s) => s.missing).length} eksik` : ""}</div>
+      {playlists.length > 0 && (
+        <div>
+          <b>Çalma listeleri (yalnızca görüntüleme)</b>
+          {playlists.map((p) => <div className="muted small" key={p.id}>🎵 {p.name} · {counts[p.id] ?? 0} şarkı</div>)}
+        </div>
+      )}
+      {songs.some((s) => s.missing) && (
+        <div>
+          <b>Eksik dosyalar</b>
+          {songs.filter((s) => s.missing).map((s) => <div className="muted small" key={s.track_key}>⚠️ {s.file_name ?? s.track_key}</div>)}
+        </div>
+      )}
     </div>
   );
 }

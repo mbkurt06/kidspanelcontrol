@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -20,6 +21,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -29,6 +33,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -48,6 +53,9 @@ import app.orbit.data.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlin.math.abs
 
 private fun mmss(ms: Long): String {
     val s = (ms / 1000).coerceAtLeast(0)
@@ -58,11 +66,12 @@ private fun mmss(ms: Long): String {
 @Composable
 fun MusicScreen() {
     val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
     val all by Music.tracks.collectAsState()
     val blocked by Music.blocked.collectAsState()
     var loaded by remember { mutableStateOf(false) }
     val fixed = remember { Store.rules().musicFolder }
-    var folder by remember { mutableStateOf(fixed ?: Music.childFolder) }
+    val folder = fixed
 
     // Çalma durumu
     var title by remember { mutableStateOf<String?>(null) }
@@ -74,6 +83,13 @@ fun MusicScreen() {
     var repeat by remember { mutableIntStateOf(Player.REPEAT_MODE_OFF) }
     var currentId by remember { mutableStateOf<String?>(null) }
     var dragging by remember { mutableStateOf<Float?>(null) }
+    var playlists by remember { mutableStateOf<List<app.orbit.data.Playlist>>(emptyList()) }
+    var missingTracks by remember { mutableStateOf<List<app.orbit.data.MissingTrack>>(emptyList()) }
+    var selectedPlaylist by remember { mutableStateOf<String?>(null) }
+    var playlistSongs by remember { mutableStateOf<List<Track>>(emptyList()) }
+    var playlistDialog by remember { mutableStateOf(false) }
+    var playlistName by remember { mutableStateOf("") }
+    var editingPlaylist by remember { mutableStateOf<String?>(null) }
 
     val perm = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
     val granted = ContextCompat.checkSelfPermission(ctx, perm) == PackageManager.PERMISSION_GRANTED
@@ -82,7 +98,15 @@ fun MusicScreen() {
         if (!granted) app.orbit.device.Policy.grantSelf(ctx, perm)
         val list = withContext(Dispatchers.IO) { Music.scan(ctx) }
         loaded = true
-        withContext(Dispatchers.IO) { Music.reportFolders(list) }
+        withContext(Dispatchers.IO) { Music.reportFolders(ctx); if (granted) Music.syncCatalog(list) }
+    }
+    LaunchedEffect(Unit) {
+        playlists = withContext(Dispatchers.IO) { Music.playlists() }
+    }
+    LaunchedEffect(all) { missingTracks = withContext(Dispatchers.IO) { Music.missingTracks() } }
+    LaunchedEffect(selectedPlaylist, all) {
+        val id = selectedPlaylist ?: return@LaunchedEffect
+        playlistSongs = withContext(Dispatchers.IO) { Music.playlistTracks(id, all) }
     }
 
     fun sync(p: Player) {
@@ -112,7 +136,20 @@ fun MusicScreen() {
         }
     }
 
-    val list = remember(all, folder) { if (folder == null) all else all.filter { it.folder == folder } }
+    val list = remember(all, folder) { all }
+
+    fun refreshPlaylists() {
+        scope.launch(Dispatchers.IO) {
+            val next = Music.playlists()
+            withContext(kotlinx.coroutines.Dispatchers.Main) {
+                playlists = next
+                if (selectedPlaylist !in next.map { it.id }) {
+                    selectedPlaylist = null
+                    playlistSongs = emptyList()
+                }
+            }
+        }
+    }
 
     if (blocked != null) Card { Text("🔇 $blocked", color = C.warn) }
 
@@ -170,29 +207,107 @@ fun MusicScreen() {
     val folders = remember(all) { Music.folders(all) }
     Card {
         Title("Klasör")
-        if (fixed != null) {
-            Muted("📁 $fixed (ebeveynin seçti)")
-        } else {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                MusicChip("Hepsi", folder == null) { folder = null; Music.childFolder = null }
-                for (f in folders) MusicChip(f.substringAfterLast('/'), folder == f) { folder = f; Music.childFolder = f }
-            }
-        }
+        if (fixed != null) Muted("📁 $fixed (ebeveynin seçti)")
+        else Muted("Ebeveynin müzik klasörü seçmesi bekleniyor.", 13)
         if (loaded && all.isEmpty()) Muted("Telefonda müzik bulunamadı. Müzikleri bilgisayardan telefonun Music klasörüne at.", 13)
         if (!granted) Muted("Müzik dosyalarına erişim izni bekleniyor.", 13)
     }
+
+    Card {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Title("Çalma listeleri")
+            Spacer(Modifier.weight(1f))
+            Button(onClick = { editingPlaylist = null; playlistName = ""; playlistDialog = true }) { Text("＋ Yeni") }
+        }
+        if (playlists.isEmpty()) Muted("Henüz çalma listesi yok.", 13)
+        playlists.forEach { p ->
+            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (selectedPlaylist == p.id) "▶ ${p.name}" else p.name, color = C.text,
+                    modifier = Modifier.weight(1f).clickable { selectedPlaylist = p.id })
+                Text("✏️", modifier = Modifier.clickable { editingPlaylist = p.id; playlistName = p.name; playlistDialog = true }.padding(8.dp))
+                Text("🗑️", modifier = Modifier.clickable {
+                    scope.launch(Dispatchers.IO) { if (Music.deletePlaylist(p.id)) withContext(kotlinx.coroutines.Dispatchers.Main) { refreshPlaylists() } }
+                }.padding(8.dp))
+            }
+        }
+        if (selectedPlaylist != null) {
+            Muted("Seçili listeye şarkı eklemek için aşağıdaki şarkıların ＋ düğmesine dokun. Uzun basıp sürükleyerek sırala.", 12)
+            playlistSongs.forEachIndexed { index, track ->
+                PlaylistTrackRow(track, index, onMove = { from, to ->
+                    if (to in playlistSongs.indices) playlistSongs = playlistSongs.toMutableList().also { it.add(to, it.removeAt(from)) }
+                }, onDrop = {
+                    selectedPlaylist?.let { id -> scope.launch(Dispatchers.IO) { Music.savePlaylistTracks(id, playlistSongs) } }
+                }, onRemove = {
+                    playlistSongs = playlistSongs.filterNot { it.id == track.id }
+                    selectedPlaylist?.let { id -> scope.launch(Dispatchers.IO) { Music.savePlaylistTracks(id, playlistSongs) } }
+                }, onClick = { Music.play(ctx, playlistSongs, index) })
+            }
+        }
+    }
+
+    if (missingTracks.isNotEmpty()) Card {
+        Title("Eksik dosyalar")
+        Muted("SD karttan silinen şarkılar burada tutulur; kaldırınca playlist kayıtlarından da çıkar.", 12)
+        missingTracks.forEach { missing ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("⚠️ ${missing.label}", color = C.text, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("🗑️", modifier = Modifier.clickable {
+                    scope.launch(Dispatchers.IO) {
+                        if (Music.removeMissingTrack(missing.key)) withContext(kotlinx.coroutines.Dispatchers.Main) {
+                            missingTracks = missingTracks.filterNot { it.key == missing.key }
+                        }
+                    }
+                }.padding(8.dp))
+            }
+        }
+    }
+
+    if (playlistDialog) AlertDialog(
+        onDismissRequest = { playlistDialog = false },
+        title = { Text(if (editingPlaylist == null) "Yeni çalma listesi" else "Çalma listesini yeniden adlandır") },
+        text = { TextField(value = playlistName, onValueChange = { playlistName = it }, label = { Text("Liste adı") }) },
+        confirmButton = { Button(onClick = {
+            val id = editingPlaylist
+            playlistDialog = false
+            scope.launch(Dispatchers.IO) {
+                if (if (id == null) Music.createPlaylist(playlistName) else Music.renamePlaylist(id, playlistName)) {
+                    withContext(kotlinx.coroutines.Dispatchers.Main) { refreshPlaylists() }
+                }
+            }
+        }) { Text("Kaydet") } },
+        dismissButton = { Button(onClick = { playlistDialog = false }) { Text("İptal") } },
+    )
 
     // Liste
     if (list.isNotEmpty()) {
         Card {
             Title("Şarkılar (${list.size})")
-            list.forEachIndexed { i, t -> TrackRow(t, t.id.toString() == currentId) { Music.play(ctx, list, i) } }
+            list.forEachIndexed { i, t ->
+                var editing by remember(t.id) { mutableStateOf(false) }
+                var name by remember(t.id) { mutableStateOf(t.fileName.substringBeforeLast('.')) }
+                TrackRow(t, t.id.toString() == currentId, onRename = { editing = true }, onAdd = selectedPlaylist?.let { id -> {
+                    if (playlistSongs.none { it.id == t.id }) {
+                        playlistSongs = playlistSongs + t
+                        scope.launch(Dispatchers.IO) { Music.savePlaylistTracks(id, playlistSongs + t) }
+                    }
+                } }) { Music.play(ctx, if (selectedPlaylist == null) list else playlistSongs, if (selectedPlaylist == null) i else playlistSongs.indexOfFirst { it.id == t.id }.coerceAtLeast(0)) }
+                if (editing) AlertDialog(
+                    onDismissRequest = { editing = false },
+                    title = { Text("Dosyanın adını değiştir") },
+                    text = { TextField(value = name, onValueChange = { name = it }, label = { Text("Dosya adı (uzantısız)") }) },
+                    confirmButton = { Button(onClick = {
+                        if (Music.rename(ctx, t, name)) Music.scan(ctx)
+                        editing = false
+                    }) { Text("Kaydet") } },
+                    dismissButton = { Button(onClick = { editing = false }) { Text("İptal") } },
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun TrackRow(t: Track, current: Boolean, onClick: () -> Unit) {
+private fun TrackRow(t: Track, current: Boolean, onRename: () -> Unit, onAdd: (() -> Unit)? = null, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (current) C.surface2 else Color.Transparent)
             .clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 10.dp),
@@ -204,7 +319,36 @@ private fun TrackRow(t: Track, current: Boolean, onClick: () -> Unit) {
             Text(t.title, color = C.text, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             t.artist?.let { Muted(it, 12) }
         }
+        Text("✏️", modifier = Modifier.clickable(onClick = onRename).padding(8.dp))
+        onAdd?.let { Text("＋", modifier = Modifier.clickable(onClick = it).padding(8.dp)) }
         Muted(mmss(t.durationMs), 12)
+    }
+}
+
+@Composable
+private fun PlaylistTrackRow(track: Track, index: Int, onMove: (Int, Int) -> Unit, onDrop: () -> Unit, onRemove: () -> Unit, onClick: () -> Unit) {
+    var distance by remember { mutableFloatStateOf(0f) }
+    Row(
+        Modifier.fillMaxWidth().pointerInput(index) {
+            detectDragGesturesAfterLongPress(
+                onDragStart = { distance = 0f },
+                onDragCancel = { distance = 0f },
+                onDragEnd = { distance = 0f; onDrop() },
+                onDrag = { change, amount ->
+                    distance += amount.y
+                    if (abs(distance) > 56f) {
+                        val next = if (distance > 0) index + 1 else index - 1
+                        onMove(index, next)
+                        distance = 0f
+                    }
+                },
+            )
+        }.clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("☰", color = C.muted, modifier = Modifier.padding(end = 8.dp))
+        Text(track.title, color = C.text, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text("✕", modifier = Modifier.clickable(onClick = onRemove).padding(8.dp))
     }
 }
 

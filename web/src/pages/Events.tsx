@@ -18,6 +18,17 @@ function describe(e: OrbitEvent, childName: string) {
       return `${childName} "${p.title}" görevini tamamladı, onay bekliyor.`;
     case "time_request":
       return `${childName} ek süre istiyor${p.label ? ` (${p.label})` : ""}${p.note ? `: "${p.note}"` : "."}`;
+    case "timer":
+    case "timer_alert": {
+      const st = String(p.status ?? "");
+      const by = p.by === "parent" ? "senin başlattığın" : "kendi başlattığı";
+      const mins = Math.round(Number(p.focused ?? 0) / 60 + Number(p.away ?? 0) / 60);
+      if (st === "started") return `⏱ ${childName} ${p.by === "parent" ? "(senin başlattığın)" : ""} "${p.title}" sayacını başlattı.`;
+      if (st === "done") return `✅ ${childName} "${p.title}" sayacını tamamladı (${mins} dk)${p.reward ? ` · +${p.reward} dk ödül` : ""}.`;
+      if (st === "stopped") return `⏹ ${childName} ${by} "${p.title}" sayacını erken bitirdi (${mins} dk).`;
+      if (st === "cancelled") return `✖ ${childName} ${by} "${p.title}" sayacını iptal etti.`;
+      return `⏱ ${childName} · ${p.title}`;
+    }
     case "message":
       return `💬 ${childName}: ${p.body ?? ""}`;
     case "app_request":

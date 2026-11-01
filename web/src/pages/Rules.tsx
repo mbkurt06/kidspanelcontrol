@@ -25,6 +25,17 @@ export default function Rules() {
     nav(`/rules/profile/${data.id}`);
   }
 
+  async function newFocus() {
+    const { data, error } = await supabase
+      .from("focus_profiles")
+      .insert({ family_id: fam.familyId, name: "Yeni odak", icon: "🎯", sort_order: fam.focusProfiles.length })
+      .select("id")
+      .single();
+    if (error) return setErr(errorText(error));
+    await fam.reload();
+    nav(`/rules/focus/${data.id}`);
+  }
+
   async function newMode() {
     const { data, error } = await supabase
       .from("modes")
@@ -104,6 +115,46 @@ export default function Rules() {
             </Link>
           );
         })}
+      </section>
+
+      <section className="stack">
+        <div className="row between">
+          <h2 className="section-title">Odak profilleri</h2>
+          <button className="btn small" onClick={newFocus}>
+            <Icon name="plus" size={16} /> Yeni
+          </button>
+        </div>
+        <p className="muted small">Sayaç çalışırken telefonda nelerin açık kalacağı. Kuralların üstüne sadece kısıtlar.</p>
+        {fam.focusProfiles.map((f) => (
+          <Link to={`/rules/focus/${f.id}`} className="card link-card" key={f.id}>
+            <span style={{ fontSize: 22 }}>{f.icon ?? "🎯"}</span>
+            <div className="grow">
+              <b>{f.name}</b>
+              <div className="muted small">
+                {f.allowed_groups.length + f.allowed_packages.length
+                  ? `${f.allowed_groups.length} grup, ${f.allowed_packages.length} uygulama açık`
+                  : "hiçbir uygulama açık değil"}
+                {" · "}
+                {f.messages_allowed ? "mesaj açık" : "mesaj kapalı"}
+                {f.calls_allowed ? "" : " · arama kapalı"}
+              </div>
+            </div>
+            <Icon name="chevron" size={18} />
+          </Link>
+        ))}
+        <Link to="/rules/activities" className="card link-card">
+          <div className="grow">
+            <b>Etkinlikler</b>
+            <div className="row wrap gap-s">
+              {fam.activities.map((a) => (
+                <span className="pill" key={a.id}>
+                  {a.icon} {a.name}
+                </span>
+              ))}
+            </div>
+          </div>
+          <Icon name="chevron" size={18} />
+        </Link>
       </section>
 
       <section className="stack">

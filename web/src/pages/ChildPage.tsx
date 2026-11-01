@@ -6,9 +6,10 @@ import { grantMinutes, sendCommand } from "../lib/actions";
 import { dateText, hhmm, minutesText, relTime, todayISO } from "../lib/util";
 import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type DayOverride, type Device, type ExtraTarget, type Section, type TimeGrant } from "../lib/types";
 import { Icon } from "../components/Icon";
+import TimerTab from "./TimerTab";
 import { currentSectionFor, suggestGroup } from "../lib/sections";
 
-type Tab = "apps" | "program" | "time" | "report" | "device";
+type Tab = "apps" | "program" | "time" | "timer" | "report" | "device";
 
 export default function ChildPage() {
   const { id } = useParams();
@@ -36,6 +37,7 @@ export default function ChildPage() {
             ["apps", "Uygulamalar"],
             ["program", "Program"],
             ["time", "Süre"],
+            ["timer", "Sayaç"],
             ["report", "Rapor"],
             ["device", "Telefon"],
           ] as [Tab, string][]
@@ -49,6 +51,7 @@ export default function ChildPage() {
       {tab === "program" && <ProgramTab childId={child.id} />}
       {tab === "time" && <TimeTab childId={child.id} />}
       {tab === "report" && <ReportTab childId={child.id} />}
+      {tab === "timer" && <TimerTab childId={child.id} />}
       {tab === "device" && <DeviceTab childId={child.id} />}
     </div>
   );

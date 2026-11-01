@@ -9,6 +9,7 @@ import ChildPage from "./pages/ChildPage";
 import Rules from "./pages/Rules";
 import ProfileEdit from "./pages/ProfileEdit";
 import Groups from "./pages/Groups";
+import { ActivitiesPage, FocusEdit } from "./pages/Focus";
 import ModeEdit from "./pages/ModeEdit";
 import Events from "./pages/Events";
 import { MessagesChat, MessagesList } from "./pages/Messages";
@@ -179,6 +180,8 @@ function Shell() {
           <Route path="/rules/profile/:id" element={<ProfileEdit />} />
           <Route path="/rules/mode/:id" element={<ModeEdit />} />
           <Route path="/rules/groups" element={<Groups />} />
+          <Route path="/rules/focus/:id" element={<FocusEdit />} />
+          <Route path="/rules/activities" element={<ActivitiesPage />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/tasks/new" element={<TaskEdit />} />
           <Route path="/tasks/:id" element={<TaskEdit />} />

@@ -3,7 +3,7 @@ export type AppGroup = "always_open" | "unlimited" | "timed" | "blocked";
 export type Window = { start: string; end: string };
 
 export type ExtraTarget = "current" | "pool" | "wallet";
-export type Child = { id: string; family_id: string; name: string; color: string; sort_order: number; extra_default: ExtraTarget };
+export type Child = { id: string; family_id: string; name: string; color: string; sort_order: number; extra_default: ExtraTarget; timer_defaults?: { allow_stop: "no" | "yes" | "notify"; pause_mode: "none" | "limit" | "child"; pause_max_minutes: number | null; focus_change: "no" | "stricter" | "free" } };
 
 export type ChildApp = {
   child_id: string;
@@ -275,3 +275,95 @@ export const STATUS_LABEL: Record<RunStatus, string> = {
   claimed: "Kardeşi yaptı",
   expired: "Süresi doldu",
 };
+
+// --- Sayaç, odak profilleri, etkinlikler, alarmlar ---
+
+export type FocusProfile = {
+  id: string;
+  family_id: string;
+  name: string;
+  icon: string | null;
+  allowed_groups: string[];
+  allowed_packages: string[];
+  messages_allowed: boolean;
+  calls_allowed: boolean;
+  sort_order: number;
+};
+
+export type ActivityDef = {
+  id: string;
+  family_id: string;
+  name: string;
+  icon: string | null;
+  default_focus_id: string | null;
+  reward_every: number | null;
+  reward_minutes: number | null;
+  reward_to: "today" | "vault";
+  sort_order: number;
+};
+
+export type AllowStop = "no" | "yes" | "notify";
+export type PauseMode = "none" | "limit" | "child";
+export type FocusChange = "no" | "stricter" | "free";
+
+export type TimerSession = {
+  id: string;
+  family_id: string;
+  child_id: string;
+  activity_id: string | null;
+  title: string;
+  icon: string | null;
+  kind: "countdown" | "stopwatch";
+  planned_seconds: number | null;
+  focus_id: string | null;
+  started_by: "child" | "parent";
+  allow_stop: AllowStop;
+  pause_mode: PauseMode;
+  pause_max_minutes: number | null;
+  focus_change: FocusChange;
+  status: "running" | "paused" | "done" | "stopped" | "cancelled";
+  started_at: string;
+  paused_at: string | null;
+  paused_seconds: number;
+  ended_at: string | null;
+  ended_by: string | null;
+  focused_seconds: number;
+  away_seconds: number;
+};
+
+export type TimerDefaults = { allow_stop: AllowStop; pause_mode: PauseMode; pause_max_minutes: number | null; focus_change: FocusChange };
+
+export type AlarmDef = {
+  id: string;
+  family_id: string;
+  child_id: string;
+  by_parent: boolean;
+  title: string;
+  kind: "alarm" | "reminder";
+  at_time: string;
+  days: number[];
+  on_date: string | null;
+  active: boolean;
+  child_can_edit: boolean;
+  child_can_delete: boolean;
+  snooze_max: number;
+  snooze_minutes: number;
+};
+
+export type AlarmLog = { id: string; alarm_id: string | null; child_id: string; title: string | null; fired_at: string; dismissed_at: string | null; snoozes: number };
+
+/** Geçen çalışma süresi (molalar hariç), saniye */
+export function timerElapsed(s: TimerSession, now = Date.now()) {
+  const paused = s.status === "paused" && s.paused_at ? (now - new Date(s.paused_at).getTime()) / 1000 : 0;
+  return Math.max(0, (now - new Date(s.started_at).getTime()) / 1000 - s.paused_seconds - paused);
+}
+export function timerRemaining(s: TimerSession, now = Date.now()) {
+  return s.planned_seconds == null ? null : Math.max(0, s.planned_seconds - timerElapsed(s, now));
+}
+export function clockText(sec: number) {
+  const t = Math.round(sec);
+  const h = Math.floor(t / 3600);
+  const m = Math.floor((t % 3600) / 60);
+  const s = t % 60;
+  return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}

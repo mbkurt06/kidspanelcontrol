@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { supabase, errorText } from "../lib/supabase";
 import { quickGrant, seedDefaults, sendCommand } from "../lib/actions";
+import { timerElapsed, timerRemaining } from "../lib/types";
 import { minutesText, relTime } from "../lib/util";
 import { Ring } from "../components/Ring";
 import { Icon } from "../components/Icon";
@@ -81,6 +82,16 @@ function ChildCard({ child }: { child: Child }) {
               <div className="row wrap gap-s">
                 {st.locked && <span className="pill danger">Kilitli{st.lock_reason ? ` · ${st.lock_reason}` : ""}</span>}
                 {st.current_mode_name && <span className="pill">{st.current_mode_name}</span>}
+                {fam.timers[child.id] && (
+                  <span className="pill accent">
+                    {fam.timers[child.id].icon ?? "⏱"} {fam.timers[child.id].title}
+                    {fam.timers[child.id].status === "paused"
+                      ? " · mola"
+                      : timerRemaining(fam.timers[child.id]) != null
+                        ? ` · ${Math.ceil((timerRemaining(fam.timers[child.id]) ?? 0) / 60)} dk kaldı`
+                        : ` · ${Math.floor(timerElapsed(fam.timers[child.id]) / 60)} dk`}
+                  </span>
+                )}
                 <span className={`pill ${stale ? "warn" : "quiet"}`}>{relTime(st.updated_at)}</span>
               </div>
             </>

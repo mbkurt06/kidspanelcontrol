@@ -88,7 +88,7 @@ object Music {
     /** Rename the actual file; ID3 tags are not changed. */
     fun rename(ctx: Context, track: Track, newName: String): Boolean {
         val base = newName.trim()
-        if (base.isBlank() || base == "." || base == ".." || base.any { it in "/\\\\:*?\\"<>|\\n\\r" }) return false
+        if (base.isBlank() || base == "." || base == ".." || base.any { it.code < 32 || it == '/' || it == ':' || it == '*' || it == '?' || it == '"' || it == '<' || it == '>' || it == '|' || it.code == 92 }) return false
         val extension = track.fileName.substringAfterLast('.', "")
         val target = if (extension.isNotEmpty() && !base.endsWith(".$extension", true)) "$base.$extension" else base
         return runCatching {

@@ -57,6 +57,8 @@ object Sync {
         if (ids.isEmpty()) return
         // Ebeveyn panelden "güncellemeyi şimdi kontrol et" dediyse bir sonraki turda hemen kontrol edilir
         if (fresh.any { it.optJSONObject("payload")?.optBoolean("update") == true }) Store.lastUpdateCheck = 0
+        // Panel kasa anahtarı istiyor (yeni ebeveyn cihazı)
+        if (fresh.any { it.optJSONObject("payload")?.optBoolean("vault") == true }) Vault.shareSoon()
         runCatching {
             Api.patch("commands?id=in.(${ids.joinToString(",")})", JSONObject().put("acked_at", Instant.now().toString()))
         }

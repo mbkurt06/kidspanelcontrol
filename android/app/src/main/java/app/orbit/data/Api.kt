@@ -70,6 +70,11 @@ object Api {
         return Store.accessToken!!
     }
 
+    /** Canlı bağlantı (Realtime) için geçerli oturum anahtarı. */
+    fun accessToken(): String = token()
+    val baseUrl get() = base
+    val apiKey get() = key
+
     private fun authCall(grant: String, body: JSONObject): JSONObject {
         val req = Request.Builder().url("$base/auth/v1/token?grant_type=$grant")
             .header("apikey", key)

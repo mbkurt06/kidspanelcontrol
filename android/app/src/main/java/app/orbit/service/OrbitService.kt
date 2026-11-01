@@ -122,6 +122,8 @@ class OrbitService : Service() {
         val n = runningNotification("Orbit çalışıyor")
         if (Build.VERSION.SDK_INT >= 34) startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         else startForeground(1, n)
+        // Panelden gelen değişiklikleri anında almak için canlı bağlantı
+        app.orbit.data.Realtime.start()
         registerReceiver(screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_USER_PRESENT)
         })
@@ -138,6 +140,7 @@ class OrbitService : Service() {
     override fun onDestroy() {
         runCatching { unregisterReceiver(screenReceiver) }
         runCatching { unregisterReceiver(packageReceiver) }
+        app.orbit.data.Realtime.stop()
         scope.cancel()
         super.onDestroy()
     }

@@ -97,6 +97,21 @@ object Vault {
         data class Open(val key: ByteArray) : State()
     }
 
+    private val sharing = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Yeni bir ebeveyn cihazı anahtar istedi: kısa bir beklemeden sonra paylaş (aynı anda tek iş). */
+    fun shareSoon() {
+        if (!sharing.compareAndSet(false, true)) return
+        Thread {
+            try {
+                Thread.sleep(1500)
+                runCatching { open() }.onFailure { Log.w(TAG, "anlık paylaşım", it) }
+            } finally {
+                sharing.set(false)
+            }
+        }.start()
+    }
+
     fun open(): State {
         val c = Store.creds ?: return State.Locked
         val me = ensureHolder()

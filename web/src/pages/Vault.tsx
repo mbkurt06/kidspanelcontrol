@@ -1,3 +1,4 @@
+import { sendCommand } from "../lib/actions";
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
@@ -68,6 +69,32 @@ export default function Vault() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Anahtar yoksa çocuğun telefonundan hemen paylaşmasını iste (canlı bağlantıyla birkaç saniyede gelir) ve bekle
+  const [asking, setAsking] = useState(false);
+  const askPhone = useCallback(async () => {
+    if (!id) return;
+    setAsking(true);
+    await sendCommand(id, "resync", { vault: true }).catch(() => {});
+  }, [id]);
+  const locked = state?.kind === "locked";
+  useEffect(() => {
+    if (!locked) {
+      setAsking(false);
+      return;
+    }
+    askPhone();
+    let n = 0;
+    const t = setInterval(() => {
+      if (++n > 24) {
+        clearInterval(t);
+        setAsking(false);
+        return;
+      }
+      load();
+    }, 5000);
+    return () => clearInterval(t);
+  }, [locked, askPhone, load]);
 
   async function run(fn: () => Promise<void>) {
     setBusy(true);
@@ -172,8 +199,9 @@ export default function Vault() {
         <div className="card">
           <h2>Bu cihazda kasa anahtarı yok</h2>
           <p className="muted small">
-            Anahtarı olan bir cihazda (diğer ebeveynin telefonu veya {child.name}'in telefonu) Orbit açılınca anahtar bu cihaza
-            kendiliğinden paylaşılır. Beklemek istemezsen kurtarma kodunu gir.
+            {asking
+              ? `${child.name}'in telefonundan anahtar isteniyor… Telefon açık ve internete bağlıysa birkaç saniye içinde açılır.`
+              : `Anahtar ${child.name}'in telefonundan bu cihaza paylaşılır. Telefon kapalı ya da internetsizse açılınca gelir; beklemek istemezsen kurtarma kodunu gir.`}
           </p>
           {state.hasRecovery ? (
             <>
@@ -188,7 +216,13 @@ export default function Vault() {
           ) : (
             <p className="muted small">Bu kasa için henüz kurtarma kodu oluşturulmamış.</p>
           )}
-          <button className="btn ghost" onClick={load}>
+          <button
+            className="btn ghost"
+            onClick={async () => {
+              await askPhone();
+              load();
+            }}
+          >
             Tekrar dene
           </button>
         </div>

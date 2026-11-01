@@ -472,6 +472,7 @@ private fun AboutScreen() {
     Card {
         Title("Orbit ${BuildConfig.VERSION_NAME}")
         Muted("Bağlantı: " + if (live.online) "bağlı" else "çevrimdışı")
+        Muted("Canlı bağlantı: " + if (app.orbit.data.Realtime.isConnected) "açık (değişiklikler anında gelir)" else "kapalı (30 sn'de bir kontrol)")
         Muted("Son eşitleme: " + if (live.lastSync > 0) java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(live.lastSync)) else "henüz yok")
         Muted("Cihaz yöneticisi: " + if (Policy.isOwner(ctx)) "evet" else "hayır")
         Muted("Kullanım erişimi: " + if (Policy.hasUsageAccess(ctx)) "açık" else "kapalı")

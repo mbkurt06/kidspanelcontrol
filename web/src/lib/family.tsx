@@ -15,6 +15,7 @@ type FamilyData = {
   groupLimits: GroupLimit[];
   statuses: Record<string, DeviceStatus>;
   unreadEvents: number;
+  unreadMessages: number;
   pendingApprovals: number;
   loading: boolean;
   reload: () => Promise<void>;
@@ -36,13 +37,14 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
     groupLimits: [],
     statuses: {},
     unreadEvents: 0,
+    unreadMessages: 0,
     pendingApprovals: 0,
     loading: true,
   });
 
   const reload = useCallback(async () => {
     supabase.rpc("touch_parent_device").then(() => {});
-    const [fam, ch, pr, mo, sl, st, ev, ap, gr, gm, se, sr, gl] = await Promise.all([
+    const [fam, ch, pr, mo, sl, st, ev, ap, gr, gm, se, sr, gl, um] = await Promise.all([
       supabase.from("families").select("id").limit(1).maybeSingle(),
       supabase.from("children").select("*").order("sort_order").order("created_at"),
       supabase.from("rule_profiles").select("*").order("created_at"),
@@ -56,6 +58,7 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
       supabase.from("profile_sections").select("*").order("start_time"),
       supabase.from("section_rules").select("*"),
       supabase.from("profile_group_limits").select("*"),
+      supabase.from("messages").select("id", { count: "exact", head: true }).eq("from_parent", false).is("read_at", null),
     ]);
     const members: Record<string, string> = {};
     for (const m of (gm.data ?? []) as GroupMember[]) members[m.package] = m.group_id;
@@ -74,6 +77,7 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
       groupLimits: (gl.data ?? []) as GroupLimit[],
       statuses,
       unreadEvents: ev.count ?? 0,
+      unreadMessages: um.count ?? 0,
       pendingApprovals: ap.count ?? 0,
       loading: false,
     });

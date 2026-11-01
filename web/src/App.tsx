@@ -11,6 +11,8 @@ import ProfileEdit from "./pages/ProfileEdit";
 import Groups from "./pages/Groups";
 import ModeEdit from "./pages/ModeEdit";
 import Events from "./pages/Events";
+import { MessagesChat, MessagesList } from "./pages/Messages";
+import { useFamily } from "./lib/family";
 import Settings from "./pages/Settings";
 import Tasks from "./pages/Tasks";
 import TaskEdit from "./pages/TaskEdit";
@@ -165,6 +167,7 @@ function DeviceGate({ userId, email }: { userId: string; email: string }) {
 }
 
 function Shell() {
+  const fam = useFamily();
   return (
     <div className="shell">
       <main className="content">
@@ -180,6 +183,8 @@ function Shell() {
           <Route path="/tasks/new" element={<TaskEdit />} />
           <Route path="/tasks/:id" element={<TaskEdit />} />
           <Route path="/events" element={<Events />} />
+          <Route path="/messages" element={<MessagesList />} />
+          <Route path="/messages/:id" element={<MessagesChat />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>
       </main>
@@ -191,6 +196,11 @@ function Shell() {
         <NavLink to="/tasks">
           <Icon name="tasks" />
           <span>Görevler</span>
+        </NavLink>
+        <NavLink to="/messages">
+          <Icon name="chat" />
+          <span>Mesajlar</span>
+          {fam.unreadMessages > 0 && <span className="badge">{fam.unreadMessages}</span>}
         </NavLink>
         <NavLink to="/rules">
           <Icon name="rules" />

@@ -106,6 +106,9 @@ function ChildCard({ child }: { child: Child }) {
           +30 dk
         </button>
       </div>
+      <Link to={`/messages/${child.id}`} className="btn ghost small">
+        <Icon name="chat" size={16} /> {child.name}'e mesaj yaz
+      </Link>
       {msg && <p className="small muted center">{msg}</p>}
     </div>
   );

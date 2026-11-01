@@ -175,7 +175,7 @@ a {
   right: 0;
   bottom: 0;
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -810,4 +810,128 @@ select:focus {
   align-items: center;
   padding: 8px 4px;
   cursor: pointer;
+}
+
+/* Görev kanıtları: öncesi + denemeler yan yana (yatay kaydırma) */
+.proof-timeline {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scroll-snap-type: x mandatory;
+}
+.proof-timeline > figure,
+.proof-attempt {
+  flex: 0 0 min(46%, 220px);
+  scroll-snap-align: start;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.proof-attempt figure {
+  margin: 0;
+}
+.proof-timeline img,
+.proof-timeline video {
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  border-radius: 12px;
+  background: var(--surface-2);
+  display: block;
+}
+.proof-timeline figcaption {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+.proof-attempt.current figcaption {
+  color: var(--accent);
+  font-weight: 600;
+}
+.proof-attempt p {
+  margin: 0;
+}
+
+/* Mesajlar */
+.badge {
+  background: var(--accent);
+  color: #fff;
+  border-radius: 999px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-grid;
+  place-items: center;
+}
+.ellipsis {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60vw;
+}
+.chat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 8px;
+}
+.bubble {
+  max-width: 80%;
+  align-self: flex-start;
+  background: var(--surface-2);
+  border-radius: 16px 16px 16px 4px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bubble.mine {
+  align-self: flex-end;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 16px 16px 4px 16px;
+}
+.bubble .who {
+  font-size: 11px;
+  opacity: 0.8;
+}
+.bubble .body {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.bubble .meta {
+  font-size: 11px;
+  opacity: 0.7;
+  align-self: flex-end;
+}
+.chat-input {
+  position: sticky;
+  bottom: calc(env(safe-area-inset-bottom) + 70px);
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  background: var(--bg);
+  padding: 8px 0;
+}
+.chat-input textarea {
+  flex: 1;
+  resize: none;
+  min-height: 44px;
+  max-height: 140px;
+  font: inherit;
+}
+.tabbar a {
+  position: relative;
+}
+.tabbar .badge {
+  position: absolute;
+  top: 0;
+  right: calc(50% - 22px);
+  min-width: 18px;
+  height: 18px;
+  font-size: 11px;
 }

@@ -18,6 +18,8 @@ function describe(e: OrbitEvent, childName: string) {
       return `${childName} "${p.title}" görevini tamamladı, onay bekliyor.`;
     case "time_request":
       return `${childName} ek süre istiyor${p.label ? ` (${p.label})` : ""}${p.note ? `: "${p.note}"` : "."}`;
+    case "message":
+      return `💬 ${childName}: ${p.body ?? ""}`;
     case "app_request":
       return `${childName} "${p.label ?? p.package}" uygulamasının açılmasını istiyor${p.note ? `: "${p.note}"` : "."}`;
     case "device_boot":
@@ -59,7 +61,7 @@ export default function Events() {
         {events?.map((e) => {
           const child = fam.children.find((c) => c.id === e.child_id);
           const text = describe(e, child?.name ?? "");
-          const to = e.type === "parent_device_pending" ? "/settings" : e.type === "task_submitted" ? "/tasks" : child ? `/child/${child.id}` : "/";
+          const to = e.type === "message" && child ? `/messages/${child.id}` : e.type === "parent_device_pending" ? "/settings" : e.type === "task_submitted" ? "/tasks" : child ? `/child/${child.id}` : "/";
           return (
             <Link to={to} className={`card event ${e.read_at ? "" : "unread"}`} key={e.id}>
               {child && <span className="dot" style={{ background: child.color }} />}

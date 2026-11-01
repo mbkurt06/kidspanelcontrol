@@ -228,16 +228,16 @@ function ReviewCard({ run, task, childName, color, onDone }: { run: TaskRun; tas
   const [rejecting, setRejecting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  const [notes, setNotes] = useState<{ attempt: number; note: string | null }[]>([]);
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase
-        .from("task_proofs")
-        .select("*")
-        .eq("run_id", run.id)
-        .eq("attempt", run.attempts)
-        .is("removed_at", null)
-        .order("created_at");
+      // Bütün denemelerin kanıtları (reddedilenler de) ve her reddin notu
+      const [{ data }, { data: nt }] = await Promise.all([
+        supabase.from("task_proofs").select("*").eq("run_id", run.id).is("removed_at", null).order("attempt").order("created_at"),
+        supabase.from("task_run_notes").select("attempt, note").eq("run_id", run.id).order("attempt"),
+      ]);
+      setNotes((nt ?? []) as { attempt: number; note: string | null }[]);
       const list = (data ?? []) as TaskProof[];
       if (!list.length) return setProofs([]);
       const { data: signed } = await supabase.storage.from("orbit-proofs").createSignedUrls(list.map((p) => p.path), 600);
@@ -276,8 +276,25 @@ function ReviewCard({ run, task, childName, color, onDone }: { run: TaskRun; tas
     onDone();
   }
 
-  const order = { before: 0, single: 1, after: 2 } as const;
-  const sorted = [...proofs].sort((a, b) => order[a.stage] - order[b.stage]);
+  // Öncesi (ilk) + her denemenin sonrası; en yenisi en sonda
+  const before = proofs.filter((p) => p.stage === "before").slice(0, 1);
+  const attempts = [...new Set(proofs.filter((p) => p.stage !== "before").map((p) => p.attempt))].sort((a, b) => a - b);
+  const proofFig = (p: TaskProof & { url?: string }, caption: string) => (
+    <figure key={p.id}>
+      {p.url ? (
+        p.media === "video" ? (
+          <video src={p.url} controls playsInline preload="metadata" />
+        ) : (
+          <a href={p.url} target="_blank" rel="noreferrer">
+            <img src={p.url} alt="" />
+          </a>
+        )
+      ) : (
+        <div className="proof-missing">yükleniyor…</div>
+      )}
+      <figcaption>{caption}</figcaption>
+    </figure>
+  );
 
   return (
     <div className="card attention">
@@ -289,24 +306,19 @@ function ReviewCard({ run, task, childName, color, onDone }: { run: TaskRun; tas
         <span className="muted tiny">{relTime(run.submitted_at)}</span>
       </div>
       {task?.description && <p className="muted small">{task.description}</p>}
-      {sorted.length > 0 ? (
-        <div className={`proofs ${sorted.length > 1 ? "two" : ""}`}>
-          {sorted.map((p) => (
-            <figure key={p.id}>
-              {p.url ? (
-                p.media === "video" ? (
-                  <video src={p.url} controls playsInline preload="metadata" />
-                ) : (
-                  <a href={p.url} target="_blank" rel="noreferrer">
-                    <img src={p.url} alt="" />
-                  </a>
-                )
-              ) : (
-                <div className="proof-missing">yükleniyor…</div>
-              )}
-              <figcaption>{p.stage === "before" ? "Öncesi" : p.stage === "after" ? "Sonrası" : "Kanıt"}</figcaption>
-            </figure>
-          ))}
+      {proofs.length > 0 ? (
+        <div className="proof-timeline">
+          {before.map((p) => proofFig(p, "Öncesi"))}
+          {attempts.map((a) => {
+            const last = a === run.attempts;
+            const n = notes.find((x) => x.attempt === a);
+            return (
+              <div key={a} className={`proof-attempt ${last ? "current" : ""}`}>
+                {proofs.filter((p) => p.stage !== "before" && p.attempt === a).map((p) => proofFig(p, last ? (attempts.length > 1 ? `${a + 1}. deneme · şimdi` : "Sonrası") : `${a + 1}. deneme`))}
+                {!last && <p className="small warn-text">↩ {n?.note ? `Reddedildi: ${n.note}` : "Reddedildi"}</p>}
+              </div>
+            );
+          })}
         </div>
       ) : (
         task?.proof !== "none" && <p className="muted small">Kanıt bulunamadı.</p>

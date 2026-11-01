@@ -79,6 +79,7 @@ export default function Settings() {
       {msg && <p className="ok">{msg}</p>}
 
       <ThemeCard />
+      <ProofCard />
 
       <div className="card">
         <h2>Bildirimler</h2>
@@ -288,6 +289,37 @@ function ThemeCard() {
         ))}
       </div>
       <p className="muted small">Otomatik: telefonun ya da bilgisayarın açık/koyu ayarına uyar. Seçim bu cihazda saklanır.</p>
+    </div>
+  );
+}
+
+function ProofCard() {
+  const fam = useFamily();
+  const [v, setV] = useState<number | null>(null);
+  useEffect(() => {
+    if (!fam.familyId) return;
+    supabase
+      .from("families")
+      .select("proof_retention_days")
+      .eq("id", fam.familyId)
+      .maybeSingle()
+      .then(({ data }) => setV((data as { proof_retention_days: number } | null)?.proof_retention_days ?? 0));
+  }, [fam.familyId]);
+  async function save(n: number) {
+    setV(n);
+    await supabase.from("families").update({ proof_retention_days: n }).eq("id", fam.familyId);
+  }
+  return (
+    <div className="card">
+      <h2>Görev kanıtları</h2>
+      <p className="muted small">
+        Reddettiğin denemelerin fotoğrafları silinmez; onay ekranında öncesi ve bütün denemeler yan yana görünür. Görevi onaylayınca:
+      </p>
+      <select value={v ?? 0} onChange={(e) => save(Number(e.target.value))} disabled={v == null}>
+        <option value={0}>Fotoğraflar hemen silinsin</option>
+        <option value={7}>7 gün saklansın</option>
+        <option value={30}>30 gün saklansın</option>
+      </select>
     </div>
   );
 }

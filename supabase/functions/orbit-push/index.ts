@@ -30,6 +30,8 @@ function text(type: string, child: string, p: Record<string, unknown>): { title:
       return { title: `${child} uygulama istiyor`, body: `${s("label") || s("package")} açılsın mı?${s("note") ? ` — ${s("note")}` : ""}`, url: "/#/" };
     case "message":
       return { title: `💬 ${child}`, body: s("body"), url: `/#/messages/${s("_child")}` };
+    case "timer_alert":
+      return { title: `⏱ ${child} sayacı erken bitirdi`, body: `${s("title")} — ${Math.round(Number(s("focused") || 0) / 60)} dk çalıştı`, url: "/#/" };
     case "app_installed":
       return { title: `${child} yeni uygulama yükledi`, body: `${s("label") || s("package")} onay bekliyor`, url: "/#/" };
     case "parent_device_pending":

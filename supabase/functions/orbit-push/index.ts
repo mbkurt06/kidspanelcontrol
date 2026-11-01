@@ -28,6 +28,8 @@ function text(type: string, child: string, p: Record<string, unknown>): { title:
       return { title: `${child} süre istiyor`, body: s("label") ? `${s("label")}: ${s("note")}` : s("note") || "Ek süre isteği", url: "/#/" };
     case "app_request":
       return { title: `${child} uygulama istiyor`, body: `${s("label") || s("package")} açılsın mı?${s("note") ? ` — ${s("note")}` : ""}`, url: "/#/" };
+    case "message":
+      return { title: `💬 ${child}`, body: s("body"), url: `/#/messages/${s("_child")}` };
     case "app_installed":
       return { title: `${child} yeni uygulama yükledi`, body: `${s("label") || s("package")} onay bekliyor`, url: "/#/" };
     case "parent_device_pending":
@@ -57,7 +59,7 @@ Deno.serve(async (req) => {
       const { data: k } = await admin.from("children").select("name").eq("id", ev.child_id).maybeSingle();
       child = k?.name ?? "";
     }
-    const msg = text(ev.type, child, ev.payload ?? {});
+    const msg = text(ev.type, child, { ...(ev.payload ?? {}), _child: ev.child_id ?? "" });
     const { data: subs } = await admin
       .from("push_subscriptions")
       .select("*")
@@ -69,7 +71,7 @@ Deno.serve(async (req) => {
       try {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-          JSON.stringify({ ...msg, tag: ev.type + ":" + (ev.child_id ?? "") }),
+          JSON.stringify({ ...msg, tag: ev.type === "message" ? `message:${ev.id}` : ev.type + ":" + (ev.child_id ?? "") }),
           { TTL: 3600, urgency: "high" },
         );
         sent++;

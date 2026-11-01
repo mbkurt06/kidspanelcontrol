@@ -1,5 +1,5 @@
 // Orbit — kanıt dosyası temizliği (15 dakikada bir, veritabanı zamanlayıcısı çağırır).
-// Onaylanan/reddedilen görevlerin ve 7 günden eski tüm kanıtların dosyaları Storage'dan silinir.
+// Silinmek üzere işaretlenen kanıtların dosyaları Storage'dan silinir.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, {
@@ -12,12 +12,14 @@ Deno.serve(async (req) => {
   if (req.headers.get("x-orbit-hook") !== (c as Record<string, string>)?.orbit_hook_secret) {
     return new Response("forbidden", { status: 403 });
   }
-  const weekAgo = new Date(Date.now() - 7 * 86400_000).toISOString();
+  // Silinecekleri işaretle: onaydan sonra saklama süresi dolanlar, kapanmış görevler, 45 günden eskiler.
+  // Reddedilen görevlerin kanıtları karar verilene kadar saklanır (denemeler karşılaştırılabilsin).
+  await admin.rpc("mark_proofs_for_cleanup");
   const { data: rows, error } = await admin
     .from("task_proofs")
     .select("id, path")
     .is("file_deleted_at", null)
-    .or(`removed_at.not.is.null,created_at.lt.${weekAgo}`)
+    .not("removed_at", "is", null)
     .limit(500);
   if (error) return new Response(error.message, { status: 500 });
   if (!rows?.length) return Response.json({ deleted: 0 });

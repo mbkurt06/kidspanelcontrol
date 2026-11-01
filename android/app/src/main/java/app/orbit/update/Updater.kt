@@ -25,7 +25,7 @@ object Updater {
     fun check(ctx: Context, installIfNew: Boolean = true) {
         Store.init(ctx)
         val token = Store.updateToken
-        if (token.isBlank()) { checkPublic(ctx); return }
+        if (token.isBlank()) { checkPublic(ctx, installIfNew); return }
         try {
             val c = open("https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases/latest", token, "application/vnd.github+json")
             if (c.responseCode != 200) { msg("GitHub HTTP ${c.responseCode}"); return }
@@ -54,7 +54,7 @@ object Updater {
      */
     private const val PUBLIC_MANIFEST = "https://orbit-panel-nu.vercel.app/kurulum/version.json"
 
-    private fun checkPublic(ctx: Context) {
+    private fun checkPublic(ctx: Context, installIfNew: Boolean) {
         try {
             val c = open(PUBLIC_MANIFEST, null, "application/json")
             if (c.responseCode != 200) { msg("Sürüm dosyası HTTP ${c.responseCode}"); return }

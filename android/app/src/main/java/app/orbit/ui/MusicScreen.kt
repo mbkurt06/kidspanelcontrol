@@ -335,7 +335,6 @@ private fun PlaylistTrackRow(track: Track, index: Int, onMove: (Int, Int) -> Uni
                 onDragCancel = { distance = 0f },
                 onDragEnd = { distance = 0f; onDrop() },
                 onDrag = { change, amount ->
-                    change.consumePositionChange()
                     distance += amount.y
                     if (abs(distance) > 56f) {
                         val next = if (distance > 0) index + 1 else index - 1

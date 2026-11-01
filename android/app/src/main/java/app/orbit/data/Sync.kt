@@ -54,6 +54,7 @@ object Sync {
                 .put("timer_sessions", runCatching { Api.get("timer_sessions?child_id=eq.$child&status=in.(running,paused)&select=*") }.getOrElse { JSONArray() })
                 .put("alarms", runCatching { Api.get("alarms?child_id=eq.$child&select=*&order=at_time") }.getOrElse { JSONArray() })
                 .put("tasks", runCatching { JSONArray(Api.rpc("device_tasks", JSONObject().put("p_day", today))) }.getOrElse { JSONArray() })
+                .put("agenda", runCatching { Api.get("agenda_items?child_id=eq.$child&select=*&order=due_date.asc,due_time.asc,entered_at.desc") }.getOrElse { JSONArray() })
             Store.rulesJson = bundle.toString()
             kid.optJSONObject(0)?.optString("name")?.let { Store.childName = it }
             Store.lastSync = System.currentTimeMillis()

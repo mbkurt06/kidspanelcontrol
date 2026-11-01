@@ -18,6 +18,7 @@ import { MessagesChat, MessagesList } from "./pages/Messages";
 import { useFamily } from "./lib/family";
 import Settings from "./pages/Settings";
 import Tasks from "./pages/Tasks";
+import Agenda from "./pages/Agenda";
 import TaskEdit from "./pages/TaskEdit";
 import Vault from "./pages/Vault";
 import { Icon } from "./components/Icon";
@@ -190,6 +191,7 @@ function Shell() {
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/tasks/new" element={<TaskEdit />} />
           <Route path="/tasks/:id" element={<TaskEdit />} />
+          <Route path="/agenda" element={<Agenda />} />
           <Route path="/events" element={<Events />} />
           <Route path="/messages" element={<MessagesList />} />
           <Route path="/messages/:id" element={<MessagesChat />} />
@@ -204,6 +206,10 @@ function Shell() {
         <NavLink to="/tasks">
           <Icon name="tasks" />
           <span>Görevler</span>
+        </NavLink>
+        <NavLink to="/agenda">
+          <Icon name="calendar" />
+          <span>Ajanda</span>
         </NavLink>
         <NavLink to="/messages">
           <Icon name="chat" />

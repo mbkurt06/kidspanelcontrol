@@ -159,6 +159,8 @@ data class Rules(
     val overrides: List<DayOverride> = emptyList(),
     val grants: List<Grant> = emptyList(),
     val commands: List<Command> = emptyList(),
+    /** Çocuğun oluşturduğu ajanda kayıtları */
+    val agenda: List<app.orbit.data.AgendaItem> = emptyList(),
     /** Bugün yapılmamış zorunlu görevler (başlıkları). Bitmeden süreli uygulamalar açılmaz. */
     val mandatoryOpen: List<String> = emptyList(),
     /** Gün bölümleri (bir gün tipinde bölüm varsa yeni kural motoru kullanılır) */

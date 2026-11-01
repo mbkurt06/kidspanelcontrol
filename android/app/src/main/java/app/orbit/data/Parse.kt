@@ -156,6 +156,7 @@ object Parse {
         overrides = overrides(b.optJSONArray("overrides") ?: JSONArray()),
         grants = grants(b.optJSONArray("grants") ?: JSONArray()),
         commands = commands(b.optJSONArray("commands") ?: JSONArray()),
+        agenda = Agenda.parse(b.optJSONArray("agenda")),
         mandatoryOpen = Tasks.parse(b.optJSONArray("tasks")).filter { it.blocking }.map { it.title },
         sections = sections(b.optJSONArray("sections") ?: JSONArray()),
         sectionRules = sectionRules(b.optJSONArray("section_rules") ?: JSONArray()),

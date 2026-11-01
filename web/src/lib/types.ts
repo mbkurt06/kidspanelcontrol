@@ -7,6 +7,24 @@ export type Child = { id: string; family_id: string; name: string; color: string
   kiosk_settings?: KioskSettings; parent_pin_enabled?: boolean; parent_pin_hash?: string | null;
   music_mode?: "always" | "rules" | "never"; music_folder?: string | null; music_folders?: string[]; timer_defaults?: { allow_stop: "no" | "yes" | "notify"; pause_mode: "none" | "limit" | "child"; pause_max_minutes: number | null; focus_change: "no" | "stricter" | "free" } };
 
+export type AgendaKind = "homework" | "exam" | "payment" | "event";
+export type AgendaItem = {
+  id: string;
+  family_id: string;
+  child_id: string;
+  kind: AgendaKind;
+  title: string;
+  note: string | null;
+  entered_at: string;
+  due_date: string;
+  due_time: string | null;
+  amount: number | null;
+  currency: string;
+  status: "open" | "done";
+  completed_at: string | null;
+  created_at: string;
+};
+
 export type ChildApp = {
   child_id: string;
   package: string;
@@ -44,9 +62,10 @@ export type Section = {
   music?: boolean;
 };
 
-export type KioskScreen = "tasks" | "messages" | "music" | "timer" | "alarms" | "day" | "wallet" | "ask" | "vault";
+export type KioskScreen = "tasks" | "agenda" | "messages" | "music" | "timer" | "alarms" | "day" | "wallet" | "ask" | "vault";
 export const KIOSK_SCREENS: [KioskScreen, string][] = [
   ["tasks", "✅ Görevler"],
+  ["agenda", "🗓 Ajanda"],
   ["messages", "💬 Mesajlar"],
   ["music", "🎵 Müzik"],
   ["timer", "⏱ Sayaç"],

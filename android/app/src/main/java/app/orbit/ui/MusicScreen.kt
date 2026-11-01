@@ -20,6 +20,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -62,7 +65,7 @@ fun MusicScreen() {
     val blocked by Music.blocked.collectAsState()
     var loaded by remember { mutableStateOf(false) }
     val fixed = remember { Store.rules().musicFolder }
-    var folder by remember { mutableStateOf(fixed ?: Music.childFolder) }
+    val folder = fixed
 
     // Çalma durumu
     var title by remember { mutableStateOf<String?>(null) }
@@ -82,7 +85,7 @@ fun MusicScreen() {
         if (!granted) app.orbit.device.Policy.grantSelf(ctx, perm)
         val list = withContext(Dispatchers.IO) { Music.scan(ctx) }
         loaded = true
-        withContext(Dispatchers.IO) { Music.reportFolders(list) }
+        withContext(Dispatchers.IO) { Music.reportFolders(ctx) }
     }
 
     fun sync(p: Player) {
@@ -112,7 +115,7 @@ fun MusicScreen() {
         }
     }
 
-    val list = remember(all, folder) { if (folder == null) all else all.filter { it.folder == folder } }
+    val list = remember(all, folder) { all }
 
     if (blocked != null) Card { Text("🔇 $blocked", color = C.warn) }
 
@@ -170,14 +173,8 @@ fun MusicScreen() {
     val folders = remember(all) { Music.folders(all) }
     Card {
         Title("Klasör")
-        if (fixed != null) {
-            Muted("📁 $fixed (ebeveynin seçti)")
-        } else {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                MusicChip("Hepsi", folder == null) { folder = null; Music.childFolder = null }
-                for (f in folders) MusicChip(f.substringAfterLast('/'), folder == f) { folder = f; Music.childFolder = f }
-            }
-        }
+        if (fixed != null) Muted("📁 $fixed (ebeveynin seçti)")
+        else Muted("Ebeveynin müzik klasörü seçmesi bekleniyor.", 13)
         if (loaded && all.isEmpty()) Muted("Telefonda müzik bulunamadı. Müzikleri bilgisayardan telefonun Music klasörüne at.", 13)
         if (!granted) Muted("Müzik dosyalarına erişim izni bekleniyor.", 13)
     }
@@ -186,13 +183,27 @@ fun MusicScreen() {
     if (list.isNotEmpty()) {
         Card {
             Title("Şarkılar (${list.size})")
-            list.forEachIndexed { i, t -> TrackRow(t, t.id.toString() == currentId) { Music.play(ctx, list, i) } }
+            list.forEachIndexed { i, t ->
+                var editing by remember(t.id) { mutableStateOf(false) }
+                var name by remember(t.id) { mutableStateOf(t.fileName.substringBeforeLast('.')) }
+                TrackRow(t, t.id.toString() == currentId, onRename = { editing = true }) { Music.play(ctx, list, i) }
+                if (editing) AlertDialog(
+                    onDismissRequest = { editing = false },
+                    title = { Text("Dosyanın adını değiştir") },
+                    text = { TextField(value = name, onValueChange = { name = it }, label = { Text("Dosya adı (uzantısız)") }) },
+                    confirmButton = { Button(onClick = {
+                        if (Music.rename(ctx, t, name)) Music.scan(ctx)
+                        editing = false
+                    }) { Text("Kaydet") } },
+                    dismissButton = { Button(onClick = { editing = false }) { Text("İptal") } },
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun TrackRow(t: Track, current: Boolean, onClick: () -> Unit) {
+private fun TrackRow(t: Track, current: Boolean, onRename: () -> Unit, onClick: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(if (current) C.surface2 else Color.Transparent)
             .clickable(onClick = onClick).padding(horizontal = 8.dp, vertical = 10.dp),
@@ -204,6 +215,7 @@ private fun TrackRow(t: Track, current: Boolean, onClick: () -> Unit) {
             Text(t.title, color = C.text, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             t.artist?.let { Muted(it, 12) }
         }
+        Text("✏️", modifier = Modifier.clickable(onClick = onRename).padding(8.dp))
         Muted(mmss(t.durationMs), 12)
     }
 }

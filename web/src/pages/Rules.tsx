@@ -3,6 +3,7 @@ import { useFamily } from "../lib/family";
 import { supabase, errorText } from "../lib/supabase";
 import { daysText, hhmm, minutesText } from "../lib/util";
 import { Icon } from "../components/Icon";
+import { Info } from "../components/Info";
 import { useState } from "react";
 import { createDefaultSections } from "./ProfileEdit";
 import { mins } from "../lib/sections";
@@ -92,12 +93,11 @@ export default function Rules() {
 
       <section className="stack">
         <div className="row between">
-          <h2 className="section-title">Gün tipleri</h2>
+          <h2 className="section-title">Gün tipleri <Info>Bir gün tipi bölümleri ve her bölümdeki kuralları tutar. Hangi güne hangisinin geçerli olduğunu çocuğun Program sekmesinden seçersin.</Info></h2>
           <button className="btn small" onClick={newProfile}>
             <Icon name="plus" size={16} /> Yeni
           </button>
         </div>
-        <p className="muted small">Bir gün tipi (hafta içi, hafta sonu, tatil…) günün bölümlerini ve her bölümdeki kuralları tutar. Hangi güne hangisinin geçerli olduğunu çocuğun Program sekmesinden seçersin.</p>
         {fam.profiles.map((p) => {
           const slots = fam.slots.filter((s) => s.profile_id === p.id);
           const secs = fam.sections.filter((s) => s.profile_id === p.id).sort((a, b) => mins(a.start_time) - mins(b.start_time));
@@ -141,12 +141,11 @@ export default function Rules() {
 
       <section className="stack">
         <div className="row between">
-          <h2 className="section-title">Odak profilleri</h2>
+          <h2 className="section-title">Odak profilleri <Info>Sayaç çalışırken telefonda nelerin açık kalacağını belirler. Kuralların üstüne yalnızca ek kısıt koyar.</Info></h2>
           <button className="btn small" onClick={newFocus}>
             <Icon name="plus" size={16} /> Yeni
           </button>
         </div>
-        <p className="muted small">Sayaç çalışırken telefonda nelerin açık kalacağı. Kuralların üstüne sadece kısıtlar.</p>
         {fam.focusProfiles.map((f) => (
           <Link to={`/rules/focus/${f.id}`} className="card link-card" key={f.id}>
             <span style={{ fontSize: 22 }}>{f.icon ?? "🎯"}</span>
@@ -181,15 +180,11 @@ export default function Rules() {
 
       <section className="stack">
         <div className="row between">
-          <h2 className="section-title">Durumlar</h2>
+          <h2 className="section-title">Durumlar <Info>Ders, uyku ve oyun zamanı gibi durumlarda hangi uygulamaların açık kalacağını ve sürenin nasıl sayılacağını belirler.</Info></h2>
           <button className="btn small" onClick={newMode}>
             <Icon name="plus" size={16} /> Yeni
           </button>
         </div>
-        <p className="muted small">
-          Ders, uyku, oyun zamanı gibi kendi durumlarını oluştur: hangi uygulamalar açık, kendi süresi var mı, günlük süreyi
-          etkiliyor mu.
-        </p>
         {fam.modes.map((m) => (
           <Link to={`/rules/mode/${m.id}`} className="card link-card" key={m.id}>
             <span className="dot" style={{ background: m.color }} />

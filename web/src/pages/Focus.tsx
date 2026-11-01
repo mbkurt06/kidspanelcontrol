@@ -4,6 +4,7 @@ import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import type { ActivityDef, FocusProfile } from "../lib/types";
 import { Icon } from "../components/Icon";
+import { Info } from "../components/Info";
 
 type AppRow = { package: string; label: string };
 
@@ -82,9 +83,7 @@ export function FocusEdit() {
           <input className="mini" style={{ width: 56, textAlign: "center", fontSize: 20 }} value={p.icon ?? ""} maxLength={4} placeholder="🎯" onChange={(e) => setP({ ...p, icon: e.target.value })} aria-label="Simge" />
           <input className="grow" value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} aria-label="Ad" />
         </div>
-        <p className="muted small">
-          Sayaç bu profille çalışırken telefonda <b>sadece</b> aşağıda seçtiklerin açık kalır. Kuralların o an kapattığı bir şeyi açmaz; sadece daha fazla kısıtlar.
-        </p>
+        <h2 className="section-title">Odak profili <Info>Sayaç bu profille çalışırken yalnızca aşağıda seçtiklerin açık kalır. Mevcut kuralları gevşetmez.</Info></h2>
       </div>
       <div className="card">
         <h2>Açık kalacak gruplar</h2>
@@ -182,7 +181,7 @@ export function ActivitiesPage() {
         </button>
       </header>
       {err && <p className="error">{err}</p>}
-      <p className="muted small">Çocuk sayaç başlatırken bunlardan birini seçer (ya da kendisi isim yazar). Ödül: odaklı çalıştığı süreye göre ekstra süre.</p>
+      <h2 className="section-title">Etkinlikler <Info>Çocuk sayaç başlatırken bunlardan birini seçebilir. Ödül, odaklı çalışma süresine göre ekstra süredir.</Info></h2>
       {fam.activities.map((a) => (
         <div className="card" key={a.id}>
           <div className="row gap-s">

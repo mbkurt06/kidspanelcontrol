@@ -22,7 +22,7 @@ object Updater {
     fun status(): String = Store.prefs().getString("updateStatus", "") ?: ""
     private fun msg(s: String) = Store.prefs().edit().putString("updateStatus", s).apply()
 
-    fun check(ctx: Context) {
+    fun check(ctx: Context, installIfNew: Boolean = true) {
         Store.init(ctx)
         val token = Store.updateToken
         if (token.isBlank()) { checkPublic(ctx); return }
@@ -32,6 +32,7 @@ object Updater {
             val j = JSONObject(c.inputStream.bufferedReader().use { it.readText() })
             val version = j.optString("tag_name").removePrefix("orbit-v").removePrefix("v").toIntOrNull() ?: 0
             if (version <= BuildConfig.VERSION_CODE) { msg("Güncel (${BuildConfig.VERSION_CODE})"); return }
+            if (!installIfNew) { msg("Yeni sürüm $version mevcut"); return }
             val assets = j.optJSONArray("assets")
             var url: String? = null
             for (i in 0 until (assets?.length() ?: 0)) {
@@ -60,6 +61,7 @@ object Updater {
             val j = JSONObject(c.inputStream.bufferedReader().use { it.readText() })
             val version = j.optInt("version")
             if (version <= BuildConfig.VERSION_CODE) { msg("Güncel (${BuildConfig.VERSION_CODE})"); return }
+            if (!installIfNew) { msg("Yeni sürüm $version mevcut"); return }
             val url = j.optString("url")
             if (!url.startsWith("https://")) { msg("Sürüm dosyası hatalı"); return }
             msg("Sürüm $version indiriliyor")

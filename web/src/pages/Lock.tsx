@@ -8,6 +8,7 @@ import { mins, nowBerlin } from "../lib/sections";
 import { relTime } from "../lib/util";
 import { type Child, type KioskSettings } from "../lib/types";
 import { Icon } from "../components/Icon";
+import { Info } from "../components/Info";
 import { RuleCard, ScreenPicker, WeekGrid, addRule } from "../components/RuleEditor";
 
 const DEFAULT_KIOSK: KioskSettings = { message: null, screens: ["tasks", "messages", "music", "timer", "alarms"], calls: "emergency" };
@@ -36,10 +37,10 @@ export async function unlockNow(childId: string) {
 }
 
 /** Kilit sayfası: şimdi kilitle, haftalık program, kilit ekranı, ana sayfa tuşu. */
-export default function Lock() {
+export default function Lock({ embeddedChildId }: { embeddedChildId?: string } = {}) {
   const fam = useFamily();
   const [params] = useSearchParams();
-  const childParam = params.get("child");
+  const childParam = embeddedChildId ?? params.get("child");
   const [kid, setKid] = useState<string>(childParam ?? (fam.selectedChildId === "all" ? "all" : fam.selectedChildId));
   const [openRule, setOpenRule] = useState<string | null>(null);
   const [err, setErr] = useState("");
@@ -58,24 +59,16 @@ export default function Lock() {
   }
 
   return (
-    <div className="page">
-      <header className="page-head">
+    <div className={embeddedChildId ? "stack" : "page"}>
+      {!embeddedChildId && <header className="page-head">
         <Link to="/rules" className="icon-btn" aria-label="Geri">
           <Icon name="back" />
         </Link>
         <h1>🔒 Kilit</h1>
         <span />
-      </header>
+      </header>}
       {err && <p className="error">{err}</p>}
-      <div className="card">
-        <p className="small">
-          <b>🔒 Kilitle:</b> ekranda sadece Orbit kalır; ayarlar, bildirim paneli ve diğer uygulamalar açılmaz.
-          <br />
-          <b>🌙 Sınırla:</b> telefon kullanılır ama sadece her zaman açık uygulamalar çalışır.
-          <br />
-          <b>🟢 Serbest:</b> o saatte süre ve kurallar işlemez.
-        </p>
-      </div>
+      <h2 className="section-title">Kilit <Info>Kilitle Orbit dışında her şeyi kapatır. Sınırla yalnızca her zaman açık uygulamalara izin verir. Serbest kural sınırları kaldırır.</Info></h2>
 
       <section className="stack">
         <h2 className="section-title">Şimdi</h2>

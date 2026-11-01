@@ -7,6 +7,7 @@ import { todayISO } from "../lib/util";
 import { PROOF_LABEL, VALIDITY_LABEL, type ProofType, type RewardValidity, type Task } from "../lib/types";
 import { DayPicker } from "../components/Windows";
 import { Icon } from "../components/Icon";
+import { Info } from "../components/Info";
 
 type Form = {
   title: string;
@@ -361,7 +362,7 @@ export default function TaskEdit() {
       </div>
 
       <div className="card">
-        <h2>Ödül</h2>
+        <h2>Ödül <Info>Süre ödülü çocuğun Süre kasasına kaydedilir; sonradan bir güne, bölüme veya saat aralığına aktarabilirsin.</Info></h2>
         <div className="grid2">
           <label className="field">
             <span>Ekstra süre (dk)</span>
@@ -383,9 +384,6 @@ export default function TaskEdit() {
             <span>Gün</span>
             <DateField value={f.reward_date} onChange={(v) => set("reward_date", v)} />
           </div>
-        )}
-        {f.reward_validity === "vault" && (
-          <p className="muted small">Süre çocuğun süre kasasına kaydedilir; çocuk kendisi kullanamaz. Çocuğun Süre sekmesinden istediğin güne, bölüme ya da saat aralığına aktarırsın.</p>
         )}
         {f.reward_validity !== "wallet" && f.reward_validity !== "vault" && (
           <label className="field">

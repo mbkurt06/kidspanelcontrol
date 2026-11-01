@@ -1,7 +1,5 @@
-import { Link } from "react-router-dom";
 import { useState } from "react";
 import { useFamily } from "../lib/family";
-import { Icon } from "../components/Icon";
 import { errorText, supabase } from "../lib/supabase";
 
 const AVATARS = ["🙂", "😎", "🦊", "🐼", "🐯", "🦄", "🚀", "⭐"];
@@ -15,8 +13,6 @@ export default function ChildSettings() {
       {fam.visibleChildren.map((child) => (
         <section className="card settings-card" key={child.id}>
           <ProfileRow child={child} />
-          <Link className="settings-row" to={`/rules/music?child=${child.id}`}><span>🎵 Müzik</span><Icon name="chevron" size={18} /></Link>
-          <Link className="settings-row" to={`/rules/lock?child=${child.id}`}><span>🔒 Kilit ve ekran</span><Icon name="chevron" size={18} /></Link>
         </section>
       ))}
     </div>
@@ -34,7 +30,7 @@ function ProfileRow({ child }: { child: { id: string; name: string; profile_nick
     if (!error) fam.reload();
   }
   return <div className="profile-mini">
-    <div className="row gap-s"><span className="profile-avatar">{avatar}</span><div><h2>{child.name}</h2><div className="muted tiny">Profil</div></div></div>
+    <div className="row gap-s"><span className="profile-avatar">{avatar.startsWith("data:image") ? <img src={avatar} alt="Profil" /> : avatar}</span><div><h2>{child.name}</h2><div className="muted tiny">Profil</div></div></div>
     <div className="row gap-xs wrap">{AVATARS.map((a) => <button className={`avatar-choice ${avatar === a ? "on" : ""}`} key={a} onClick={() => setAvatar(a)}>{a}</button>)}</div>
     <div className="row gap-s"><input value={name} onChange={(e) => setName(e.target.value.slice(0, 60))} placeholder="İsim veya takma ad" /><button className="btn small" onClick={save}>Kaydet</button></div>
     {msg && <span className="muted tiny">{msg}</span>}

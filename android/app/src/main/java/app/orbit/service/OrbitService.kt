@@ -370,7 +370,9 @@ class OrbitService : Service() {
         }
         if (nowMs - Store.lastUpdateCheck > 3600_000L) {
             Store.lastUpdateCheck = nowMs
-            scope.launch(Dispatchers.IO) { Updater.check(this@OrbitService) }
+            val checkOnly = Store.updateCheckOnly
+            Store.updateCheckOnly = false
+            scope.launch(Dispatchers.IO) { Updater.check(this@OrbitService, installIfNew = !checkOnly) }
         }
         firstRun = false
     }

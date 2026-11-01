@@ -30,7 +30,7 @@ export default function Agenda() {
   }
 
   return <div className="page">
-    <header className="page-head"><h1>Ajanda</h1><button className="icon-btn large" aria-label="Ajandaya ekle" onClick={() => setForm(true)}><Icon name="plus" /></button></header>
+    <header className="page-head"><h1>Ajanda</h1></header>
     {err && <p className="error">{err}</p>}
     {!grouped.some((g) => g.items.length) && <p className="muted small">Ajandada kayıt yok.</p>}
     {grouped.map(({ child, items: list }) => <section className="agenda-group" key={child.id}>
@@ -44,6 +44,7 @@ export default function Agenda() {
     </section>)}
     {form && <AgendaForm defaultChildren={fam.visibleChildren.map((c) => c.id)} allChildren={fam.children} onClose={() => setForm(false)} onSaved={() => { setForm(false); load(); }} />}
     {open && <AgendaDetail item={open} childName={fam.children.find((c) => c.id === open.child_id)?.name ?? ""} onClose={() => setOpen(null)} onToggle={() => toggle(open)} onRemove={() => remove(open)} />}
+    <button className="agenda-fab" aria-label="Ajandaya kayıt ekle" onClick={() => setForm(true)}>+</button>
   </div>;
 }
 

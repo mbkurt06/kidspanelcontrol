@@ -22,12 +22,10 @@ const STATUS: Record<TimerSession["status"], string> = { running: "çalışıyor
 const DEF: TimerDefaults = { allow_stop: "notify", pause_mode: "limit", pause_max_minutes: 5, focus_change: "stricter" };
 
 /** Çocuk sayfası → Sayaç & Alarm: canlı sayaç, uzaktan başlatma, rapor, alarmlar. */
-export default function TimerTab({ childId }: { childId: string }) {
+export default function TimerTab({ childId, only }: { childId: string; only?: "alarms" }) {
   return (
     <div className="stack">
-      <LiveTimer childId={childId} />
-      <StartTimer childId={childId} />
-      <Report childId={childId} />
+      {!only && <><LiveTimer childId={childId} /><StartTimer childId={childId} /><Report childId={childId} /></>}
       <AlarmsCard childId={childId} />
     </div>
   );
@@ -408,7 +406,7 @@ function AlarmsCard({ childId }: { childId: string }) {
   return (
     <div className="card">
       <div className="row between">
-        <h2>Alarm ve hatırlatıcılar</h2>
+        <h2>Hatırlatıcılar</h2>
         {!edit && (
           <button className="btn small" onClick={() => setEdit(emptyAlarm(childId, child.family_id))}>
             <Icon name="plus" size={16} /> Yeni

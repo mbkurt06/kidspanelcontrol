@@ -93,6 +93,7 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
     val messages by app.orbit.data.Messages.list.collectAsState()
     val unreadMsgs = messages.count { it.fromParent && !it.read }
     val live by Live.state.collectAsState()
+    val profileRules = remember(live.lastSync) { Store.rules() }
     val openTasks = remember(live.lastSync, live.snapshot?.now?.minute) { Tasks.current().count { it.open } }
     // Tam kilit: sadece izin verilen ekranlar
     val kiosk = live.kiosk
@@ -106,7 +107,14 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = C.surface) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(Store.childName.ifBlank { "Orbit" }, color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { screen = Screen.PROFILE; scope.launch { drawer.close() } }.padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OrbitAvatar(profileRules.profileAvatar, Modifier.size(46.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Column { Text(Store.childName.ifBlank { "Orbit" }, color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold); Muted(profileRules.profileNickname ?: "Profil", 12) }
+                    }
                     Muted(if (live.online) "bağlı" else "çevrimdışı", 12)
                     Spacer(Modifier.height(12.dp))
                     val focusNow = remember(live.lastSync, live.snapshot?.now?.minute) { app.orbit.data.Timers.activeFocus() }
@@ -459,7 +467,7 @@ private fun WalletScreen() {
     val maxUse = minOf(walletTotal, limitLeft ?: walletTotal)
     var busy by remember { mutableStateOf(false) }
     Card {
-        Title("Cüzdanım")
+        Row(verticalAlignment = Alignment.CenterVertically) { Title("Cüzdanım"); Spacer(Modifier.width(6.dp)); Info("Cüzdandaki süreyi çocuk kullanabilir; yalnızca izin verilen saatlerde ve günlük sınır içinde geçerlidir.") }
         if (s.walletGrants.isEmpty()) {
             Muted("Cüzdanında süre yok. Görevlerini yaparak süre kazanabilirsin.")
         } else {
@@ -498,14 +506,14 @@ private fun WalletScreen() {
     }
     if (vaultMin > 0) {
         Card {
-            Title("Süre kasası")
+            Row(verticalAlignment = Alignment.CenterVertically) { Title("Süre kasası"); Spacer(Modifier.width(6.dp)); Info("Bu süre ebeveyn tarafından daha sonra bir güne veya bölüme aktarılır.") }
             Text(minutesText(vaultMin.toLong()), color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Muted("Kazandığın bu süre ebeveyninde. Ne zaman kullanacağını o planlayacak.")
         }
     }
     if (today.isNotEmpty()) {
         Card {
-            Title("Bugünkü ekstra süreler")
+            Row(verticalAlignment = Alignment.CenterVertically) { Title("Bugünkü ekstra süreler"); Spacer(Modifier.width(6.dp)); Info("Bugün için açılmış ek sürelerin kısa dökümü.") }
             for (g in today) {
                 val where = when {
                     g.window != null -> "${hm(g.window.start)}–${hm(g.window.end)} arası"

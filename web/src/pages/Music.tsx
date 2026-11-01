@@ -4,13 +4,14 @@ import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import type { Child } from "../lib/types";
 import { Icon } from "../components/Icon";
+import { Info } from "../components/Info";
 import { RuleCard, WeekGrid, addRule } from "../components/RuleEditor";
 
 /** Müzik: çocuk başına ne zaman çalabileceği, klasör ve müzik programı. */
-export default function Music() {
+export default function Music({ embeddedChildId }: { embeddedChildId?: string } = {}) {
   const fam = useFamily();
   const [params] = useSearchParams();
-  const childParam = params.get("child");
+  const childParam = embeddedChildId ?? params.get("child");
   const [err, setErr] = useState("");
   const [openRule, setOpenRule] = useState<string | null>(null);
   const rules = fam.timeRules.filter((r) => r.kind === "music_off" || r.kind === "music_on");
@@ -26,16 +27,16 @@ export default function Music() {
   }
 
   return (
-    <div className="page">
-      <header className="page-head">
+    <div className={embeddedChildId ? "stack" : "page"}>
+      {!embeddedChildId && <header className="page-head">
         <Link to="/rules" className="icon-btn" aria-label="Geri">
           <Icon name="back" />
         </Link>
         <h1>🎵 Müzik</h1>
         <span />
-      </header>
+      </header>}
       {err && <p className="error">{err}</p>}
-      <p className="muted small">Orbit'teki müzik çalar süreden düşmez; arka planda ve ekran kapalıyken de çalar. Kilitliyken çalması için kilit ekranında "Müzik" açık olmalı.</p>
+      <h2 className="section-title">Müzik <Info>Orbit müzik çaları süreden düşmez. Kilitliyken çalması için kilit ekranında Müzik açık olmalı.</Info></h2>
       {fam.visibleChildren.filter((c) => !childParam || c.id === childParam).map((c) => (
         <ChildMusic key={c.id} child={c} onErr={setErr} />
       ))}
@@ -46,7 +47,7 @@ export default function Music() {
             <Icon name="plus" size={16} /> Kural
           </button>
         </div>
-        <p className="muted small">"Programa göre" seçili çocuklarda geçerli. "Müzik açık" kuralı, aynı saatteki "Müzik kapalı" kuralını geçersiz kılar.</p>
+        <h2 className="section-title">Müzik programı <Info>“Programa göre” seçili çocuklarda geçerlidir. Müzik açık kuralı, aynı saatteki müzik kapalı kuralını geçersiz kılar.</Info></h2>
         {rules.length > 0 && (
           <div className="card">
             <WeekGrid rules={rules} onPick={(id) => setOpenRule(id)} />

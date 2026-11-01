@@ -4,14 +4,19 @@ import android.app.DatePickerDialog
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -54,26 +59,25 @@ fun AgendaScreen() {
     var detail by remember { mutableStateOf<AgendaItem?>(null) }
     val items = remember(live.lastSync) { Agenda.current() }
 
-    Card {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Title("Ajanda")
-            IconButton(onClick = { form = true }, modifier = Modifier.size(44.dp)) { Text("＋", color = C.accent, fontSize = 26.sp) }
-        }
-    }
-    if (items.isEmpty()) Card { Muted("Ajandada kayıt yok.") }
-    for (item in items) {
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).clickable { detail = item }.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            val done = item.status == "done"
-            Text(if (done) "☑" else "☐", color = if (done) C.good else C.muted, fontSize = 27.sp)
-            Column(Modifier.weight(1f).padding(start = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Muted(enteredText(item.enteredAt), 12)
-                Text(item.title, color = C.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-                Muted("${dateText(item.dueDate)}${item.dueTime?.take(5)?.let { " · $it" } ?: ""}", 12)
+    Box(Modifier.fillMaxWidth()) {
+        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (items.isEmpty()) Card { Muted("Ajandada kayıt yok.") }
+            for (item in items) {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).clickable { detail = item }.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val done = item.status == "done"
+                    Text(if (done) "☑" else "☐", color = if (done) C.good else C.muted, fontSize = 27.sp)
+                    Column(Modifier.weight(1f).padding(start = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Muted(enteredText(item.enteredAt), 12)
+                        Text(item.title, color = C.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                        Muted("${dateText(item.dueDate)}${item.dueTime?.take(5)?.let { " · $it" } ?: ""}", 12)
+                    }
+                }
             }
         }
+        FloatingActionButton(onClick = { form = true }, containerColor = C.accent, contentColor = C.text, modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)) { Text("+", fontSize = 24.sp) }
     }
     if (form) AgendaForm(onClose = { form = false })
     detail?.let { item -> AgendaDetail(item, onClose = { detail = null }, onDone = {
@@ -98,7 +102,7 @@ private fun AgendaForm(onClose: () -> Unit) {
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(title, { title = it.take(160); error = "" }, label = { Text("Başlık") }, singleLine = true)
-                DateButton(dueDate) { dueDate = it }
+                DateSelector(dueDate) { dueDate = it }
                 OutlinedButton(onClick = { extra = !extra }) { Text("⌄") }
                 if (extra) {
                     OutlinedTextField(dueTime, { dueTime = it.take(5) }, label = { Text("Saat") }, singleLine = true)
@@ -122,10 +126,45 @@ private fun AgendaForm(onClose: () -> Unit) {
 }
 
 @Composable
-private fun DateButton(value: String, onChange: (String) -> Unit) {
+private fun DateSelector(value: String, onChange: (String) -> Unit) {
     val context = LocalContext.current
     val date = runCatching { LocalDate.parse(value) }.getOrDefault(LocalDate.now())
-    OutlinedButton(onClick = { DatePickerDialog(context, { _, y, m, d -> onChange("%04d-%02d-%02d".format(y, m + 1, d)) }, date.year, date.monthValue - 1, date.dayOfMonth).show() }) { Text(dateText(value)) }
+    var mode by remember { mutableStateOf("calendar") }
+    var wheel by remember { mutableStateOf(false) }
+    var day by remember(value) { mutableStateOf(date.dayOfMonth.toString()) }
+    var month by remember(value) { mutableStateOf(date.monthValue.toString()) }
+    var year by remember(value) { mutableStateOf(date.year.toString()) }
+    fun apply(d: Int, m: Int, y: Int) { runCatching { onChange(LocalDate.of(y, m, d).toString()) } }
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedButton(onClick = { mode = "write" }) { Text("Yaz") }
+            OutlinedButton(onClick = { mode = "wheel" }) { Text("Kaydır") }
+            OutlinedButton(onClick = { mode = "calendar"; DatePickerDialog(context, { _, y, m, d -> onChange("%04d-%02d-%02d".format(y, m + 1, d)) }, date.year, date.monthValue - 1, date.dayOfMonth).show() }) { Text("Takvim") }
+        }
+        when (mode) {
+            "write" -> Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                OutlinedTextField(day, { day = it.filter(Char::isDigit).take(2); if (day.length == 2) apply(day.toInt(), month.toIntOrNull() ?: 1, year.toIntOrNull() ?: date.year) }, label = { Text("Gün") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(month, { month = it.filter(Char::isDigit).take(2); if (month.length == 2) apply(day.toIntOrNull() ?: 1, month.toInt(), year.toIntOrNull() ?: date.year) }, label = { Text("Ay") }, singleLine = true, modifier = Modifier.weight(1f))
+                OutlinedTextField(year, { year = it.filter(Char::isDigit).take(4); if (year.length == 4) apply(day.toIntOrNull() ?: 1, month.toIntOrNull() ?: 1, year.toInt()) }, label = { Text("Yıl") }, singleLine = true, modifier = Modifier.weight(1.3f))
+            }
+            "wheel" -> {
+                OutlinedButton(onClick = { wheel = true }) { Text(dateText(value) + " · gün/ay/yıl seç") }
+                if (wheel) AlertDialog(
+                    onDismissRequest = { wheel = false },
+                    title = { Text("Tarihi kaydırarak seç") },
+                    text = {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Column(Modifier.weight(1f).height(150.dp).verticalScroll(rememberScrollState())) { (1..31).forEach { d -> TextButton(onClick = { day = d.toString(); apply(d, month.toIntOrNull() ?: 1, year.toIntOrNull() ?: date.year) }) { Text("%02d".format(d)) } } }
+                            Column(Modifier.weight(1.4f).height(150.dp).verticalScroll(rememberScrollState())) { (1..12).forEach { m -> TextButton(onClick = { month = m.toString(); apply(day.toIntOrNull() ?: 1, m, year.toIntOrNull() ?: date.year) }) { Text(m.toString()) } } }
+                            Column(Modifier.weight(1.2f).height(150.dp).verticalScroll(rememberScrollState())) { (date.year - 10..date.year + 10).forEach { y -> TextButton(onClick = { year = y.toString(); apply(day.toIntOrNull() ?: 1, month.toIntOrNull() ?: 1, y) }) { Text(y.toString()) } } }
+                        }
+                    },
+                    confirmButton = { TextButton(onClick = { wheel = false }) { Text("Tamam") } },
+                )
+            }
+            else -> OutlinedButton(onClick = { DatePickerDialog(context, { _, y, m, d -> onChange("%04d-%02d-%02d".format(y, m + 1, d)) }, date.year, date.monthValue - 1, date.dayOfMonth).show() }) { Text("📅 ${dateText(value)}") }
+        }
+    }
 }
 
 @Composable

@@ -9,9 +9,11 @@ import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment,
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
 import TimerTab from "./TimerTab";
+import Music from "./Music";
+import Lock from "./Lock";
 import { currentSectionFor, suggestGroup, timedPossible } from "../lib/sections";
 
-type Tab = "apps" | "program" | "time" | "timer" | "report" | "device";
+type Tab = "apps" | "program" | "time" | "timer" | "alarms" | "music" | "lock" | "report" | "device";
 
 export default function ChildPage() {
   const { id } = useParams();
@@ -33,13 +35,16 @@ export default function ChildPage() {
         </Link>
       </header>
       <ParentModeCard childId={child.id} />
-      <div className="segmented">
+      <div className="segmented child-tabs">
         {(
           [
             ["apps", "Uygulamalar"],
             ["program", "Program"],
             ["time", "Süre"],
             ["timer", "Sayaç"],
+            ["alarms", "Hatırlatıcılar"],
+            ["music", "Müzik"],
+            ["lock", "Kilit"],
             ["report", "Rapor"],
             ["device", "Telefon"],
           ] as [Tab, string][]
@@ -54,6 +59,9 @@ export default function ChildPage() {
       {tab === "time" && <TimeTab childId={child.id} />}
       {tab === "report" && <ReportTab childId={child.id} />}
       {tab === "timer" && <TimerTab childId={child.id} />}
+      {tab === "alarms" && <TimerTab childId={child.id} only="alarms" />}
+      {tab === "music" && <Music embeddedChildId={child.id} />}
+      {tab === "lock" && <Lock embeddedChildId={child.id} />}
       {tab === "device" && <DeviceTab childId={child.id} />}
     </div>
   );
@@ -73,27 +81,23 @@ function UpdateCard({ childId, current }: { childId: string; current: string | n
   }, []);
   const cur = current ? Number(current.split(".").pop()) : null;
   const behind = latest != null && cur != null && latest > cur;
+  async function command(update: boolean) {
+    try {
+      await sendCommand(childId, "resync", update ? { update: true } : { check_update: true });
+      setMsg(update ? "Güncelleme kontrolü ve gönderimi başlatıldı." : "Telefon güncellemeyi kontrol edecek; sonuç birazdan görünecek.");
+    } catch (e) {
+      setMsg(errorText(e));
+    }
+  }
   return (
     <div className="card">
       <h2>Orbit güncellemesi</h2>
-      <p className="muted small">
-        Telefondaki sürüm: {current ?? "?"}
-        {latest != null && ` · en yeni: ${latest}`}
-        {behind ? " — güncelleme var." : latest != null && cur != null ? " — güncel." : ""} Telefon saatte bir kendisi de bakar.
-      </p>
-      <button
-        className="btn"
-        onClick={async () => {
-          try {
-            await sendCommand(childId, "resync", { update: true });
-            setMsg("Gönderildi. Telefon 30 sn içinde kontrol eder; varsa 1–2 dk içinde kurulur ve sürüm burada değişir.");
-          } catch (e) {
-            setMsg(errorText(e));
-          }
-        }}
-      >
-        Güncellemeyi şimdi kontrol et
-      </button>
+      <div className="muted small">Telefon: {current ?? "?"} · En yeni: {latest ?? "?"}{behind ? " · Yeni sürüm var" : ""}</div>
+      <div className="row gap-s wrap">
+        <button className="btn" onClick={() => command(false)}>Kontrol et</button>
+        {behind && <button className="btn primary" onClick={() => command(true)}>Güncelle</button>}
+        <button className="btn ghost" onClick={() => command(true)}>Kontrol et ve güncelle</button>
+      </div>
       {msg && <p className="muted small">{msg}</p>}
     </div>
   );
@@ -541,6 +545,30 @@ function ProgramTab({ childId }: { childId: string }) {
 
 // ---------------------------------------------------------------------------
 
+function DurationField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const total = value === "" ? 0 : Math.max(0, Number(value) || 0);
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  const [open, setOpen] = useState(false);
+  const set = (h: number, m: number) => onChange(String(Math.min(24 * 60, h * 60 + m)));
+  return <div className="duration-field">
+    <input className="mini" type="number" min={0} max={24} value={value === "" ? "" : hours} onChange={(e) => set(Number(e.target.value) || 0, minutes)} aria-label="Saat" />
+    <span>sa</span>
+    <input className="mini" type="number" min={0} max={59} value={value === "" ? "" : minutes} onChange={(e) => set(hours, Number(e.target.value) || 0)} aria-label="Dakika" />
+    <span>dk</span>
+    <button type="button" className="icon-btn" aria-label="Süreyi kaydırarak seç" onClick={() => setOpen(true)}>⌄</button>
+    <button type="button" className="icon-btn" aria-label="Sınırsız" onClick={() => onChange("")}>∞</button>
+    {open && <div className="sheet-backdrop" onClick={() => setOpen(false)}><div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <h2>Günlük sınır</h2>
+      <div className="date-wheel">
+        <select size={5} value={hours} onChange={(e) => set(hours, Number(e.target.value))}>{Array.from({ length: 25 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")} sa</option>)}</select>
+        <select size={5} value={minutes} onChange={(e) => set(hours, Number(e.target.value))}>{Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")} dk</option>)}</select>
+      </div>
+      <button type="button" className="btn primary wide" onClick={() => setOpen(false)}>Tamam</button>
+    </div></div>}
+  </div>;
+}
+
 type When = "now" | "from" | "today" | "tomorrow" | "date" | "child" | "vault";
 
 function TimeTab({ childId }: { childId: string }) {
@@ -802,9 +830,8 @@ function TimeTab({ childId }: { childId: string }) {
         )}
         {wallet.map((g) => grantRow(g, "wallet"))}
         <div className="row gap-s wrap" style={{ alignItems: "center" }}>
-          <span className="small">Günde en fazla</span>
-          <input className="mini" type="number" min={0} placeholder="sınırsız" value={walletMax} onChange={(e) => setWalletMax(e.target.value)} aria-label="Cüzdan günlük sınır" />
-          <span className="small">dk kullanabilsin</span>
+          <span className="small">Günlük sınır <Info>Çocuğun cüzdandan bir günde kullanabileceği en fazla süre.</Info></span>
+          <DurationField value={walletMax} onChange={setWalletMax} />
           <button className="btn small" onClick={saveWalletMax}>
             Kaydet
           </button>
@@ -836,7 +863,7 @@ function TimeTab({ childId }: { childId: string }) {
         />
       )}
       <div className="card">
-        <h2>Verilen süreler</h2>
+        <h2>Verilen süreler <Info>Bu kayıtlar ebeveynin verdiği veya görev ödülü olarak oluşan süre hareketleridir. Hangi güne, bölüme ya da cüzdana aktarıldığını gösterir.</Info></h2>
         {!live.length && <p className="muted small">Bekleyen ekstra süre yok.</p>}
         {live.map((g) => (
           <div className="app-row wrap" key={g.id}>
@@ -1148,11 +1175,14 @@ type UsageRow = { day: string; package: string; minutes: number; counted_minutes
 function ReportTab({ childId }: { childId: string }) {
   const [rows, setRows] = useState<UsageRow[]>([]);
   const [labels, setLabels] = useState<Record<string, string>>({});
+  const [range, setRange] = useState<"day" | "week" | "month" | "custom">("week");
+  const [from, setFrom] = useState(todayISO("Europe/Berlin", -6));
+  const [to, setTo] = useState(todayISO());
   const [day, setDay] = useState(todayISO());
 
   useEffect(() => {
     (async () => {
-      const since = todayISO("Europe/Berlin", -6);
+      const since = todayISO("Europe/Berlin", -365);
       const [u, a] = await Promise.all([
         supabase.from("usage_daily").select("day, package, minutes, counted_minutes").eq("child_id", childId).gte("day", since),
         supabase.from("child_apps").select("package, label").eq("child_id", childId),
@@ -1162,24 +1192,40 @@ function ReportTab({ childId }: { childId: string }) {
     })();
   }, [childId]);
 
-  const days = Array.from({ length: 7 }, (_, i) => todayISO("Europe/Berlin", i - 6));
+  const addDays = (value: string, amount: number) => {
+    const d = new Date(`${value}T12:00:00`);
+    d.setDate(d.getDate() + amount);
+    return d.toISOString().slice(0, 10);
+  };
+  const monthStart = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; })();
+  const start = range === "day" ? to : range === "week" ? addDays(to, -6) : range === "month" ? monthStart : from;
+  const end = range === "custom" ? to : to;
+  const days: string[] = [];
+  for (let d = start; d <= end && days.length < 366; d = addDays(d, 1)) days.push(d);
   const totals = days.map((d) => ({
     d,
     total: rows.filter((r) => r.day === d).reduce((a, r) => a + r.minutes, 0),
     counted: rows.filter((r) => r.day === d).reduce((a, r) => a + r.counted_minutes, 0),
   }));
   const max = Math.max(60, ...totals.map((t) => t.total));
-  const dayRows = rows.filter((r) => r.day === day && r.minutes > 0).sort((a, b) => b.minutes - a.minutes);
+  const totalMinutes = totals.reduce((a, t) => a + t.total, 0);
+  const countedMinutes = totals.reduce((a, t) => a + t.counted, 0);
+  const selectedDay = days.includes(day) ? day : days[days.length - 1] ?? todayISO();
+  const dayRows = rows.filter((r) => r.day === selectedDay && r.minutes > 0).sort((a, b) => b.minutes - a.minutes);
   const short = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("tr-TR", { weekday: "short" });
 
   return (
     <div className="stack">
       <div className="card">
-        <h2>Son 7 gün</h2>
-        <p className="muted tiny">Koyu kısım günlük süreden düşen kullanım, açık kısım süre dışı (sınırsız, her zaman açık, durumlar).</p>
+        <h2>Rapor <Info>Koyu kısım günlük süreden düşen, açık kısım süre dışı kullanımdır.</Info></h2>
+        <div className="row gap-xs wrap">
+          {([["day", "Günlük"], ["week", "Haftalık"], ["month", "Aylık"], ["custom", "Özel"]] as const).map(([key, label]) => <button key={key} className={`chip small ${range === key ? "on" : ""}`} onClick={() => setRange(key)}>{label}</button>)}
+        </div>
+        {range === "custom" && <div className="grid2"><label className="field"><span>Başlangıç</span><DateField value={from} onChange={setFrom} /></label><label className="field"><span>Bitiş</span><DateField value={to} onChange={setTo} /></label></div>}
+        <div className="report-total"><b>{minutesText(totalMinutes)}</b><span className="muted tiny">toplam · {minutesText(countedMinutes)} sınırdan düştü</span></div>
         <div className="bars">
           {totals.map((t) => (
-            <button key={t.d} className={`bar ${t.d === day ? "on" : ""}`} onClick={() => setDay(t.d)}>
+            <button key={t.d} className={`bar ${t.d === selectedDay ? "on" : ""}`} onClick={() => setDay(t.d)}>
               <span className="bar-val">{t.total ? minutesText(t.total) : ""}</span>
               <span className="bar-track">
                 <span className="bar-all" style={{ height: `${(t.total / max) * 100}%` }}>
@@ -1192,7 +1238,7 @@ function ReportTab({ childId }: { childId: string }) {
         </div>
       </div>
       <div className="card">
-        <h2>{dateText(day)}</h2>
+        <h2>{dateText(selectedDay)}</h2>
         {!dayRows.length && <p className="muted small">Bu gün için kayıt yok.</p>}
         {dayRows.map((r) => (
           <div className="app-row" key={r.package}>

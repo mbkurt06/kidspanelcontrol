@@ -107,4 +107,8 @@ object Store {
     var lastUpdateCheck: Long
         get() = p.getLong("lastUpdateCheck", 0)
         set(v) = p.edit().putLong("lastUpdateCheck", v).apply()
+
+    var updateCheckOnly: Boolean
+        get() = p.getBoolean("updateCheckOnly", false)
+        set(v) = p.edit().putBoolean("updateCheckOnly", v).apply()
 }

@@ -219,7 +219,7 @@ export function dateLabel(s: string) {
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${WD[(d.getDay() + 6) % 7]}`;
 }
 
-/** Tarih seçici: büyük takvim (Pazartesi başlar), ◀ ▶ ile gün gün, Bugün / Yarın kısayolları. */
+/** Tarih seçici: klavye, kaydırmalı gün/ay/yıl veya klasik takvim. */
 export function DateField({
   value,
   onChange,
@@ -234,12 +234,20 @@ export function DateField({
   placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"calendar" | "write" | "wheel">("calendar");
   const base = value ? fromIso(value) : new Date();
   const [view, setView] = useState({ y: base.getFullYear(), m: base.getMonth() });
+  const [dayText, setDayText] = useState(String(base.getDate()).padStart(2, "0"));
+  const [monthText, setMonthText] = useState(String(base.getMonth() + 1).padStart(2, "0"));
+  const [yearText, setYearText] = useState(String(base.getFullYear()));
   useEffect(() => {
     if (open) {
       const b = value ? fromIso(value) : new Date();
       setView({ y: b.getFullYear(), m: b.getMonth() });
+      setDayText(String(b.getDate()).padStart(2, "0"));
+      setMonthText(String(b.getMonth() + 1).padStart(2, "0"));
+      setYearText(String(b.getFullYear()));
+      setMode("calendar");
     }
   }, [open, value]);
 
@@ -264,6 +272,14 @@ export function DateField({
     const n = new Date(view.y, view.m + d, 1);
     setView({ y: n.getFullYear(), m: n.getMonth() });
   };
+  const setParts = (d: number, m: number, y: number) => {
+    const next = new Date(y, m - 1, d, 12);
+    if (next.getFullYear() !== y || next.getMonth() !== m - 1 || next.getDate() !== d) return;
+    onChange(iso(next));
+    setView({ y, m: m - 1 });
+  };
+  const years = Array.from({ length: 41 }, (_, i) => new Date().getFullYear() - 20 + i);
+  const current = value ? fromIso(value) : new Date();
 
   return (
     <div className="df">
@@ -290,6 +306,9 @@ export function DateField({
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
             {label && <h2>{label}</h2>}
             <div className="row gap-xs wrap">
+              <button type="button" className={`chip small ${mode === "calendar" ? "on" : ""}`} onClick={() => setMode("calendar")}>Takvim</button>
+              <button type="button" className={`chip small ${mode === "write" ? "on" : ""}`} onClick={() => setMode("write")}>Yaz</button>
+              <button type="button" className={`chip small ${mode === "wheel" ? "on" : ""}`} onClick={() => setMode("wheel")}>Kaydır</button>
               <button type="button" className={`chip small ${value === today ? "on" : ""}`} onClick={() => { onChange(today); setOpen(false); }}>
                 Bugün
               </button>
@@ -302,7 +321,27 @@ export function DateField({
                 </button>
               )}
             </div>
-            <div className="cal-head">
+            {mode === "write" && (
+              <div className="date-edit-grid">
+                <label><span>Gün</span><input inputMode="numeric" value={dayText} onChange={(e) => setDayText(e.target.value.replace(/\D/g, "").slice(0, 2))} onBlur={() => setParts(Number(dayText), Number(monthText), Number(yearText))} /></label>
+                <label><span>Ay</span><input inputMode="numeric" value={monthText} onChange={(e) => setMonthText(e.target.value.replace(/\D/g, "").slice(0, 2))} onBlur={() => setParts(Number(dayText), Number(monthText), Number(yearText))} /></label>
+                <label><span>Yıl</span><input inputMode="numeric" value={yearText} onChange={(e) => setYearText(e.target.value.replace(/\D/g, "").slice(0, 4))} onBlur={() => setParts(Number(dayText), Number(monthText), Number(yearText))} /></label>
+              </div>
+            )}
+            {mode === "wheel" && (
+              <div className="date-wheel">
+                <select size={5} value={String(current.getDate())} onChange={(e) => setParts(Number(e.target.value), current.getMonth() + 1, current.getFullYear())}>
+                  {Array.from({ length: 31 }, (_, i) => <option key={i + 1} value={i + 1}>{String(i + 1).padStart(2, "0")}</option>)}
+                </select>
+                <select size={5} value={String(current.getMonth() + 1)} onChange={(e) => setParts(current.getDate(), Number(e.target.value), current.getFullYear())}>
+                  {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+                </select>
+                <select size={5} value={String(current.getFullYear())} onChange={(e) => setParts(current.getDate(), current.getMonth() + 1, Number(e.target.value))}>
+                  {years.map((y) => <option key={y} value={y}>{y}</option>)}
+                </select>
+              </div>
+            )}
+            {mode === "calendar" && <><div className="cal-head">
               <button type="button" className="tf-more" onClick={() => moveMonth(-1)} aria-label="Önceki ay">
                 ◀
               </button>
@@ -336,7 +375,7 @@ export function DateField({
                   <span key={i} />
                 )
               )}
-            </div>
+            </div></>}
             <button type="button" className="btn ghost wide" onClick={() => setOpen(false)}>
               Kapat
             </button>

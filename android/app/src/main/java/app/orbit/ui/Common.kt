@@ -17,10 +17,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -123,6 +128,17 @@ fun Title(text: String) = Text(text, color = C.text, fontSize = 18.sp, fontWeigh
 
 @Composable
 fun Muted(text: String, size: Int = 14) = Text(text, color = C.muted, fontSize = size.sp)
+
+@Composable
+fun Info(text: String) {
+    var open by remember { mutableStateOf(false) }
+    Text("ⓘ", color = C.muted, fontSize = 16.sp, modifier = Modifier.clickable { open = true })
+    if (open) AlertDialog(
+        onDismissRequest = { open = false },
+        text = { Text(text, color = C.text) },
+        confirmButton = { TextButton(onClick = { open = false }) { Text("Tamam") } },
+    )
+}
 
 fun launch(ctx: Context, pkg: String): Boolean {
     val i = ctx.packageManager.getLaunchIntentForPackage(pkg) ?: return false

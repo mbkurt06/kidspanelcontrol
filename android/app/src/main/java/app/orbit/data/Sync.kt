@@ -71,7 +71,8 @@ object Sync {
         val ids = fresh.map { it.getString("id") }
         if (ids.isEmpty()) return
         // Ebeveyn panelden "güncellemeyi şimdi kontrol et" dediyse bir sonraki turda hemen kontrol edilir
-        if (fresh.any { it.optJSONObject("payload")?.optBoolean("update") == true }) Store.lastUpdateCheck = 0
+        if (fresh.any { it.optJSONObject("payload")?.optBoolean("update") == true }) { Store.updateCheckOnly = false; Store.lastUpdateCheck = 0 }
+        if (fresh.any { it.optJSONObject("payload")?.optBoolean("check_update") == true }) { Store.updateCheckOnly = true; Store.lastUpdateCheck = 0 }
         // Panel kasa anahtarı istiyor (yeni ebeveyn cihazı)
         if (fresh.any { it.optJSONObject("payload")?.optBoolean("vault") == true }) Vault.shareSoon()
         runCatching {

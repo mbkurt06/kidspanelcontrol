@@ -4,6 +4,7 @@ import { useFamily } from "../lib/family";
 import { errorText, localDevice, supabase } from "../lib/supabase";
 import { relTime } from "../lib/util";
 import type { Device, ParentDevice } from "../lib/types";
+import { Info } from "../components/Info";
 import { currentSubscription, disablePush, enablePush, isStandalone, pushSupported } from "../lib/push";
 
 type Parent = { user_id: string; email: string; display_name: string };
@@ -82,17 +83,11 @@ export default function Settings() {
       <ProofCard />
 
       <div className="card">
-        <h2>Bildirimler</h2>
+        <h2>Bildirimler <Info>Görev, süre, uygulama ve telefon durumlarıyla ilgili bildirimleri bu cihazda yönetirsin.</Info></h2>
         {!pushSupported() || (/iPhone|iPad/.test(navigator.userAgent) && !isStandalone()) ? (
-          <p className="muted small">
-            iPhone'da bildirim için paneli önce ana ekrana ekle (Safari → Paylaş → Ana Ekrana Ekle), sonra ana ekrandaki Orbit'ten aç ve
-            buradan bildirimleri aç.
-          </p>
+          <p className="muted tiny">Bildirimleri açmak için paneli iPhone ana ekranından açman gerekir.</p>
         ) : (
           <>
-            <p className="muted small">
-              Görev tamamlanınca, süre istenince, yeni uygulama yüklenince ve telefon uzun süre çevrimdışı kalınca bu cihaza bildirim gelir.
-            </p>
             <div className="row gap-s wrap">
               {pushOn ? (
                 <>
@@ -147,8 +142,7 @@ export default function Settings() {
       </div>
 
       <div className="card">
-        <h2>Ebeveyn cihazları</h2>
-        <p className="muted small">Paneli sadece burada onaylı cihazlar açabilir. Kaybolan telefonun erişimini buradan kaldır.</p>
+        <h2>Ebeveyn cihazları <Info>Paneli yalnızca onaylı cihazlar açabilir. Kaybolan bir cihazın erişimini buradan kaldırabilirsin.</Info></h2>
         {devices.map((d) => (
           <div className="app-row" key={d.id}>
             <div className="grow">
@@ -212,8 +206,7 @@ export default function Settings() {
       </div>
 
       <div className="card">
-        <h2>Noor tableti</h2>
-        <p className="muted small">Noor'daki Orbit sayfası iki çocuğun durumunu gösterir. Eşleştirmek için bir kod al ve tablete gir.</p>
+        <h2>Noor tableti <Info>Tabletteki Orbit sayfası çocukların durumunu gösterir. Eşleştirmek için kod alıp tablete girersin.</Info></h2>
         {viewers
           .filter((v) => v.status === "active")
           .map((v) => (
@@ -255,8 +248,7 @@ export default function Settings() {
       <SecurityCard />
 
       <div className="card">
-        <h2>Hesap</h2>
-        <p className="muted small">Panel ekranını iPhone'da ana ekrana ekle: Safari → Paylaş → Ana Ekrana Ekle.</p>
+        <h2>Hesap <Info>Paneli iPhone ana ekranına eklemek için Safari → Paylaş → Ana Ekrana Ekle yolunu kullan.</Info></h2>
         <button className="btn ghost" onClick={() => supabase.auth.signOut()}>
           Çıkış yap
         </button>
@@ -295,10 +287,7 @@ function SecurityCard() {
   }
   return (
     <div className="card">
-      <h2>🔐 Güvenlik · Ebeveyn PIN'i</h2>
-      <p className="muted small">
-        Çocuk telefonunda (kilit ekranında ya da menüde "Ebeveyn girişi") bu PIN girilince bütün kısıtlamalar bir süre kalkar; ayarlara girebilirsin. 3 yanlış denemede 5 dk bekler. Her giriş sana bildirilir.
-      </p>
+      <h2>🔐 Güvenlik · Ebeveyn PIN'i <Info>Bu PIN ile çocuk telefonunda geçici ebeveyn modu açılır. Üç yanlış denemede 5 dakika beklenir ve giriş sana bildirilir.</Info></h2>
       <div className="row gap-s">
         <input type="password" inputMode="numeric" className="grow" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))} placeholder={f.parent_pin_hash ? "Yeni PIN (değiştir)" : "PIN belirle (4–8 rakam)"} />
         <button className="btn small" onClick={savePin}>
@@ -343,7 +332,7 @@ function ThemeCard() {
   ];
   return (
     <div className="card">
-      <h2>Görünüm</h2>
+        <h2>Görünüm <Info>Otomatik seçenek cihazın açık/koyu ayarını izler; seçim bu cihazda saklanır.</Info></h2>
       <div className="segmented">
         {opts.map(([k, l]) => (
           <button
@@ -358,7 +347,6 @@ function ThemeCard() {
           </button>
         ))}
       </div>
-      <p className="muted small">Otomatik: telefonun ya da bilgisayarın açık/koyu ayarına uyar. Seçim bu cihazda saklanır.</p>
     </div>
   );
 }
@@ -381,10 +369,7 @@ function ProofCard() {
   }
   return (
     <div className="card">
-      <h2>Görev kanıtları</h2>
-      <p className="muted small">
-        Reddettiğin denemelerin fotoğrafları silinmez; onay ekranında öncesi ve bütün denemeler yan yana görünür. Görevi onaylayınca:
-      </p>
+      <h2>Görev kanıtları <Info>Reddedilen denemeler seçtiğin süre boyunca saklanır; onay ekranında önceki ve sonraki denemeleri görebilirsin.</Info></h2>
       <select value={v ?? 0} onChange={(e) => save(Number(e.target.value))} disabled={v == null}>
         <option value={0}>Fotoğraflar hemen silinsin</option>
         <option value={7}>7 gün saklansın</option>

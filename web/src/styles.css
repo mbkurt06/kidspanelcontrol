@@ -591,6 +591,7 @@ select:focus {
 .settings-row { justify-content: space-between; min-height: 46px; padding: 0 2px; border-top: 1px solid var(--line); }
 .profile-mini { display: flex; flex-direction: column; gap: 10px; padding-bottom: 10px; }
 .profile-avatar { font-size: 34px; width: 46px; height: 46px; display: grid; place-items: center; background: var(--surface-2); border-radius: 50%; }
+.profile-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 .avatar-choice { width: 34px; height: 34px; border: 1px solid var(--line); border-radius: 50%; background: var(--surface-2); cursor: pointer; font-size: 18px; }
 .avatar-choice.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent); }
 .agenda-group { display: flex; flex-direction: column; gap: 8px; }
@@ -603,6 +604,30 @@ select:focus {
 .check-box { width: 22px; height: 22px; border: 2px solid var(--line); border-radius: 6px; display: grid; place-items: center; flex: none; }
 .check-box.checked { background: var(--good); border-color: var(--good); color: #fff; }
 .compact-sheet { max-height: min(720px, 90dvh); overflow: auto; }
+.agenda-fab {
+  position: fixed;
+  right: 20px;
+  bottom: calc(env(safe-area-inset-bottom) + 78px);
+  z-index: 25;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 50%;
+  background: #3878ff;
+  color: #fff;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .35);
+  font-size: 30px;
+  cursor: pointer;
+}
+.date-edit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+.date-edit-grid label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+.date-edit-grid input { width: 100%; text-align: center; }
+.date-wheel { display: grid; grid-template-columns: .8fr 1.4fr 1fr; gap: 8px; margin: 12px 0; }
+.date-wheel select { width: 100%; min-width: 0; height: 126px; padding: 4px; }
+.duration-field { display: inline-flex; align-items: center; gap: 5px; }
+.duration-field .mini { width: 54px; }
+.report-total { display: flex; align-items: baseline; gap: 10px; margin: 12px 0 4px; }
+.report-total b { font-size: 22px; }
 .disclosure { align-self: flex-end; width: 32px; height: 28px; font-size: 20px; }
 .detail-line { color: var(--muted); font-size: 14px; }
 .chip {
@@ -642,6 +667,8 @@ select:focus {
   padding: 3px;
   gap: 3px;
 }
+.child-tabs { display: flex; overflow-x: auto; justify-content: flex-start; }
+.child-tabs button { flex: 0 0 auto; min-width: 92px; }
 .segmented button {
   font: inherit;
   font-size: 13px;

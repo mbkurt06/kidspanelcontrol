@@ -85,7 +85,7 @@ fun MusicScreen() {
         if (!granted) app.orbit.device.Policy.grantSelf(ctx, perm)
         val list = withContext(Dispatchers.IO) { Music.scan(ctx) }
         loaded = true
-        withContext(Dispatchers.IO) { Music.reportFolders(ctx) }
+        withContext(Dispatchers.IO) { Music.reportFolders(ctx); if (granted) Music.syncCatalog(list) }
     }
 
     fun sync(p: Player) {

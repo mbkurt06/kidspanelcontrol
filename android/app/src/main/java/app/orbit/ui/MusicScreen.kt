@@ -54,7 +54,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
-import androidx.compose.ui.input.pointer.consume
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlin.math.abs
 
@@ -336,7 +335,7 @@ private fun PlaylistTrackRow(track: Track, index: Int, onMove: (Int, Int) -> Uni
                 onDragCancel = { distance = 0f },
                 onDragEnd = { distance = 0f; onDrop() },
                 onDrag = { change, amount ->
-                    change.consume()
+                    change.consumePositionChange()
                     distance += amount.y
                     if (abs(distance) > 56f) {
                         val next = if (distance > 0) index + 1 else index - 1

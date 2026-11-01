@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
+import android.content.ContentValues
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
@@ -19,7 +20,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
 
-data class Track(val id: Long, val title: String, val artist: String?, val durationMs: Long, val uri: String, val folder: String)
+data class Track(val id: Long, val title: String, val artist: String?, val durationMs: Long, val uri: String, val folder: String, val fileName: String = "")
 
 /** Orbit müzik çalar: telefondaki müzik dosyaları, çalma listesi ve arka planda çalan servis. Süreden düşmez. */
 object Music {
@@ -40,9 +41,11 @@ object Music {
         val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         val proj = mutableListOf(
             MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.DATA,
+            MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.DATA, MediaStore.Audio.Media.DISPLAY_NAME,
         )
         if (Build.VERSION.SDK_INT >= 29) proj += MediaStore.Audio.Media.RELATIVE_PATH
+        val selected = Store.rules().musicFolder?.trim('/')?.takeIf { it.isNotBlank() }
+        if (selected == null) { tracks.value = emptyList(); return emptyList() }
         runCatching {
             ctx.contentResolver.query(uri, proj.toTypedArray(), "${MediaStore.Audio.Media.DURATION} >= 15000", null, "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE")?.use { c ->
                 val iId = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
@@ -50,14 +53,18 @@ object Music {
                 val iA = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
                 val iD = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                 val iData = c.getColumnIndex(MediaStore.Audio.Media.DATA)
+                val iFile = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
                 val iRel = if (Build.VERSION.SDK_INT >= 29) c.getColumnIndex(MediaStore.Audio.Media.RELATIVE_PATH) else -1
                 while (c.moveToNext()) {
                     val id = c.getLong(iId)
                     val folder = (if (iRel >= 0) c.getString(iRel) else null)?.trimEnd('/')
                         ?: c.getString(iData)?.substringBeforeLast('/')?.substringAfter("/0/")
                         ?: ""
+                    val relative = folder.trim('/')
+                    if (relative != selected && !relative.startsWith("$selected/")) continue
+                    val fileName = c.getString(iFile) ?: continue
                     val artist = c.getString(iA)?.takeIf { it.isNotBlank() && it != "<unknown>" }
-                    out += Track(id, c.getString(iT) ?: "Şarkı", artist, c.getLong(iD), ContentUris.withAppendedId(uri, id).toString(), folder)
+                    out += Track(id, c.getString(iT) ?: "Şarkı", artist, c.getLong(iD), ContentUris.withAppendedId(uri, id).toString(), folder, fileName)
                 }
             }
         }.onFailure { Log.w(TAG, "müzik listesi okunamadı", it) }
@@ -76,6 +83,18 @@ object Music {
             Api.rpc("device_report_music", JSONObject().put("p_folders", JSONArray(f)))
             Store.prefs().edit().putString("musicFoldersReported", key).apply()
         }.onFailure { Log.w(TAG, "klasörler gönderilemedi", it) }
+    }
+
+    /** Rename the actual file; ID3 tags are not changed. */
+    fun rename(ctx: Context, track: Track, newName: String): Boolean {
+        val base = newName.trim()
+        if (base.isBlank() || base == "." || base == ".." || base.any { it in "/\\\\:*?\\"<>|\\n\\r" }) return false
+        val extension = track.fileName.substringAfterLast('.', "")
+        val target = if (extension.isNotEmpty() && !base.endsWith(".$extension", true)) "$base.$extension" else base
+        return runCatching {
+            val values = ContentValues().apply { put(MediaStore.Audio.Media.DISPLAY_NAME, target) }
+            ctx.contentResolver.update(android.net.Uri.parse(track.uri), values, null, null) > 0
+        }.onFailure { Log.w(TAG, "Dosya yeniden adlandırılamadı", it) }.getOrDefault(false)
     }
 
     /** Çocuğun seçtiği klasör (ebeveyn sabitlemediyse); null = hepsi */

@@ -78,6 +78,12 @@ object Policy {
         }
     }
 
+    /** Orbit'e bir çalışma zamanı iznini ver (cihaz sahibiyse). */
+    fun grantSelf(ctx: Context, perm: String) {
+        if (!isOwner(ctx)) return
+        runCatching { dpm(ctx).setPermissionGrantState(admin(ctx), ctx.packageName, perm, DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED) }
+    }
+
     private var lastBlockedMessage: String? = null
 
     /** Askıya alınmış uygulamaya dokununca çıkan sistem penceresindeki açıklama. Sadece değişince yazılır. */

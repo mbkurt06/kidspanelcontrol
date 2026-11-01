@@ -32,6 +32,17 @@ function text(type: string, child: string, p: Record<string, unknown>): { title:
       return { title: `💬 ${child}`, body: s("body"), url: `/#/messages/${s("_child")}` };
     case "timer_alert":
       return { title: `⏱ ${child} sayacı erken bitirdi`, body: `${s("title")} — ${Math.round(Number(s("focused") || 0) / 60)} dk çalıştı`, url: "/#/" };
+    case "recording_alert": {
+      const a = s("action");
+      const rec = Math.round(Number(s("recorded") || 0) / 60);
+      const plan = Math.round(Number(s("planned") || 0) / 60);
+      const what =
+        a === "gap" ? "kayıt kesildi (kamera / uygulama kapandı)" :
+        a === "leave" ? "kayıt ekranından çıktı" :
+        a === "cancel" ? "kaydı iptal etti" :
+        `kaydı erken bitirdi (${rec}/${plan} dk)`;
+      return { title: `📹 ${child}: ${what}`, body: s("title"), url: "/#/tasks" };
+    }
     case "app_installed":
       return { title: `${child} yeni uygulama yükledi`, body: `${s("label") || s("package")} onay bekliyor`, url: "/#/" };
     case "parent_device_pending":

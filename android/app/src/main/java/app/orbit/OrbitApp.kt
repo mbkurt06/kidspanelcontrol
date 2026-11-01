@@ -8,6 +8,7 @@ class OrbitApp : Application() {
     override fun onCreate() {
         super.onCreate()
         Store.init(this)
+        app.orbit.data.Recorder.init(this)
         OrbitService.start(this)
     }
 }

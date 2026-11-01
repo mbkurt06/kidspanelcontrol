@@ -22,7 +22,20 @@ data class TaskItem(
     val firstWins: Boolean,
     val hasBefore: Boolean,
     val hasAfter: Boolean,
+    /** Kamera kaydı: süre (dk); null = kayıt yok */
+    val recordMinutes: Int? = null,
+    /** back | front | choose */
+    val recordCamera: String = "back",
+    /** none | limit | child */
+    val recordPause: String = "child",
+    val recordPauseMax: Int? = null,
+    /** Şimdiki denemenin kaydı: id, durum (recording | paused | done), kaydedilen saniye */
+    val recId: String? = null,
+    val recStatus: String? = null,
+    val recSeconds: Int = 0,
 ) {
+    val needsRecording get() = recordMinutes != null
+    val recordingDone get() = recStatus == "done"
     val open get() = status in setOf("open", "started", "rejected")
     val needsProof get() = proof != "none"
     /** Zorunlu ve henüz gönderilmemiş */
@@ -53,6 +66,13 @@ object Tasks {
             firstWins = o.optString("assign_mode") == "first",
             hasBefore = "before" in stages,
             hasAfter = "after" in stages || "single" in stages,
+            recordMinutes = if (o.isNull("record_minutes") || !o.has("record_minutes")) null else o.optInt("record_minutes"),
+            recordCamera = o.optString("record_camera", "back"),
+            recordPause = o.optString("record_pause", "child"),
+            recordPauseMax = if (o.isNull("record_pause_max") || !o.has("record_pause_max")) null else o.optInt("record_pause_max"),
+            recId = o.optJSONObject("recording")?.optString("id"),
+            recStatus = o.optJSONObject("recording")?.optString("status"),
+            recSeconds = o.optJSONObject("recording")?.optInt("recorded_seconds") ?: 0,
         )
     }
 

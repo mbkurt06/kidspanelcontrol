@@ -14,6 +14,7 @@ import {
   type TaskTemplate,
 } from "../lib/types";
 import { Icon } from "../components/Icon";
+import { RecordingList } from "../components/RecordingPlayer";
 import { STARTER_TEMPLATES } from "../lib/templates";
 
 export default function Tasks() {
@@ -234,7 +235,7 @@ function ReviewCard({ run, task, childName, color, onDone }: { run: TaskRun; tas
     (async () => {
       // Bütün denemelerin kanıtları (reddedilenler de) ve her reddin notu
       const [{ data }, { data: nt }] = await Promise.all([
-        supabase.from("task_proofs").select("*").eq("run_id", run.id).is("removed_at", null).order("attempt").order("created_at"),
+        supabase.from("task_proofs").select("*").eq("run_id", run.id).neq("stage", "record").is("removed_at", null).order("attempt").order("created_at"),
         supabase.from("task_run_notes").select("attempt, note").eq("run_id", run.id).order("attempt"),
       ]);
       setNotes((nt ?? []) as { attempt: number; note: string | null }[]);
@@ -306,6 +307,7 @@ function ReviewCard({ run, task, childName, color, onDone }: { run: TaskRun; tas
         <span className="muted tiny">{relTime(run.submitted_at)}</span>
       </div>
       {task?.description && <p className="muted small">{task.description}</p>}
+      {task?.record_minutes != null && <RecordingList runId={run.id} />}
       {proofs.length > 0 ? (
         <div className="proof-timeline">
           {before.map((p) => proofFig(p, "Öncesi"))}

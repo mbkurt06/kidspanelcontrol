@@ -93,6 +93,9 @@ class OrbitService : Service() {
     private var lastRemind = 0L
     @Volatile private var lastVault = 0L
     private val netBusy = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val recBusy = java.util.concurrent.atomic.AtomicBoolean(false)
+    private var lastRecPump = 0L
+    private var lastRecFront = 0L
     private val pushBusy = java.util.concurrent.atomic.AtomicBoolean(false)
     private var lastLockLaunch = 0L
     private var lastLockPkg: String? = null
@@ -208,7 +211,11 @@ class OrbitService : Service() {
             }
         }
 
-        val rules = Store.rules()
+        // Kameralı görev kaydı sürerken telefon sadece kayıt ekranına (ve her zaman açık olanlara) açık
+        val rec = app.orbit.data.Recorder.current()
+        val baseRules = Store.rules()
+        val rules = if (rec?.status == "recording") baseRules.copy(focus = app.orbit.engine.Focus("Kamera kaydı", emptySet(), emptySet())) else baseRules
+        recordingTick(rec, nowMs)
         val engine = RuleEngine(rules)
         val zone = engine.zone()
         val now = ZonedDateTime.now(zone)
@@ -287,7 +294,17 @@ class OrbitService : Service() {
             snap.remainingSeconds <= 0 -> "Günlük süren bitti"
             else -> null
         }
-        if (interactive && fg != null && fg !in exempt) {
+        if (rec?.status == "recording" && interactive && fg != null && fg !in exempt && fg != packageName) {
+            // Kayıt sürerken başka uygulamaya geçilirse kayıt ekranına dön
+            if (nowMs - lastRecFront > 3_000) {
+                lastRecFront = nowMs
+                runCatching {
+                    startActivity(Intent(this, app.orbit.ui.RecordActivity::class.java)
+                        .putExtra("runId", rec.runId)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+                }
+            }
+        } else if (interactive && fg != null && fg !in exempt) {
             val v = verdicts[fg] ?: engine.verdict(fg, snap, usage)
             if (!v.allowed) {
                 lockReason = v.reason ?: lockReason
@@ -322,6 +339,28 @@ class OrbitService : Service() {
             scope.launch(Dispatchers.IO) { Updater.check(this@OrbitService) }
         }
         firstRun = false
+    }
+
+    /** Kayıt: servis beklenmedik kapandıysa molaya al ve bildir; bekleyen parçaları yükle. */
+    private fun recordingTick(rec: app.orbit.data.RecState?, nowMs: Long) {
+        val R = app.orbit.data.Recorder
+        if (rec?.status == "recording" && !RecordService.running && nowMs - R.lastAlive > 15_000) {
+            val n = R.update { it.copy(status = "paused") }
+            if (n != null) {
+                scope.launch(Dispatchers.IO) {
+                    R.push(n, org.json.JSONObject().put("type", "gap").put("note", "kayıt durdu (uygulama ya da telefon kapandı)"))
+                }
+                runCatching { app.orbit.data.Notifier.recordingStopped(this, n.runId, n.title) }
+            }
+        }
+        val needs = R.pending.value > 0 || rec?.dirty == true || (rec != null && !rec.active) ||
+            Store.prefs().getString("recEvents", "[]") != "[]"
+        if (needs && nowMs - lastRecPump > 20_000 && recBusy.compareAndSet(false, true)) {
+            lastRecPump = nowMs
+            scope.launch(Dispatchers.IO) {
+                try { R.pump() } finally { recBusy.set(false) }
+            }
+        }
     }
 
     private var finishingTimer: String? = null

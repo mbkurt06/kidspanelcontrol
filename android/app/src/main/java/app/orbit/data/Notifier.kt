@@ -41,6 +41,22 @@ object Notifier {
         runCatching { ctx.getSystemService(NotificationManager::class.java).notify(id, n) }
     }
 
+    /** Kayıt beklenmedik durdu: dokununca kayıt ekranı açılır (oradan devam edilir). */
+    fun recordingStopped(ctx: Context, runId: String, title: String) {
+        val open = Intent(ctx, app.orbit.ui.RecordActivity::class.java)
+            .putExtra("runId", runId)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        val pi = PendingIntent.getActivity(ctx, 77, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val n = Notification.Builder(ctx, CH_TASKS)
+            .setSmallIcon(R.drawable.ic_orbit)
+            .setContentTitle("📹 Kayıt durdu")
+            .setContentText("$title — devam etmek için dokun")
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .build()
+        runCatching { ctx.getSystemService(NotificationManager::class.java).notify(77, n) }
+    }
+
     fun cancel(id: Int) {
         val ctx = app ?: return
         runCatching { ctx.getSystemService(NotificationManager::class.java).cancel(id) }

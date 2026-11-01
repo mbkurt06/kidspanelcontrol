@@ -29,6 +29,29 @@ function describe(e: OrbitEvent, childName: string) {
       if (st === "cancelled") return `✖ ${childName} ${by} "${p.title}" sayacını iptal etti.`;
       return `⏱ ${childName} · ${p.title}`;
     }
+    case "recording":
+    case "recording_alert": {
+      const rec = Math.round(Number(p.recorded ?? 0) / 60);
+      const plan = Math.round(Number(p.planned ?? 0) / 60);
+      switch (p.action) {
+        case "start":
+          return `📹 ${childName} "${p.title}" kaydını başlattı (${p.minutes} dk).`;
+        case "pause":
+          return `📹 ${childName} "${p.title}" kaydında mola verdi (${rec} dk kaydedildi).`;
+        case "resume":
+          return `📹 ${childName} "${p.title}" kaydına devam etti${p.note ? ` (${p.note})` : ""}.`;
+        case "gap":
+          return `⚠️ ${childName} "${p.title}" kaydı kesildi${p.note ? `: ${p.note}` : ""}.`;
+        case "leave":
+          return `⚠️ ${childName} "${p.title}" kayıt ekranından çıktı.`;
+        case "cancel":
+          return `✖ ${childName} "${p.title}" kaydını iptal etti.`;
+        case "done":
+          return rec < plan ? `⚠️ ${childName} "${p.title}" kaydını erken bitirdi (${rec}/${plan} dk).` : `✅ ${childName} "${p.title}" kaydını tamamladı (${rec} dk).`;
+        default:
+          return `📹 ${childName} · ${p.title}`;
+      }
+    }
     case "message":
       return `💬 ${childName}: ${p.body ?? ""}`;
     case "app_request":

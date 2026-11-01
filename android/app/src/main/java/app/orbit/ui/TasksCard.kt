@@ -81,7 +81,9 @@ fun TasksCard(tasks: List<TaskItem>) {
         scope.launch {
             val ok = withContext(Dispatchers.IO) { runCatching { Sync.submitTask(t.runId) } }
             busyRun = null
-            msg = if (ok.isSuccess) "\"${t.title}\" gönderildi, onay bekleniyor" else "Gönderilemedi: ${ok.exceptionOrNull()?.message ?: "internet?"}"
+            msg = if (ok.isSuccess) "\"${t.title}\" gönderildi, onay bekleniyor"
+                else if ("recording_missing" in (ok.exceptionOrNull()?.message ?: "")) "Önce kaydı tamamla"
+                else "Gönderilemedi: ${ok.exceptionOrNull()?.message ?: "internet?"}"
             Live.syncRequested = true
         }
     }
@@ -144,7 +146,28 @@ fun TasksCard(tasks: List<TaskItem>) {
                 statusText(t)?.let {
                     Text(it, color = if (t.status == "rejected") C.warn else if (t.status == "approved") C.good else C.muted, fontSize = 13.sp)
                 }
-                if (t.open) {
+                if (t.open && t.needsRecording) {
+                    val rec = app.orbit.data.Recorder.current()?.takeIf { it.runId == t.runId }
+                    when {
+                        rec?.active == true || (!t.recordingDone && !(t.needsProof && t.beforeAfter && !t.hasBefore)) -> Button(
+                            onClick = { ctx.startActivity(Intent(ctx, RecordActivity::class.java).putExtra("runId", t.runId)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = C.bad),
+                        ) {
+                            Text(
+                                when {
+                                    rec?.status == "paused" -> "📹 Kayda devam et"
+                                    rec?.active == true -> "📹 Kayıt sürüyor — aç"
+                                    t.recStatus == "recording" || t.recStatus == "paused" -> "📹 Kayda devam et"
+                                    else -> "📹 Kayda başla (${t.recordMinutes} dk)"
+                                }
+                            )
+                        }
+                        t.recordingDone -> Text("📹 Kayıt tamam (${t.recSeconds / 60} dk)", color = C.good, fontSize = 13.sp)
+                    }
+                }
+                val recordFirst = t.needsRecording && !t.recordingDone && !(t.needsProof && t.beforeAfter && !t.hasBefore)
+                if (t.open && !recordFirst && !(t.needsRecording && app.orbit.data.Recorder.current()?.let { it.runId == t.runId && it.active } == true)) {
                     val busy = busyRun == t.runId
                     val needBefore = t.needsProof && t.beforeAfter && !t.hasBefore
                     Button(

@@ -207,6 +207,10 @@ export type TaskTemplate = {
   reward_validity: RewardValidity;
   reward_expires_days: number | null;
   mandatory: boolean;
+  record_minutes?: number | null;
+  record_camera?: "back" | "front" | "choose";
+  record_pause?: "none" | "limit" | "child";
+  record_pause_max?: number | null;
 };
 
 export type Task = TaskTemplate & {
@@ -244,11 +248,34 @@ export type TaskRun = {
 export type TaskProof = {
   id: string;
   run_id: string;
-  stage: "before" | "after" | "single";
-  media: "photo" | "video";
+  stage: "before" | "after" | "single" | "record";
+  media: "photo" | "video" | "timelapse";
   path: string;
   attempt: number;
   removed_at: string | null;
+  recording_id?: string | null;
+  seq?: number | null;
+  frames?: number | null;
+  started_at?: string | null;
+  ended_at?: string | null;
+};
+
+export type TaskRecording = {
+  id: string;
+  run_id: string;
+  child_id: string;
+  attempt: number;
+  status: "recording" | "paused" | "done" | "cancelled";
+  camera: string;
+  planned_seconds: number | null;
+  recorded_seconds: number;
+  paused_seconds: number;
+  pause_count: number;
+  capture_fps: number;
+  video_fps: number;
+  events: { at: string; type: string; note?: string }[];
+  started_at: string;
+  ended_at: string | null;
 };
 
 export const PROOF_LABEL: Record<ProofType, string> = {

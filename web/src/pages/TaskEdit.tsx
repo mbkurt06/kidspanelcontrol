@@ -28,6 +28,11 @@ type Form = {
   reward_section_id: string;
   mandatory: boolean;
   active: boolean;
+  record_on: boolean;
+  record_minutes: string;
+  record_camera: "back" | "front" | "choose";
+  record_pause: "none" | "limit" | "child";
+  record_pause_max: string;
 };
 
 const empty = (childIds: string[]): Form => ({
@@ -51,6 +56,20 @@ const empty = (childIds: string[]): Form => ({
   reward_section_id: "",
   mandatory: false,
   active: true,
+  record_on: false,
+  record_minutes: "60",
+  record_camera: "back",
+  record_pause: "child",
+  record_pause_max: "10",
+});
+
+type RecFields = { record_minutes?: number | null; record_camera?: Form["record_camera"]; record_pause?: Form["record_pause"]; record_pause_max?: number | null };
+const recForm = (t: RecFields) => ({
+  record_on: t.record_minutes != null,
+  record_minutes: t.record_minutes?.toString() ?? "60",
+  record_camera: t.record_camera ?? "back",
+  record_pause: t.record_pause ?? "child",
+  record_pause_max: t.record_pause_max?.toString() ?? "10",
 });
 
 export default function TaskEdit() {
@@ -91,6 +110,7 @@ export default function TaskEdit() {
             reward_section_id: (t as Task & { reward_section_id?: string | null }).reward_section_id ?? "",
             mandatory: t.mandatory,
             active: t.active,
+            ...recForm(t as RecFields),
           });
       } else {
         const tid = params.get("template");
@@ -109,6 +129,7 @@ export default function TaskEdit() {
               reward_expires_days: data.reward_expires_days?.toString() ?? "",
               reward_section_id: data.reward_section_id ?? "",
               mandatory: data.mandatory,
+              ...recForm(data as RecFields),
             }));
         }
       }
@@ -145,6 +166,10 @@ export default function TaskEdit() {
       reward_section_id: f.reward_validity !== "wallet" && f.reward_validity !== "vault" && f.reward_section_id ? f.reward_section_id : null,
       mandatory: f.mandatory,
       active: f.active,
+      record_minutes: f.record_on ? Math.min(240, Math.max(1, Number(f.record_minutes) || 60)) : null,
+      record_camera: f.record_camera,
+      record_pause: f.record_pause,
+      record_pause_max: f.record_pause === "limit" ? Math.max(1, Number(f.record_pause_max) || 10) : null,
     };
     const { error } = isNew ? await supabase.from("tasks").insert(row) : await supabase.from("tasks").update(row).eq("id", id);
     if (!error && saveTemplate) {
@@ -160,6 +185,10 @@ export default function TaskEdit() {
         reward_expires_days: row.reward_expires_days,
         reward_section_id: row.reward_section_id,
         mandatory: row.mandatory,
+        record_minutes: row.record_minutes,
+        record_camera: row.record_camera,
+        record_pause: row.record_pause,
+        record_pause_max: row.record_pause_max,
       });
     }
     setBusy(false);
@@ -281,6 +310,53 @@ export default function TaskEdit() {
           </label>
         )}
         <p className="muted tiny">Çocuk kanıtı Orbit'in kamerasıyla çeker; galeriden eski foto seçemez. Onay veya retten sonra dosya silinir.</p>
+      </div>
+
+      <div className="card">
+        <h2>📹 Kamera kaydı</h2>
+        <label className="check">
+          <input type="checkbox" checked={f.record_on} onChange={(e) => set("record_on", e.target.checked)} />
+          Görev süresince kamerayla kayıt yapsın
+        </label>
+        {f.record_on && (
+          <>
+            <div className="row gap-s wrap" style={{ alignItems: "center" }}>
+              {["30", "45", "60", "90", "120"].map((m) => (
+                <button key={m} className={`chip small ${f.record_minutes === m ? "on" : ""}`} onClick={() => set("record_minutes", m)}>
+                  {m} dk
+                </button>
+              ))}
+              <input className="mini" type="number" min={1} max={240} value={f.record_minutes} onChange={(e) => set("record_minutes", e.target.value)} aria-label="Kayıt süresi" />
+            </div>
+            <label className="field">
+              <span>Kamera</span>
+              <select value={f.record_camera} onChange={(e) => set("record_camera", e.target.value as Form["record_camera"])}>
+                <option value="back">Arka kamera (oda / masa)</option>
+                <option value="front">Ön kamera (çocuğu görür)</option>
+                <option value="choose">Çocuk seçsin</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Mola</span>
+              <select value={f.record_pause} onChange={(e) => set("record_pause", e.target.value as Form["record_pause"])}>
+                <option value="none">Mola yok</option>
+                <option value="limit">Sınırlı mola</option>
+                <option value="child">Serbest: istediği zaman mola verip devam etsin</option>
+              </select>
+            </label>
+            {f.record_pause === "limit" && (
+              <div className="row gap-s" style={{ alignItems: "center" }}>
+                <span className="small">Toplam en fazla</span>
+                <input className="mini" type="number" min={1} value={f.record_pause_max} onChange={(e) => set("record_pause_max", e.target.value)} aria-label="Mola dakika" />
+                <span className="small">dk (dolunca kayıt kendiliğinden devam eder)</span>
+              </div>
+            )}
+            <p className="muted tiny">
+              Telefon saniyede 2 kare çeker; 1 saatlik kayıt yaklaşık 3 dakikalık, ~45 MB'lık bir video olur ve panelde 5x–40x hızda izlenir. Molalar kayda sayılmaz.
+              Kayıt sürerken telefonda diğer uygulamalar kapalıdır. Kayıt kesilirse ya da erken bitirilirse sana bildirim gelir.
+            </p>
+          </>
+        )}
       </div>
 
       <div className="card">

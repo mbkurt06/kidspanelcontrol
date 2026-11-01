@@ -5,6 +5,7 @@ import app.orbit.BuildConfig
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
@@ -134,6 +135,23 @@ object Api {
             .build()
         uploadClient.newCall(req).execute().use { r ->
             if (!r.isSuccessful) throw ApiError(r.code, "Yükleme başarısız (${r.code})")
+        }
+    }
+
+    /** Dosyayı akışla yükler; aynı yol zaten yüklenmişse (önceki deneme) başarılı sayar. */
+    fun uploadFile(bucket: String, path: String, file: java.io.File, contentType: String) {
+        val req = Request.Builder()
+            .url("$base/storage/v1/object/$bucket/$path")
+            .header("apikey", key)
+            .header("Authorization", "Bearer ${token()}")
+            .header("x-upsert", "false")
+            .post(file.asRequestBody(contentType.toMediaType()))
+            .build()
+        uploadClient.newCall(req).execute().use { r ->
+            if (r.isSuccessful) return
+            val body = r.body?.string().orEmpty()
+            if (r.code == 409 || "Duplicate" in body || "already exists" in body) return
+            throw ApiError(r.code, "Yükleme başarısız (${r.code})")
         }
     }
 

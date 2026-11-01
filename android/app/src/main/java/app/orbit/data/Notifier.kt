@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import app.orbit.R
 import app.orbit.ui.MainActivity
+import app.orbit.ui.RecordActivity
 
 /** Çocuğun telefonunda görev ve mesaj bildirimleri. Dokununca Orbit'in ilgili ekranı açılır. */
 object Notifier {
@@ -43,7 +44,7 @@ object Notifier {
 
     /** Kayıt beklenmedik durdu: dokununca kayıt ekranı açılır (oradan devam edilir). */
     fun recordingStopped(ctx: Context, runId: String, title: String) {
-        val open = Intent(ctx, app.orbit.ui.RecordActivity::class.java)
+        val open = Intent(ctx, RecordActivity::class.java)
             .putExtra("runId", runId)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         val pi = PendingIntent.getActivity(ctx, 77, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)

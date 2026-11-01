@@ -193,7 +193,8 @@ object Recorder {
             val video = File(meta.path.removeSuffix(".json") + ".mp4")
             val seq = meta.name.removeSuffix(".json").toLongOrNull() ?: continue
             if (!video.exists()) { meta.delete(); continue }
-            val m = runCatching { JSONObject(meta.readText()) }.getOrNull() ?: run { meta.delete(); continue }
+            val m = runCatching { JSONObject(meta.readText()) }.getOrNull()
+            if (m == null) { meta.delete(); continue }
             val runId = m.getString("runId")
             val path = "${c.familyId}/$runId/rec-${recId.take(8)}-$seq.mp4"
             val ok = runCatching {

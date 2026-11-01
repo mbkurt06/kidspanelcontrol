@@ -97,7 +97,7 @@ function ChildMusic({ child, onErr }: { child: Child; onErr: (e: string) => void
 
 /** Read-only parent view: children manage their own playlists on the phone. */
 function MusicLibrary({ childId }: { childId: string }) {
-  type Song = { id: string; file_name: string; missing: boolean };
+  type Song = { track_key: string; file_name: string | null; missing: boolean };
   type Playlist = { id: string; name: string };
   const [songs, setSongs] = useState<Song[]>([]);
   const [playlists, setPlaylists] = useState<Playlist[]>([]);
@@ -106,8 +106,8 @@ function MusicLibrary({ childId }: { childId: string }) {
     let active = true;
     async function load() {
       const [t, p] = await Promise.all([
-        supabase.from("music_tracks").select("id,file_name,missing").eq("child_id", childId).order("sort_order"),
-        supabase.from("music_playlists").select("id,name").eq("child_id", childId).order("sort_order"),
+        supabase.from("music_meta").select("track_key,file_name,missing").eq("child_id", childId).order("sort"),
+        supabase.from("music_playlists").select("id,name").eq("child_id", childId).order("sort"),
       ]);
       if (!active) return;
       const ts = (t.data ?? []) as Song[];
@@ -115,7 +115,7 @@ function MusicLibrary({ childId }: { childId: string }) {
       setSongs(ts);
       setPlaylists(ps);
       if (ps.length) {
-        const e = await supabase.from("music_playlist_tracks").select("playlist_id").in("playlist_id", ps.map((x) => x.id));
+        const e = await supabase.from("music_playlist_items").select("playlist_id").in("playlist_id", ps.map((x) => x.id));
         if (!active) return;
         const next: Record<string, number> = {};
         for (const row of e.data ?? []) next[row.playlist_id] = (next[row.playlist_id] ?? 0) + 1;
@@ -137,7 +137,7 @@ function MusicLibrary({ childId }: { childId: string }) {
       {songs.some((s) => s.missing) && (
         <div>
           <b>Eksik dosyalar</b>
-          {songs.filter((s) => s.missing).map((s) => <div className="muted small" key={s.id}>⚠️ {s.file_name}</div>)}
+          {songs.filter((s) => s.missing).map((s) => <div className="muted small" key={s.track_key}>⚠️ {s.file_name ?? s.track_key}</div>)}
         </div>
       )}
     </div>

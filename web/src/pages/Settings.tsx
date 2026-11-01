@@ -1,3 +1,4 @@
+import { getTheme, setTheme, type ThemeChoice } from "../lib/theme";
 import { useCallback, useEffect, useState } from "react";
 import { useFamily } from "../lib/family";
 import { errorText, localDevice, supabase } from "../lib/supabase";
@@ -76,6 +77,8 @@ export default function Settings() {
       </header>
       {err && <p className="error">{err}</p>}
       {msg && <p className="ok">{msg}</p>}
+
+      <ThemeCard />
 
       <div className="card">
         <h2>Bildirimler</h2>
@@ -256,6 +259,35 @@ export default function Settings() {
         </button>
       </div>
       <p className="muted tiny center">Orbit panel 0.1 · {fam.children.length} çocuk</p>
+    </div>
+  );
+}
+
+function ThemeCard() {
+  const [t, setT] = useState<ThemeChoice>(getTheme());
+  const opts: [ThemeChoice, string][] = [
+    ["auto", "Otomatik"],
+    ["light", "Açık"],
+    ["dark", "Gece modu"],
+  ];
+  return (
+    <div className="card">
+      <h2>Görünüm</h2>
+      <div className="segmented">
+        {opts.map(([k, l]) => (
+          <button
+            key={k}
+            className={t === k ? "on" : ""}
+            onClick={() => {
+              setT(k);
+              setTheme(k);
+            }}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+      <p className="muted small">Otomatik: telefonun ya da bilgisayarın açık/koyu ayarına uyar. Seçim bu cihazda saklanır.</p>
     </div>
   );
 }

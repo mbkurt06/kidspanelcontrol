@@ -56,6 +56,9 @@ function ChildCard({ child }: { child: Child }) {
       const r = await fn();
       setMsg(typeof ok === "function" ? ok(r) : ok);
       await fam.reload();
+      // Telefon yeni kuralı birkaç saniyede alıp durumunu gönderir; halka o zaman güncellenir
+      setTimeout(() => fam.reload(), 5000);
+      setTimeout(() => fam.reload(), 12000);
     } catch (e) {
       setMsg(errorText(e));
     }

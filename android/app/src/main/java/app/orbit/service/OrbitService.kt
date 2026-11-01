@@ -91,7 +91,7 @@ class OrbitService : Service() {
     private var lastEventTs = 0L
     private var lastTick = 0L
     private var lastPull = 0L
-    private var lastPush = 0L
+    @Volatile private var lastPush = 0L
     private var firstRun = true
     private var lastParentMode = false
     private var lastRemind = 0L
@@ -205,7 +205,10 @@ class OrbitService : Service() {
                         Sync.reportApps(this@OrbitService, initial = true)
                         Store.prefs().edit().putInt("appsReportedVersion", app.orbit.BuildConfig.VERSION_CODE).apply()
                     }
+                    val before = Store.rulesJson
                     Sync.pullRules()
+                    // Kurallar değiştiyse (ör. ebeveyn süre verdi) durumu hemen gönder: panel halkası güncellensin
+                    if (Store.rulesJson != before) lastPush = 0L
                     // Şifre kasası: sahip kaydı ve yeni ebeveyn cihazlarına anahtar paylaşımı (10 dk'da bir)
                     if (System.currentTimeMillis() - lastVault > 10 * 60_000L) {
                         lastVault = System.currentTimeMillis()

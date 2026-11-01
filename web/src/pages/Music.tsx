@@ -71,6 +71,7 @@ function ChildMusic({ child, onErr }: { child: Child; onErr: (e: string) => void
       <b>
         <span className="dot" style={{ background: child.color, marginTop: 0 }} /> {child.name}
       </b>
+      <MusicLibrary childId={child.id} />
       <label className="field">
         <span>Ne zaman çalabilir</span>
         <select value={child.music_mode ?? "rules"} onChange={(e) => save({ music_mode: e.target.value })}>
@@ -82,7 +83,7 @@ function ChildMusic({ child, onErr }: { child: Child; onErr: (e: string) => void
       <label className="field">
         <span>Klasör</span>
         <select value={child.music_folder ?? ""} onChange={(e) => save({ music_folder: e.target.value || null })}>
-          <option value="">Çocuk kendisi seçsin</option>
+          <option value="">Klasör seçilmedi (çalma kapalı)</option>
           {(child.music_folders ?? []).map((f) => (
             <option key={f} value={f}>
               📁 {f}

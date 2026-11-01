@@ -189,6 +189,8 @@ data class Rules(
     /** PIN ile kaç dakika açık kalır */
     val pinMinutes: Int = 15,
     val familyId: String = "",
+    val profileNickname: String? = null,
+    val profileAvatar: String? = null,
 )
 
 data class KioskSettings(

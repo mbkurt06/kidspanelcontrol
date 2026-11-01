@@ -35,7 +35,7 @@ export default function Home() {
       </header>
       {!fam.profiles.length && <SeedCard />}
       <div className="stack">
-        {fam.children.map((c) => (
+        {fam.visibleChildren.map((c) => (
           <ChildCard key={c.id} child={c} />
         ))}
       </div>

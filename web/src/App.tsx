@@ -17,6 +17,7 @@ import Events from "./pages/Events";
 import { MessagesChat, MessagesList } from "./pages/Messages";
 import { useFamily } from "./lib/family";
 import Settings from "./pages/Settings";
+import ChildSettings from "./pages/ChildSettings";
 import Tasks from "./pages/Tasks";
 import Agenda from "./pages/Agenda";
 import TaskEdit from "./pages/TaskEdit";
@@ -172,8 +173,18 @@ function DeviceGate({ userId, email }: { userId: string; email: string }) {
 
 function Shell() {
   const fam = useFamily();
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <div className="shell">
+      <button className="menu-toggle" aria-label="Menüyü aç" onClick={() => setMenuOpen(true)}>☰</button>
+      {menuOpen && <div className="menu-backdrop" onClick={() => setMenuOpen(false)}><aside className="side-menu" onClick={(e) => e.stopPropagation()}>
+        <div className="side-menu-head"><b>Orbit</b><button className="icon-btn" onClick={() => setMenuOpen(false)} aria-label="Menüyü kapat">×</button></div>
+        <div className="side-menu-list">
+          <button className={fam.selectedChildId === "all" ? "selected" : ""} onClick={() => { fam.setSelectedChildId("all"); setMenuOpen(false); }}>Tümü</button>
+          {fam.children.map((c) => <button key={c.id} className={fam.selectedChildId === c.id ? "selected" : ""} onClick={() => { fam.setSelectedChildId(c.id); setMenuOpen(false); }}><span className="dot" style={{ background: c.color }} />{c.name}</button>)}
+        </div>
+        <div className="side-menu-bottom"><NavLink to="/settings" onClick={() => setMenuOpen(false)} aria-label="Web sayfası ayarları"><Icon name="gear" /></NavLink></div>
+      </aside></div>}
       <main className="content">
         <Routes>
           <Route path="/" element={<Home />} />
@@ -196,6 +207,7 @@ function Shell() {
           <Route path="/messages" element={<MessagesList />} />
           <Route path="/messages/:id" element={<MessagesChat />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/child-settings" element={<ChildSettings />} />
         </Routes>
       </main>
       <nav className="tabbar">
@@ -224,7 +236,7 @@ function Shell() {
           <Icon name="bell" />
           <span>Olaylar</span>
         </NavLink>
-        <NavLink to="/settings">
+        <NavLink to="/child-settings">
           <Icon name="gear" />
           <span>Ayarlar</span>
         </NavLink>

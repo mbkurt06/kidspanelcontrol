@@ -40,7 +40,7 @@ export function MessagesList() {
       <header className="page-head">
         <h1>Mesajlar</h1>
       </header>
-      {fam.children.map((c) => {
+      {fam.visibleChildren.map((c) => {
         const m = last[c.id];
         return (
           <Link to={`/messages/${c.id}`} className="card link-card" key={c.id}>

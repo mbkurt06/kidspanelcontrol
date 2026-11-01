@@ -27,7 +27,7 @@ object Sync {
                 .getOrElse { Api.get("families?select=timezone&limit=1") }
             val tz = fam.optJSONObject(0)?.optString("timezone") ?: "Europe/Berlin"
             val today = java.time.LocalDate.now(java.time.ZoneId.of(tz)).toString()
-            val kid = runCatching { Api.get("children?select=name,wallet_daily_max,kiosk_settings,parent_pin_hash,parent_pin_enabled,music_mode,music_folder&id=eq.$child") }
+            val kid = runCatching { Api.get("children?select=name,wallet_daily_max,kiosk_settings,parent_pin_hash,parent_pin_enabled,music_mode,music_folder,profile_nickname,profile_avatar&id=eq.$child") }
                 .getOrElse { Api.get("children?select=name&id=eq.$child") }
             val bundle = JSONObject()
                 .put("timezone", fam.optJSONObject(0)?.optString("timezone") ?: "Europe/Berlin")

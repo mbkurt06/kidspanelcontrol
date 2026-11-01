@@ -96,7 +96,7 @@ export default function Events() {
       {!events && <p className="muted">Yükleniyor…</p>}
       {events && !events.length && <p className="muted">Henüz olay yok.</p>}
       <div className="stack-s">
-        {events?.map((e) => {
+        {events?.filter((e) => e.child_id == null || fam.visibleChildren.some((c) => c.id === e.child_id)).map((e) => {
           const child = fam.children.find((c) => c.id === e.child_id);
           const text = describe(e, child?.name ?? "");
           const to = e.type === "message" && child ? `/messages/${child.id}` : e.type === "parent_device_pending" ? "/settings" : e.type === "task_submitted" ? "/tasks" : child ? `/child/${child.id}` : "/";

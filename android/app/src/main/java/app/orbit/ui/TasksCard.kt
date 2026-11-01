@@ -34,6 +34,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 private fun statusText(t: TaskItem) = when (t.status) {
     "open" -> null
@@ -60,6 +63,10 @@ private fun rewardText(t: TaskItem): String? {
     t.rewardText?.let { parts += it }
     return parts.joinToString(" · ").ifBlank { null }
 }
+
+private val taskDay = DateTimeFormatter.ofPattern("dd.MM.yyyy EEEE", java.util.Locale("tr", "TR"))
+private fun taskDate(value: String?): String? = value?.let { runCatching { java.time.LocalDate.parse(it.take(10)).format(taskDay) }.getOrNull() }
+private fun taskEntered(value: String?): String? = value?.let { runCatching { Instant.parse(it).atZone(ZoneId.systemDefault()).toLocalDate().format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) + " · " + Instant.parse(it).atZone(ZoneId.systemDefault()).toLocalTime().toString().take(5) }.getOrNull() }
 
 private fun mediaFor(proof: String) = when (proof) {
     "video" -> "video"
@@ -140,7 +147,7 @@ fun TasksCard(tasks: List<TaskItem>) {
                 }
                 t.description?.let { Muted(it, 13) }
                 rewardText(t)?.let { Text("Ödül: $it", color = C.good, fontSize = 13.sp) }
-                val due = listOfNotNull(t.dueDate?.let { "son gün $it" }, t.dueTime?.let { "$it'e kadar" }).joinToString(" · ")
+                val due = listOfNotNull(taskEntered(t.createdAt), taskDate(t.dueDate), t.dueTime?.let { it }).joinToString(" · ")
                 if (due.isNotBlank()) Muted(due, 12)
                 if (t.firstWins && t.open) Muted("İlk yapan alır", 12)
                 statusText(t)?.let {

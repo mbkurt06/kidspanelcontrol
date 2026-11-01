@@ -3,7 +3,7 @@ import { DateField } from "../components/DateTime";
 import { Link, useNavigate } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
-import { dateText, minutesText, relTime, todayISO } from "../lib/util";
+import { agendaDateText, dateText, dateTimeText, minutesText, relTime, todayISO } from "../lib/util";
 import {
   PROOF_LABEL,
   STATUS_LABEL,
@@ -54,12 +54,13 @@ export default function Tasks() {
   const taskById = useMemo(() => Object.fromEntries(tasks.map((t) => [t.id, t])), [tasks]);
   const childName = (id: string) => fam.children.find((c) => c.id === id)?.name ?? "";
   const childColor = (id: string) => fam.children.find((c) => c.id === id)?.color ?? "#888";
+  const visibleChildIds = new Set(fam.visibleChildren.map((c) => c.id));
 
-  const pending = runs.filter((r) => r.status === "submitted");
+  const pending = runs.filter((r) => r.status === "submitted" && visibleChildIds.has(r.child_id));
   const todays = runs.filter(
     (r) => r.day === today || (taskById[r.task_id]?.recurrence === "once" && ["open", "started", "rejected"].includes(r.status))
   );
-  const rewards = runs.filter((r) => r.status === "approved" && r.reward_text && !r.reward_delivered_at);
+  const rewards = runs.filter((r) => r.status === "approved" && r.reward_text && !r.reward_delivered_at && visibleChildIds.has(r.child_id));
 
   async function seedTemplates() {
     const { error } = await supabase.from("task_templates").insert(STARTER_TEMPLATES.map((t) => ({ ...t, family_id: fam.familyId })));
@@ -115,7 +116,7 @@ export default function Tasks() {
       <div className="card">
         <h2>Bugün</h2>
         {!todays.length && <p className="muted small">Bugün için görev yok.</p>}
-        {fam.children.map((c) => {
+        {fam.visibleChildren.map((c) => {
           const list = todays.filter((r) => r.child_id === c.id);
           if (!list.length) return null;
           return (
@@ -134,12 +135,9 @@ export default function Tasks() {
                     <div className="grow">
                       <b>
                         {t?.title}
-                        {t?.mandatory ? " · zorunlu" : ""}
                       </b>
                       <div className="muted tiny">
-                        {t?.reward_minutes ? `+${minutesText(t.reward_minutes)}` : ""}
-                        {t?.reward_text ? ` ${t.reward_text}` : ""}
-                        {r.reject_note ? ` · "${r.reject_note}"` : ""}
+                        {t ? dateTimeText(t.created_at) : ""}{t?.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}
                       </div>
                     </div>
                     <span className={`pill ${r.status === "approved" ? "" : r.status === "submitted" ? "accent" : r.status === "rejected" ? "warn" : "quiet"}`}>
@@ -156,12 +154,14 @@ export default function Tasks() {
       <div className="card">
         <h2>Verilen görevler</h2>
         {!tasks.length && <p className="muted small">Henüz görev yok. "Yeni görev" ile ekle veya aşağıdaki şablonlardan birini kullan.</p>}
-        {tasks.map((t) => (
+        {tasks.filter((t) => t.child_ids.some((id) => fam.visibleChildren.some((c) => c.id === id))).map((t) => (
           <Link to={`/tasks/${t.id}`} className="app-row" key={t.id}>
             <div className="grow">
               <b style={{ opacity: t.active ? 1 : 0.5 }}>{t.title}</b>
               <div className="muted tiny">
                 {t.child_ids.map(childName).join(", ")}
+                {` · ${dateTimeText(t.created_at)}`}
+                {t.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}
                 {t.assign_mode === "first" ? " · ilk yapan alır" : ""} ·{" "}
                 {t.recurrence === "once" ? `tek sefer${t.due_date ? `, ${dateText(t.due_date)}'e kadar` : ""}` : "tekrarlı"} ·{" "}
                 {PROOF_LABEL[t.proof]}

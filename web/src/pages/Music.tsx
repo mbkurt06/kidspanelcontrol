@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import type { Child } from "../lib/types";
@@ -9,6 +9,8 @@ import { RuleCard, WeekGrid, addRule } from "../components/RuleEditor";
 /** Müzik: çocuk başına ne zaman çalabileceği, klasör ve müzik programı. */
 export default function Music() {
   const fam = useFamily();
+  const [params] = useSearchParams();
+  const childParam = params.get("child");
   const [err, setErr] = useState("");
   const [openRule, setOpenRule] = useState<string | null>(null);
   const rules = fam.timeRules.filter((r) => r.kind === "music_off" || r.kind === "music_on");
@@ -34,7 +36,7 @@ export default function Music() {
       </header>
       {err && <p className="error">{err}</p>}
       <p className="muted small">Orbit'teki müzik çalar süreden düşmez; arka planda ve ekran kapalıyken de çalar. Kilitliyken çalması için kilit ekranında "Müzik" açık olmalı.</p>
-      {fam.children.map((c) => (
+      {fam.visibleChildren.filter((c) => !childParam || c.id === childParam).map((c) => (
         <ChildMusic key={c.id} child={c} onErr={setErr} />
       ))}
       <section className="stack">

@@ -76,6 +76,7 @@ enum class Screen(val icon: String, val title: String) {
     DAY("🗓", "Günüm"),
     WALLET("⏳", "Süre cüzdanı"),
     ASK("🙋", "Ebeveynden iste"),
+    PROFILE("👤", "Profil"),
     VAULT("🔑", "Şifrelerim"),
     ABOUT("ℹ️", "Hakkında"),
 }
@@ -199,6 +200,7 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                     Screen.DAY -> DayScreen()
                     Screen.WALLET -> WalletScreen()
                     Screen.ASK -> AskScreen()
+                    Screen.PROFILE -> ProfileScreen()
                     Screen.ABOUT -> AboutScreen()
                     Screen.VAULT -> VaultScreen(onCancel = { screen = Screen.TODAY })
                     Screen.MESSAGES -> Unit

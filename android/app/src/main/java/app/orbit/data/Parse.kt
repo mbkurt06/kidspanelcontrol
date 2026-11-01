@@ -178,6 +178,8 @@ object Parse {
             ?.let { b.optJSONObject("family")?.str("parent_pin_hash")?.takeIf { h -> h.isNotBlank() } },
         pinMinutes = b.optJSONObject("family")?.optInt("pin_unlock_minutes", 15)?.takeIf { it > 0 } ?: 15,
         familyId = b.optJSONObject("family")?.optString("id") ?: "",
+        profileNickname = b.optJSONObject("child")?.str("profile_nickname"),
+        profileAvatar = b.optJSONObject("child")?.str("profile_avatar"),
         focus = Timers.activeFocus(b)?.let { app.orbit.engine.Focus(it.name, it.groups, it.packages) },
     )
 

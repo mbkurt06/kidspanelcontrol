@@ -23,6 +23,9 @@ type FamilyData = {
   unreadEvents: number;
   unreadMessages: number;
   pendingApprovals: number;
+  selectedChildId: string;
+  setSelectedChildId: (id: string) => void;
+  visibleChildren: Child[];
   loading: boolean;
   reload: () => Promise<void>;
 };
@@ -30,7 +33,7 @@ type FamilyData = {
 const Ctx = createContext<FamilyData | null>(null);
 
 export function FamilyProvider({ children: kids }: { children: React.ReactNode }) {
-  const [state, setState] = useState<Omit<FamilyData, "reload">>({
+  const [state, setState] = useState<Omit<FamilyData, "reload" | "selectedChildId" | "setSelectedChildId" | "visibleChildren">>({
     familyId: null,
     family: null,
     children: [],
@@ -52,6 +55,12 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
     pendingApprovals: 0,
     loading: true,
   });
+  const [selectedChildId, setSelectedChildId] = useState(() => localStorage.getItem("orbit.selectedChild") ?? "all");
+
+  useEffect(() => {
+    if (state.children.length && selectedChildId !== "all" && !state.children.some((c) => c.id === selectedChildId)) setSelectedChildId("all");
+    localStorage.setItem("orbit.selectedChild", selectedChildId);
+  }, [selectedChildId, state.children]);
 
   const reload = useCallback(async () => {
     supabase.rpc("touch_parent_device").then(() => {});
@@ -117,7 +126,8 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
     };
   }, [reload]);
 
-  return <Ctx.Provider value={{ ...state, reload }}>{kids}</Ctx.Provider>;
+  const visibleChildren = selectedChildId === "all" ? state.children : state.children.filter((c) => c.id === selectedChildId);
+  return <Ctx.Provider value={{ ...state, reload, selectedChildId, setSelectedChildId, visibleChildren }}>{kids}</Ctx.Provider>;
 }
 
 export function useFamily() {

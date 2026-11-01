@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { TimeField } from "../components/DateTime";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { sendCommand } from "../lib/actions";
@@ -38,10 +38,13 @@ export async function unlockNow(childId: string) {
 /** Kilit sayfası: şimdi kilitle, haftalık program, kilit ekranı, ana sayfa tuşu. */
 export default function Lock() {
   const fam = useFamily();
-  const [kid, setKid] = useState<string>("all");
+  const [params] = useSearchParams();
+  const childParam = params.get("child");
+  const [kid, setKid] = useState<string>(childParam ?? (fam.selectedChildId === "all" ? "all" : fam.selectedChildId));
   const [openRule, setOpenRule] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const kinds = ["kiosk", "limit", "free"] as const;
+  const shownChildren = fam.visibleChildren.filter((c) => !childParam || c.id === childParam);
   const rules = fam.timeRules.filter((r) => (kinds as readonly string[]).includes(r.kind) && (kid === "all" || !r.child_ids.length || r.child_ids.includes(kid)));
 
   async function add() {
@@ -76,7 +79,7 @@ export default function Lock() {
 
       <section className="stack">
         <h2 className="section-title">Şimdi</h2>
-        {fam.children.map((c) => (
+        {shownChildren.map((c) => (
           <NowCard key={c.id} child={c} onErr={setErr} />
         ))}
       </section>
@@ -92,7 +95,7 @@ export default function Lock() {
           <button className={`chip small ${kid === "all" ? "on" : ""}`} onClick={() => setKid("all")}>
             Hepsi
           </button>
-          {fam.children.map((c) => (
+          {shownChildren.map((c) => (
             <button key={c.id} className={`chip small ${kid === c.id ? "on" : ""}`} onClick={() => setKid(c.id)}>
               {c.name}
             </button>
@@ -116,7 +119,7 @@ export default function Lock() {
 
       <section className="stack">
         <h2 className="section-title">Kilit ekranı</h2>
-        {fam.children.map((c) => (
+        {shownChildren.map((c) => (
           <KioskLook key={c.id} child={c} onErr={setErr} />
         ))}
       </section>

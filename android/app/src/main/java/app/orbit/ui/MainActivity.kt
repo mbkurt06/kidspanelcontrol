@@ -56,15 +56,28 @@ import org.json.JSONObject
 
 class MainActivity : ComponentActivity() {
     private var paired by mutableStateOf(false)
+    /** Bildirimden ya da kilit ekranından gelen "şu ekranı aç" isteği */
+    private var request by mutableStateOf<Pair<Screen, Long>?>(null)
+
+    private fun readRequest(i: android.content.Intent?) {
+        val s = i?.getStringExtra(app.orbit.data.Notifier.EXTRA_SCREEN) ?: return
+        runCatching { Screen.valueOf(s) }.getOrNull()?.let { request = it to System.nanoTime() }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        readRequest(intent)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Store.init(this)
         paired = Store.creds != null
+        readRequest(intent)
         setContent {
             OrbitTheme {
                 Column(Modifier.fillMaxSize().background(C.bg).safeDrawingPadding()) {
-                    if (paired) OrbitHome() else PairScreen(onPaired = {
+                    if (paired) OrbitHome(request) else PairScreen(onPaired = {
                         paired = true
                         OrbitService.start(this@MainActivity)
                     })

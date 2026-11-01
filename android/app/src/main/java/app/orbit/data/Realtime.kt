@@ -35,7 +35,7 @@ object Realtime {
     private var loop: Job? = null
 
     /** Telefonun kendi yazdıkları (durum, kullanım, olaylar) burada yok — kendi kendini tetiklemesin. */
-    private val childTables = listOf("commands", "child_apps", "time_grants", "profile_assignments", "day_overrides", "task_runs")
+    private val childTables = listOf("commands", "child_apps", "time_grants", "profile_assignments", "day_overrides", "task_runs", "messages")
     private val familyTables = listOf(
         "rule_profiles", "modes", "mode_slots", "profile_sections", "section_rules",
         "app_groups", "app_group_members", "profile_group_limits", "tasks", "vault_holders",

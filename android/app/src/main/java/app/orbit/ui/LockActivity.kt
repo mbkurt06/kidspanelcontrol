@@ -123,11 +123,22 @@ private fun LockScreen(reason: String, pkg: String?, onHome: () -> Unit) {
         ) { Text(if (sent) "İstek gönderildi" else "Ebeveynden süre iste") }
         if (reason.startsWith("Önce görevini yap")) {
             Button(
-                onClick = { ctx.startActivity(android.content.Intent(ctx, MainActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)) },
+                onClick = { ctx.startActivity(android.content.Intent(ctx, MainActivity::class.java).putExtra(app.orbit.data.Notifier.EXTRA_SCREEN, "TASKS").addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)) },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = C.blue),
             ) { Text("Görevlerime git") }
         }
+        Button(
+            onClick = {
+                ctx.startActivity(
+                    android.content.Intent(ctx, MainActivity::class.java)
+                        .putExtra(app.orbit.data.Notifier.EXTRA_SCREEN, "MESSAGES")
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                )
+            },
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = C.surface2),
+        ) { Text("💬 Ebeveynine yaz", color = C.text) }
         OutlinedButton(onClick = onHome, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text("Ana ekrana dön") }
     }
 }

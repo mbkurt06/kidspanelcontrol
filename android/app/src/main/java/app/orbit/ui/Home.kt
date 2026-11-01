@@ -31,6 +31,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,6 +67,7 @@ import org.json.JSONObject
 enum class Screen(val icon: String, val title: String) {
     TODAY("🏠", "Bugün"),
     TASKS("✅", "Görevlerim"),
+    MESSAGES("💬", "Mesajlar"),
     DAY("🗓", "Günüm"),
     WALLET("⏳", "Süre cüzdanı"),
     ASK("🙋", "Ebeveynden iste"),
@@ -76,11 +78,14 @@ enum class Screen(val icon: String, val title: String) {
 private fun hm(t: java.time.LocalTime) = t.toString().take(5)
 
 @Composable
-fun OrbitHome() {
+fun OrbitHome(request: Pair<Screen, Long>? = null) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     val drawer = rememberDrawerState(DrawerValue.Closed)
     var screen by rememberSaveable { mutableStateOf(Screen.TODAY) }
+    LaunchedEffect(request) { request?.let { screen = it.first } }
+    val messages by app.orbit.data.Messages.list.collectAsState()
+    val unreadMsgs = messages.count { it.fromParent && !it.read }
     val live by Live.state.collectAsState()
     val openTasks = remember(live.lastSync, live.snapshot?.now?.minute) { Tasks.current().count { it.open } }
 
@@ -108,6 +113,7 @@ fun OrbitHome() {
                             Spacer(Modifier.width(14.dp))
                             Text(s.title, color = C.text, fontSize = 16.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, modifier = Modifier.weight(1f))
                             if (s == Screen.TASKS && openTasks > 0) Badge(openTasks)
+                            if (s == Screen.MESSAGES && unreadMsgs > 0) Badge(unreadMsgs)
                         }
                     }
                 }
@@ -124,12 +130,21 @@ fun OrbitHome() {
                     if (screen == Screen.TODAY) Store.childName.ifBlank { "Orbit" } else screen.title,
                     color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
                 )
+                if (screen != Screen.MESSAGES && unreadMsgs > 0) {
+                    Box(Modifier.clip(RoundedCornerShape(12.dp)).clickable { screen = Screen.MESSAGES }.padding(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) { Text("💬", fontSize = 16.sp); Spacer(Modifier.width(4.dp)); Badge(unreadMsgs) }
+                    }
+                }
                 if (screen != Screen.TASKS && openTasks > 0) {
                     Box(Modifier.clip(RoundedCornerShape(12.dp)).clickable { screen = Screen.TASKS }.padding(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) { Text("✅", fontSize = 16.sp); Spacer(Modifier.width(4.dp)); Badge(openTasks) }
                     }
                 }
                 Box(Modifier.padding(8.dp).size(10.dp).clip(CircleShape).background(if (live.online) C.good else C.muted))
+            }
+            if (screen == Screen.MESSAGES) {
+                MessagesScreen()
+                return@Column
             }
             Column(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp),
@@ -143,6 +158,7 @@ fun OrbitHome() {
                     Screen.ASK -> AskScreen()
                     Screen.ABOUT -> AboutScreen()
                     Screen.VAULT -> VaultScreen(onCancel = { screen = Screen.TODAY })
+                    Screen.MESSAGES -> Unit
                 }
             }
         }

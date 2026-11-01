@@ -90,6 +90,7 @@ class OrbitService : Service() {
     private var lastPush = 0L
     private var firstRun = true
     private var lastParentMode = false
+    private var lastRemind = 0L
     @Volatile private var lastVault = 0L
     private val netBusy = java.util.concurrent.atomic.AtomicBoolean(false)
     private val pushBusy = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -122,6 +123,7 @@ class OrbitService : Service() {
         val n = runningNotification("Orbit çalışıyor")
         if (Build.VERSION.SDK_INT >= 34) startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         else startForeground(1, n)
+        app.orbit.data.Notifier.init(this)
         // Panelden gelen değişiklikleri anında almak için canlı bağlantı
         app.orbit.data.Realtime.start()
         registerReceiver(screenReceiver, IntentFilter().apply {
@@ -226,6 +228,12 @@ class OrbitService : Service() {
             val v = engine.verdict(fg, snap, usage)
             usage = engine.account(usage, fg, v, dt)
             snap = engine.snapshot(now, usage)
+        }
+
+        // Saatli görev hatırlatması (dakikada bir)
+        if (nowMs - lastRemind > 60_000) {
+            lastRemind = nowMs
+            runCatching { app.orbit.data.TaskAlerts.remind(app.orbit.data.Tasks.current(), now.toLocalDate(), now.toLocalTime()) }
         }
 
         // 4) Uyarılar

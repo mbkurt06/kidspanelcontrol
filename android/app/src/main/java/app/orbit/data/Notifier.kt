@@ -1,0 +1,48 @@
+package app.orbit.data
+
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.Context
+import android.content.Intent
+import app.orbit.R
+import app.orbit.ui.MainActivity
+
+/** Çocuğun telefonunda görev ve mesaj bildirimleri. Dokununca Orbit'in ilgili ekranı açılır. */
+object Notifier {
+    const val CH_TASKS = "orbit-tasks"
+    const val CH_MSG = "orbit-messages"
+    const val EXTRA_SCREEN = "screen"
+    @Volatile private var app: Context? = null
+
+    fun init(ctx: Context) {
+        if (app != null) return
+        app = ctx.applicationContext
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(NotificationChannel(CH_TASKS, "Görevler", NotificationManager.IMPORTANCE_HIGH))
+        nm.createNotificationChannel(NotificationChannel(CH_MSG, "Ebeveyn mesajları", NotificationManager.IMPORTANCE_HIGH))
+    }
+
+    fun show(channel: String, id: Int, title: String, text: String, screen: String) {
+        val ctx = app ?: return
+        val open = Intent(ctx, MainActivity::class.java)
+            .putExtra(EXTRA_SCREEN, screen)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        val pi = PendingIntent.getActivity(ctx, id, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val n = Notification.Builder(ctx, channel)
+            .setSmallIcon(R.drawable.ic_orbit)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .build()
+        runCatching { ctx.getSystemService(NotificationManager::class.java).notify(id, n) }
+    }
+
+    fun cancel(id: Int) {
+        val ctx = app ?: return
+        runCatching { ctx.getSystemService(NotificationManager::class.java).cancel(id) }
+    }
+}

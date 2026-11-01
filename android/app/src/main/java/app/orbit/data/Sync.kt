@@ -46,6 +46,8 @@ object Sync {
             Store.rulesJson = bundle.toString()
             kid.optJSONObject(0)?.optString("name")?.let { Store.childName = it }
             Store.lastSync = System.currentTimeMillis()
+            runCatching { TaskAlerts.onTasks(Tasks.current()) }
+            runCatching { Messages.refresh() }
             ackCommands(bundle.getJSONArray("commands"))
             true
         }.onFailure { Log.w(TAG, "kurallar alınamadı", it) }.getOrDefault(false)

@@ -6,6 +6,11 @@ on:
     paths:
       - "android/**"
       - ".github/workflows/android.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "android/**"
+      - ".github/workflows/android.yml"
   workflow_dispatch:
 
 permissions:
@@ -61,12 +66,32 @@ jobs:
           echo "imza=var" >> "$GITHUB_OUTPUT"
 
       - name: GitHub surumu (Release)
-        if: steps.imza.outputs.imza == 'var'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.imza.outputs.imza == 'var'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           C=${{ steps.surum.outputs.code }}
           gh release create "orbit-v$C" "orbit-$C.apk" --title "Orbit $C" --notes "Otomatik derleme ${GITHUB_SHA::7}" --latest
+
+      - name: Vercel kurulum dosyalarini guncelle
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.imza.outputs.imza == 'var'
+        shell: bash
+        env:
+          ORBIT_VERSION_CODE: ${{ steps.surum.outputs.code }}
+        run: |
+          cp "orbit-$ORBIT_VERSION_CODE.apk" ../web/public/kurulum/orbit.apk
+          python3 - <<'PY'
+          import json, os
+          version = int(os.environ["ORBIT_VERSION_CODE"])
+          with open("../web/public/kurulum/version.json", "w", encoding="utf-8") as f:
+              json.dump({"version": version, "url": "https://orbit-panel-nu.vercel.app/kurulum/orbit.apk"}, f, separators=(",", ":"))
+              f.write("\n")
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/public/kurulum/orbit.apk web/public/kurulum/version.json
+          git diff --cached --quiet || git commit -m "chore(release): publish Orbit $ORBIT_VERSION_CODE installer"
+          git push origin HEAD:main
 
       - uses: actions/upload-artifact@v4
         if: success()

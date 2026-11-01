@@ -1,9 +1,10 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { supabase } from "./supabase";
-import type { ActivityDef, FocusProfile, TimerSession, AppGroupDef, Child, DeviceStatus, GroupLimit, GroupMember, Mode, ModeSlot, OrbitEvent, Profile, Section, SectionRule, TimeRule } from "./types";
+import type { ActivityDef, FocusProfile, TimerSession, AppGroupDef, Child, DeviceStatus, GroupLimit, GroupMember, Mode, ModeSlot, OrbitEvent, Profile, Section, SectionRule, TimeRule, FamilySettings } from "./types";
 
 type FamilyData = {
   familyId: string | null;
+  family: FamilySettings | null;
   children: Child[];
   profiles: Profile[];
   modes: Mode[];
@@ -31,6 +32,7 @@ const Ctx = createContext<FamilyData | null>(null);
 export function FamilyProvider({ children: kids }: { children: React.ReactNode }) {
   const [state, setState] = useState<Omit<FamilyData, "reload">>({
     familyId: null,
+    family: null,
     children: [],
     profiles: [],
     modes: [],
@@ -54,7 +56,7 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
   const reload = useCallback(async () => {
     supabase.rpc("touch_parent_device").then(() => {});
     const [fam, ch, pr, mo, sl, st, ev, ap, gr, gm, se, sr, gl, um, fp, ac, ts, tr] = await Promise.all([
-      supabase.from("families").select("id").limit(1).maybeSingle(),
+      supabase.from("families").select("id,lock_button,lock_button_minutes,pin_unlock_minutes,parent_pin_hash").limit(1).maybeSingle(),
       supabase.from("children").select("*").order("sort_order").order("created_at"),
       supabase.from("rule_profiles").select("*").order("created_at"),
       supabase.from("modes").select("*").order("priority", { ascending: false }),
@@ -81,6 +83,7 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
     for (const s of (st.data ?? []) as DeviceStatus[]) statuses[s.child_id] = s;
     setState({
       familyId: (fam.data as { id: string } | null)?.id ?? null,
+      family: (fam.data as FamilySettings | null) ?? null,
       children: (ch.data ?? []) as Child[],
       profiles: (pr.data ?? []) as Profile[],
       modes: (mo.data ?? []) as Mode[],

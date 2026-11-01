@@ -23,7 +23,8 @@ object Sync {
         val c = Store.creds ?: return false
         val child = enc(c.childId)
         return runCatching {
-            val fam = Api.get("families?select=timezone&limit=1")
+            val fam = runCatching { Api.get("families?select=id,timezone,parent_pin_hash,pin_unlock_minutes&limit=1") }
+                .getOrElse { Api.get("families?select=timezone&limit=1") }
             val tz = fam.optJSONObject(0)?.optString("timezone") ?: "Europe/Berlin"
             val today = java.time.LocalDate.now(java.time.ZoneId.of(tz)).toString()
             val kid = runCatching { Api.get("children?select=name,wallet_daily_max,kiosk_settings,parent_pin_hash,parent_pin_enabled,music_mode,music_folder&id=eq.$child") }
@@ -32,6 +33,7 @@ object Sync {
                 .put("timezone", fam.optJSONObject(0)?.optString("timezone") ?: "Europe/Berlin")
                 .put("wallet_daily_max", kid.optJSONObject(0)?.takeIf { it.has("wallet_daily_max") && !it.isNull("wallet_daily_max") }?.optInt("wallet_daily_max") ?: JSONObject.NULL)
                 .put("child", kid.optJSONObject(0) ?: JSONObject())
+                .put("family", fam.optJSONObject(0) ?: JSONObject())
                 .put("child_id", c.childId)
                 .put("time_rules", runCatching { Api.get("time_rules?select=*") }.getOrElse { JSONArray() })
                 .put("apps", Api.get("child_apps?child_id=eq.$child&select=package,label,app_group,approved,daily_limit_minutes"))

@@ -58,11 +58,30 @@ export const KIOSK_SCREENS: [KioskScreen, string][] = [
 ];
 export type KioskSettings = { message: string | null; screens: KioskScreen[]; calls: "emergency" | "all" };
 
+export type FamilySettings = {
+  id: string;
+  lock_button: "kiosk" | "limit" | "ask";
+  lock_button_minutes: number | null;
+  pin_unlock_minutes: number;
+  parent_pin_hash: string | null;
+};
+
+export type RuleKind = "kiosk" | "limit" | "free" | "music_off" | "music_on";
+export const RULE_KIND: Record<RuleKind, { label: string; color: string; hint: string }> = {
+  kiosk: { label: "🔒 Kilitle", color: "#ff5d6c", hint: "Ekranda sadece Orbit kalır; ayarlar, bildirimler ve diğer uygulamalar kapalı." },
+  limit: { label: "🌙 Sınırla", color: "#f2b134", hint: "Sadece her zaman açık uygulamalar çalışır (telefon, mesaj vb.)." },
+  free: { label: "🟢 Serbest", color: "#2bb673", hint: "Süre ve kurallar işlemez; onaylı her şey açık." },
+  music_off: { label: "🔇 Müzik kapalı", color: "#7a7fa8", hint: "Orbit müzik çalar bu saatlerde çalmaz." },
+  music_on: { label: "🎵 Müzik açık", color: "#4f7cff", hint: "Bu saatlerde müzik her durumda çalabilir." },
+};
+
 export type TimeRule = {
   id: string;
   family_id: string;
   name: string;
-  kind: "kiosk" | "music_off" | "music_on";
+  kind: RuleKind;
+  start_date: string | null;
+  end_date: string | null;
   child_ids: string[];
   days: number[];
   start_time: string;

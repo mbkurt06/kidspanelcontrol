@@ -321,13 +321,15 @@ private fun NowCard(s: Snapshot) {
     val mode = s.activeMode
     val sec = s.section?.section
     val icon = when {
-        s.locked -> "🔒"
+        s.locked -> "🌙"
+        s.freeName != null -> "🟢"
         mode != null -> "⭐"
         sec != null -> sec.icon ?: if (s.sectionClosed) "🌙" else "☀️"
         else -> "🌙"
     }
     val title = when {
-        s.locked -> "Telefon kilitli"
+        s.locked -> s.limitName ?: "Sınırlı"
+        s.freeName != null -> s.freeName
         mode != null -> mode.name
         sec != null -> sec.name
         s.sectionMode -> "Kapalı saatler"

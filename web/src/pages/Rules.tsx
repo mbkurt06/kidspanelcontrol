@@ -54,6 +54,28 @@ export default function Rules() {
       </header>
       {err && <p className="error">{err}</p>}
 
+      <div className="grid2">
+        <Link to="/rules/lock" className="card link-card">
+          <div className="grow">
+            <b>🔒 Kilit</b>
+            <div className="muted small">
+              Kilitle · Sınırla · Serbest
+              {fam.timeRules.filter((r) => ["kiosk", "limit", "free"].includes(r.kind)).length
+                ? ` · ${fam.timeRules.filter((r) => ["kiosk", "limit", "free"].includes(r.kind)).length} kural`
+                : ""}
+            </div>
+          </div>
+          <Icon name="chevron" size={18} />
+        </Link>
+        <Link to="/rules/music" className="card link-card">
+          <div className="grow">
+            <b>🎵 Müzik</b>
+            <div className="muted small">Ne zaman çalar, klasör</div>
+          </div>
+          <Icon name="chevron" size={18} />
+        </Link>
+      </div>
+
       <Link to="/rules/groups" className="card link-card">
         <div className="grow">
           <b>Uygulama grupları</b>
@@ -151,15 +173,6 @@ export default function Rules() {
                   {a.icon} {a.name}
                 </span>
               ))}
-            </div>
-          </div>
-          <Icon name="chevron" size={18} />
-        </Link>
-        <Link to="/rules/time" className="card link-card">
-          <div className="grow">
-            <b>Zaman kuralları</b>
-            <div className="muted small">
-              {fam.timeRules.length ? `${fam.timeRules.length} kural · tam kilit / müzik` : "Belirli saatlerde tam kilit, müzik kapalı / açık"}
             </div>
           </div>
           <Icon name="chevron" size={18} />

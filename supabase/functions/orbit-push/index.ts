@@ -43,6 +43,10 @@ function text(type: string, child: string, p: Record<string, unknown>): { title:
         `kaydı erken bitirdi (${rec}/${plan} dk)`;
       return { title: `📹 ${child}: ${what}`, body: s("title"), url: "/#/tasks" };
     }
+    case "pin_unlock":
+      return { title: `🔓 ${child}: ebeveyn PIN'i girildi`, body: `${s("minutes") || 15} dk kısıtlama yok`, url: "/#/events" };
+    case "pin_fail":
+      return { title: `⚠️ ${child}: yanlış ebeveyn PIN'i`, body: "Telefonda yanlış PIN denendi", url: "/#/events" };
     case "app_installed":
       return { title: `${child} yeni uygulama yükledi`, body: `${s("label") || s("package")} onay bekliyor`, url: "/#/" };
     case "parent_device_pending":

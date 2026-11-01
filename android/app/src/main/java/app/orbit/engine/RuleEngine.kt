@@ -62,6 +62,10 @@ data class Snapshot(
     val capLeftSeconds: Long? = null,
     /** Bölümde açık ya da süreli hiçbir şey yok (Uyku / Kapalı gibi) */
     val sectionClosed: Boolean = false,
+    /** Programdaki "Sınırla" kuralının adı (sınırlıysa) */
+    val limitName: String? = null,
+    /** Programdaki "Serbest" kuralının adı */
+    val freeName: String? = null,
     /** Açık bölümde geçerli saat aralıklı süreler: kullanım bu sayaçlara da yazılır */
     val windowBuckets: List<String> = emptyList(),
 )
@@ -161,7 +165,13 @@ class RuleEngine(private val rules: Rules) {
         val dayEnd = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
 
         val profile = profileFor(day)
-        val (locked, free, lockUntil) = lockState(nowMs)
+        val (locked0, free0, lockUntil0) = lockState(nowMs)
+        // Kilit programı: "Sınırla" (sadece her zaman açık uygulamalar) ve "Serbest"
+        val limit = if (locked0) null else Extras.limitNow(rules, this, day, t)
+        val freeRule = if (locked0 || limit != null || free0) null else Extras.freeNow(rules, this, day, t)
+        val locked = locked0 || limit != null
+        val lockUntil = if (locked0) lockUntil0 else limit?.second
+        val free = free0 || freeRule != null
         val manual = manualMode(nowMs)
         val sched = scheduledModes(day, t).maxByOrNull { it.first.priority }
         val active = manual?.first ?: sched?.first
@@ -184,7 +194,7 @@ class RuleEngine(private val rules: Rules) {
             return sectionSnapshot(
                 now, day, t, profile, todaySections, usage, dayStart, dayEnd, wallet,
                 manual, active, modeEnds, modeRemaining, locked, lockUntil, free, parentUntil,
-            )
+            ).copy(limitName = limit?.first, freeName = freeRule?.first)
         }
 
         return Snapshot(
@@ -193,6 +203,7 @@ class RuleEngine(private val rules: Rules) {
             allowanceMinutes = allowance, usedMinutes = (used / 60).toInt(), remainingSeconds = remaining,
             modeRemainingSeconds = modeRemaining, extraMinutesToday = extra, walletGrants = wallet,
             parentMode = parentUntil != null, parentModeUntil = parentUntil,
+            limitName = limit?.first, freeName = freeRule?.first,
         )
     }
 
@@ -390,7 +401,7 @@ class RuleEngine(private val rules: Rules) {
         if (s.free) {
             return if (approved && group != Group.BLOCKED) AppVerdict(true) else AppVerdict(false, if (!approved) "Ebeveyn onayı bekliyor" else "Bu uygulama kapalı")
         }
-        if (s.locked) return AppVerdict(false, "Telefon ebeveyn tarafından kilitlendi")
+        if (s.locked) return AppVerdict(false, s.limitName?.let { "$it: şu an sadece temel uygulamalar açık" } ?: "Telefon sınırlandı: sadece temel uygulamalar açık")
 
         val mode = s.activeMode
         if (mode != null) {

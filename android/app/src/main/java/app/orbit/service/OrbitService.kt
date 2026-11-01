@@ -309,7 +309,7 @@ class OrbitService : Service() {
         // 6) Ön plandaki uygulama kapalıysa kilit ekranını göster
         var lockReason: String? = when {
             snap.parentMode -> null
-            snap.locked -> "Telefon ebeveyn tarafından kilitlendi"
+            snap.locked -> snap.limitName?.let { "Sınırlı · $it" } ?: "Sınırlı"
             snap.activeMode != null && snap.activeMode.othersBlocked -> "Şu an ${snap.activeMode.name}"
             snap.sectionMode && snap.section == null -> "Bu saatlerde kapalı"
             snap.sectionMode && snap.sectionClosed -> "Şu an ${snap.section!!.section.name}"
@@ -439,7 +439,7 @@ class OrbitService : Service() {
         val until = s.modeEndsAt?.toString()?.take(5)
         return when {
             s.parentMode -> "Orbit: Ebeveyn modu açık."
-            s.locked -> "🔒 Telefon ebeveynin tarafından kilitlendi. Açılınca tekrar kullanabilirsin."
+            s.locked -> "🌙 ${s.limitName ?: "Telefon sınırlandı"}: şu an sadece temel uygulamalar açık."
             s.activeMode != null && s.activeMode.othersBlocked ->
                 "Şu an ${s.activeMode.name}" + (until?.let { " — $it'te biter." } ?: ".") + " Açık uygulamalar Orbit'te."
             mandatory.isNotEmpty() -> "Önce görevini yap: ${mandatory.first()}. Görev onaylanınca açılır."

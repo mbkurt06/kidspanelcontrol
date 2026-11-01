@@ -7,10 +7,9 @@ import { dateText, hhmm, minutesText, relTime, todayISO } from "../lib/util";
 import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type DayOverride, type Device, type ExtraTarget, type Section, type TimeGrant } from "../lib/types";
 import { Icon } from "../components/Icon";
 import TimerTab from "./TimerTab";
-import LockTab from "./LockTab";
 import { currentSectionFor, suggestGroup, timedPossible } from "../lib/sections";
 
-type Tab = "apps" | "program" | "time" | "timer" | "lock" | "report" | "device";
+type Tab = "apps" | "program" | "time" | "timer" | "report" | "device";
 
 export default function ChildPage() {
   const { id } = useParams();
@@ -27,6 +26,9 @@ export default function ChildPage() {
           <Icon name="back" />
         </Link>
         <h1>{child.name}</h1>
+        <Link to="/rules/lock" className="btn small">
+          🔒 Kilit
+        </Link>
         <Link to={`/child/${child.id}/vault`} className="btn small">
           <Icon name="key" size={16} /> Şifreler
         </Link>
@@ -39,7 +41,6 @@ export default function ChildPage() {
             ["program", "Program"],
             ["time", "Süre"],
             ["timer", "Sayaç"],
-            ["lock", "Kilit & Müzik"],
             ["report", "Rapor"],
             ["device", "Telefon"],
           ] as [Tab, string][]
@@ -54,7 +55,6 @@ export default function ChildPage() {
       {tab === "time" && <TimeTab childId={child.id} />}
       {tab === "report" && <ReportTab childId={child.id} />}
       {tab === "timer" && <TimerTab childId={child.id} />}
-      {tab === "lock" && <LockTab childId={child.id} />}
       {tab === "device" && <DeviceTab childId={child.id} />}
     </div>
   );

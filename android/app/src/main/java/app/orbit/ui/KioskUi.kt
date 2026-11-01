@@ -50,7 +50,7 @@ fun KioskToday(k: KioskNow, open: (Screen) -> Unit) {
     var pin by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(now?.toString()?.take(5) ?: "", color = C.text, fontSize = 64.sp, fontWeight = FontWeight.Bold)
-        Text("🔒 ${k.name}", color = C.accent, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        Text("🔒 ${if (k.source == "manual") "Kilitli" else k.name}", color = C.accent, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         k.message?.let { Text(it, color = C.text, fontSize = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 12.dp)) }
         Muted(
             k.untilMs?.let { "Bitiş: " + Instant.ofEpochMilli(it).atZone(ZoneId.of(Store.rules().timezone)).toLocalTime().toString().take(5) }
@@ -103,7 +103,7 @@ fun PinDialog(onClose: () -> Unit) {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                 )
                 if (err.isNotEmpty()) Text(err, color = C.bad, fontSize = 13.sp)
-                Muted("Doğru PIN ile 15 dakika boyunca bütün kısıtlamalar kalkar (ayarlar dahil).", 12)
+                Muted("Doğru PIN ile ${Store.rules().pinMinutes} dakika boyunca bütün kısıtlamalar kalkar (ayarlar dahil).", 12)
             }
         },
         confirmButton = {
@@ -112,7 +112,8 @@ fun PinDialog(onClose: () -> Unit) {
                     Live.syncRequested = true
                     onClose()
                 } else {
-                    err = "PIN yanlış"
+                    val w = Kiosk.waitMs()
+                    err = if (w > 0) "Çok fazla yanlış deneme. ${(w / 60_000) + 1} dk sonra tekrar dene." else "PIN yanlış"
                     code = ""
                 }
             }) { Text("Aç") }

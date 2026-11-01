@@ -131,6 +131,7 @@ object Parse {
                 TimeWindow(time(o.getString("start_time")), time(o.getString("end_time"))),
                 o.str("message")?.takeIf { it.isNotBlank() },
                 if (o.isNull("screens") || !o.has("screens")) null else strings(o.optJSONArray("screens")).toSet(),
+                date(o.str("start_date")), date(o.str("end_date")),
             )
         }.getOrNull()
     }
@@ -172,7 +173,10 @@ object Parse {
         timeRules = timeRules(b.optJSONArray("time_rules") ?: JSONArray(), b.optString("child_id")),
         musicMode = b.optJSONObject("child")?.optString("music_mode", "rules") ?: "rules",
         musicFolder = b.optJSONObject("child")?.str("music_folder")?.takeIf { it.isNotBlank() },
-        pinHash = b.optJSONObject("child")?.takeIf { it.optBoolean("parent_pin_enabled") }?.str("parent_pin_hash")?.takeIf { it.isNotBlank() },
+        pinHash = b.optJSONObject("child")?.takeIf { it.optBoolean("parent_pin_enabled") }
+            ?.let { b.optJSONObject("family")?.str("parent_pin_hash")?.takeIf { h -> h.isNotBlank() } },
+        pinMinutes = b.optJSONObject("family")?.optInt("pin_unlock_minutes", 15)?.takeIf { it > 0 } ?: 15,
+        familyId = b.optJSONObject("family")?.optString("id") ?: "",
         focus = Timers.activeFocus(b)?.let { app.orbit.engine.Focus(it.name, it.groups, it.packages) },
     )
 

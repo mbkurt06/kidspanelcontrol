@@ -119,12 +119,7 @@ function SectionsEditor({ profile, sections }: { profile: Profile; sections: Sec
               <input type="checkbox" checked={s.carry_over} onChange={(e) => patch(s, { carry_over: e.target.checked })} /> Kalan süre sonraki bölüme
               devretsin
             </label>
-            <label className="check">
-              <input type="checkbox" checked={!!s.kiosk} onChange={(e) => patch(s, { kiosk: e.target.checked })} /> 🔒 Tam kilit (ekranda sadece Orbit)
-            </label>
-            <label className="check">
-              <input type="checkbox" checked={s.music !== false} onChange={(e) => patch(s, { music: e.target.checked })} /> 🎵 Müzik çalabilir
-            </label>
+
             <label className="row gap-xs">
               <span className="muted small">Diğer uygulamalar:</span>
               <select value={s.default_rule} onChange={(e) => patch(s, { default_rule: e.target.value as SecRule })}>

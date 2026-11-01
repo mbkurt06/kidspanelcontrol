@@ -283,6 +283,29 @@ class SectionEngineTest {
     }
 
     @Test
+    fun limitAndFreeRulesWithDates() {
+        val W = app.orbit.engine.TimeWindow
+        val limit = app.orbit.engine.TimeRule("l1", "Akşam", "limit", (1..7).toSet(), W(t("17:00"), t("18:00")))
+        val free = app.orbit.engine.TimeRule("f1", "Bayram", "free", (1..7).toSet(), W(t("12:00"), t("23:00")), startDate = day.plusDays(1), endDate = day.plusDays(1))
+        var r = rules().copy(timeRules = listOf(limit, free))
+        var e = RuleEngine(r)
+        // 17:30 Serbest bölümü ama sınırlı: sadece her zaman açık uygulamalar
+        val s = e.snapshot(at(17, 30), DayUsage(day))
+        assertTrue(s.locked)
+        assertEquals("Akşam", s.limitName)
+        assertFalse(v(e, "com.insta", at(17, 30)).allowed)
+        assertTrue(v(e, "com.phone", at(17, 30)).allowed)
+        assertTrue(v(e, "com.insta", at(18, 10)).allowed)
+        // Serbest sadece belirtilen günde: bugün yok, yarın 20:00'de her şey açık (Akşam bölümünde oyunlar normalde kapalı)
+        assertFalse(v(e, "com.game1", at(20)).allowed)
+        assertTrue(v(e, "com.game1", at(20, d = day.plusDays(1))).allowed)
+        // Ebeveyn "kilidi kaldır" dedi: bu seferki sınırlama biter
+        val un = app.orbit.engine.Command("u1", app.orbit.engine.CommandType.UNLOCK, at(17, 10).toInstant().toEpochMilli(), null, null, null, false, false)
+        r = r.copy(commands = listOf(un)); e = RuleEngine(r)
+        assertFalse(e.snapshot(at(17, 30), DayUsage(day)).locked)
+    }
+
+    @Test
     fun focusOnlyRestrictsFurther() {
         val e = RuleEngine(rules().copy(focus = app.orbit.engine.Focus("Ders", setOf("g-video"), setOf("com.wa"))))
         // Serbest bölümünde: Video grubu ve WhatsApp açık kalır, diğerleri odak yüzünden kapanır

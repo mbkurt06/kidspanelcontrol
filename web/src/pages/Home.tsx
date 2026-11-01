@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { supabase, errorText } from "../lib/supabase";
-import { quickGrant, seedDefaults, sendCommand } from "../lib/actions";
+import { quickGrant, seedDefaults } from "../lib/actions";
+import { kioskOf, lockNow, unlockNow } from "./Lock";
 import { timerElapsed, timerRemaining } from "../lib/types";
 import { minutesText, relTime } from "../lib/util";
 import { Ring } from "../components/Ring";
@@ -48,6 +49,8 @@ function ChildCard({ child }: { child: Child }) {
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
   const stale = !st || Date.now() - new Date(st.updated_at).getTime() > 15 * 60000;
+  const [asking, setAsking] = useState(false);
+  const untilAt = () => (fam.family?.lock_button_minutes ? new Date(Date.now() + fam.family.lock_button_minutes * 60000).toISOString() : null);
 
   async function run(key: string, fn: () => Promise<unknown>, ok: string | ((r: unknown) => string)) {
     setBusy(key);
@@ -83,7 +86,11 @@ function ChildCard({ child }: { child: Child }) {
                 {st.allowance_minutes < 1440 ? ` · hakkı ${minutesText(st.allowance_minutes)}` : " · süre sınırı yok"}
               </p>
               <div className="row wrap gap-s">
-                {st.locked && <span className="pill danger">Kilitli{st.lock_reason ? ` · ${st.lock_reason}` : ""}</span>}
+                {st.lock_reason?.startsWith("🔒") ? (
+                  <span className="pill danger">🔒 Kilitli</span>
+                ) : (
+                  st.locked && <span className="pill danger">🌙 {st.lock_reason ?? "Sınırlı"}</span>
+                )}
                 {st.current_mode_name && <span className="pill">{st.current_mode_name}</span>}
                 {fam.timers[child.id] && (
                   <span className="pill accent">
@@ -104,13 +111,35 @@ function ChildCard({ child }: { child: Child }) {
         </div>
       </Link>
       <div className="actions">
-        {st?.locked ? (
-          <button className="btn" disabled={!!busy} onClick={() => run("unlock", () => sendCommand(child.id, "unlock"), "Kilit kaldırılıyor")}>
+        {st?.locked || st?.lock_reason?.startsWith("🔒") ? (
+          <button className="btn" disabled={!!busy} onClick={() => run("unlock", () => unlockNow(child.id), "Kilit kaldırılıyor")}>
             <Icon name="unlock" size={18} /> Kilidi kaldır
           </button>
+        ) : (fam.family?.lock_button ?? "kiosk") === "ask" ? (
+          asking ? (
+            <>
+              <button className="btn" disabled={!!busy} onClick={() => { setAsking(false); run("lock", () => lockNow(child.id, "kiosk", untilAt(), kioskOf(child).message), "Kilitleniyor"); }}>
+                🔒 Kilitle
+              </button>
+              <button className="btn" disabled={!!busy} onClick={() => { setAsking(false); run("lock", () => lockNow(child.id, "limit", untilAt()), "Sınırlanıyor"); }}>
+                🌙 Sınırla
+              </button>
+            </>
+          ) : (
+            <button className="btn" disabled={!!busy} onClick={() => setAsking(true)}>
+              <Icon name="lock" size={18} /> Kilit…
+            </button>
+          )
         ) : (
-          <button className="btn" disabled={!!busy} onClick={() => run("lock", () => sendCommand(child.id, "lock"), "Telefon kilitleniyor")}>
-            <Icon name="lock" size={18} /> Şimdi kilitle
+          <button
+            className="btn"
+            disabled={!!busy}
+            onClick={() => {
+              const kind = fam.family?.lock_button === "limit" ? "limit" : "kiosk";
+              run("lock", () => lockNow(child.id, kind, untilAt(), kioskOf(child).message), kind === "kiosk" ? "Kilitleniyor" : "Sınırlanıyor");
+            }}
+          >
+            <Icon name="lock" size={18} /> {fam.family?.lock_button === "limit" ? "Sınırla" : "Kilitle"}
           </button>
         )}
         <button className="btn" disabled={!!busy} onClick={() => run("15", () => quickGrant(child, 15, fam), (r) => `+15 dk verildi (${r})`)}>

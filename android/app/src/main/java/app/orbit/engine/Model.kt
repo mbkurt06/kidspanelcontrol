@@ -145,6 +145,9 @@ data class Command(
     /** Tam kilit: çocuğa mesaj ve açık Orbit ekranları (null = varsayılan) */
     val message: String? = null,
     val screens: Set<String>? = null,
+    /** Geçerlilik aralığı (ör. tatil); null = sınırsız */
+    val startDate: java.time.LocalDate? = null,
+    val endDate: java.time.LocalDate? = null,
 )
 
 /** Sunucudan alınan kuralların tamamı (telefonda saklanır, internet yokken de kullanılır). */
@@ -182,8 +185,11 @@ data class Rules(
     val musicMode: String = "rules",
     /** null = çocuk seçer */
     val musicFolder: String? = null,
-    /** Ebeveyn PIN'i (sha256(childId:pin)); kapalıysa null */
+    /** Aile ebeveyn PIN'i (sha256("orbit:<aile>:<pin>")); bu çocukta kapalıysa null */
     val pinHash: String? = null,
+    /** PIN ile kaç dakika açık kalır */
+    val pinMinutes: Int = 15,
+    val familyId: String = "",
 )
 
 data class KioskSettings(

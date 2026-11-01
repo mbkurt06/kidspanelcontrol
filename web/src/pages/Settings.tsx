@@ -252,6 +252,8 @@ export default function Settings() {
         )}
       </div>
 
+      <SecurityCard />
+
       <div className="card">
         <h2>Hesap</h2>
         <p className="muted small">Panel ekranını iPhone'da ana ekrana ekle: Safari → Paylaş → Ana Ekrana Ekle.</p>
@@ -260,6 +262,74 @@ export default function Settings() {
         </button>
       </div>
       <p className="muted tiny center">Orbit panel 0.1 · {fam.children.length} çocuk</p>
+    </div>
+  );
+}
+
+async function sha256(text: string) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** Güvenlik: bütün telefonlarda geçen ebeveyn PIN'i. */
+function SecurityCard() {
+  const fam = useFamily();
+  const f = fam.family;
+  const [pin, setPin] = useState("");
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  if (!f) return null;
+  async function savePin() {
+    setErr("");
+    setMsg("");
+    if (!/^\d{4,8}$/.test(pin)) return setErr("PIN 4–8 rakam olmalı.");
+    const { error } = await supabase.from("families").update({ parent_pin_hash: await sha256(`orbit:${f!.id}:${pin}`) }).eq("id", f!.id);
+    if (error) return setErr(error.message);
+    setPin("");
+    setMsg("PIN kaydedildi");
+    fam.reload();
+  }
+  async function patchChild(id: string, on: boolean) {
+    await supabase.from("children").update({ parent_pin_enabled: on }).eq("id", id);
+    fam.reload();
+  }
+  return (
+    <div className="card">
+      <h2>🔐 Güvenlik · Ebeveyn PIN'i</h2>
+      <p className="muted small">
+        Çocuk telefonunda (kilit ekranında ya da menüde "Ebeveyn girişi") bu PIN girilince bütün kısıtlamalar bir süre kalkar; ayarlara girebilirsin. 3 yanlış denemede 5 dk bekler. Her giriş sana bildirilir.
+      </p>
+      <div className="row gap-s">
+        <input type="password" inputMode="numeric" className="grow" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))} placeholder={f.parent_pin_hash ? "Yeni PIN (değiştir)" : "PIN belirle (4–8 rakam)"} />
+        <button className="btn small" onClick={savePin}>
+          Kaydet
+        </button>
+      </div>
+      {err && <p className="error">{err}</p>}
+      {msg && <p className="ok">{msg}</p>}
+      <label className="field">
+        <span>PIN ile ne kadar açık kalsın</span>
+        <select
+          value={f.pin_unlock_minutes}
+          onChange={async (e) => {
+            await supabase.from("families").update({ pin_unlock_minutes: Number(e.target.value) }).eq("id", f.id);
+            fam.reload();
+          }}
+        >
+          {[5, 15, 30, 60].map((m) => (
+            <option key={m} value={m}>
+              {m} dk
+            </option>
+          ))}
+        </select>
+      </label>
+      <span className="small">Hangi telefonlarda geçerli</span>
+      {fam.children.map((c) => (
+        <label className="check" key={c.id}>
+          <input type="checkbox" checked={!!c.parent_pin_enabled} disabled={!f.parent_pin_hash} onChange={(e) => patchChild(c.id, e.target.checked)} /> {c.name}
+        </label>
+      ))}
+      {!f.parent_pin_hash && <p className="muted tiny">Önce PIN belirle.</p>}
     </div>
   );
 }

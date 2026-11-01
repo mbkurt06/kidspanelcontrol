@@ -23,14 +23,15 @@ object Extras {
     /** Kural şu an geçerliyse bu geçerliliğin başlangıç ve bitişi (ms). */
     fun ruleSpan(r: TimeRule, engine: RuleEngine, day: LocalDate, t: LocalTime): Pair<Long, Long>? {
         val w = r.window
-        val dow = day.dayOfWeek.value
+        fun on(d: LocalDate) = d.dayOfWeek.value in r.days &&
+            (r.startDate == null || !d.isBefore(r.startDate)) && (r.endDate == null || !d.isAfter(r.endDate))
         if (w.start < w.end) {
-            if (dow in r.days && t >= w.start && t < w.end) return ms(engine, day, w.start) to ms(engine, day, w.end)
+            if (on(day) && t >= w.start && t < w.end) return ms(engine, day, w.start) to ms(engine, day, w.end)
             return null
         }
-        if (dow in r.days && t >= w.start) return ms(engine, day, w.start) to ms(engine, day.plusDays(1), w.end)
+        if (on(day) && t >= w.start) return ms(engine, day, w.start) to ms(engine, day.plusDays(1), w.end)
         val y = day.minusDays(1)
-        if (y.dayOfWeek.value in r.days && t < w.end) return ms(engine, y, w.start) to ms(engine, day, w.end)
+        if (on(y) && t < w.end) return ms(engine, y, w.start) to ms(engine, day, w.end)
         return null
     }
 
@@ -59,6 +60,27 @@ object Extras {
             val start = ms(engine, sec.startDay, s.start)
             val end = ms(engine, if (s.crossesMidnight) sec.startDay.plusDays(1) else sec.startDay, s.end)
             if (start > endedAt) return KioskNow("section", s.name, s.message ?: def.message, def.screens, end)
+        }
+        return null
+    }
+
+    /** Programdaki "Sınırla": (ad, bitiş ms). Ebeveyn sonradan "kilidi kaldır" (unlock) dediyse o sefer biter. */
+    fun limitNow(rules: Rules, engine: RuleEngine, day: LocalDate, t: LocalTime): Pair<String, Long>? {
+        val unlockedAt = rules.commands.filter { !it.cancelled && it.type == CommandType.UNLOCK }.maxOfOrNull { it.createdAt } ?: 0L
+        for (r in rules.timeRules) {
+            if (r.kind != "limit") continue
+            val (start, end) = ruleSpan(r, engine, day, t) ?: continue
+            if (start > unlockedAt) return r.name to end
+        }
+        return null
+    }
+
+    /** Programdaki "Serbest": o saatte süre ve kurallar işlemez. */
+    fun freeNow(rules: Rules, engine: RuleEngine, day: LocalDate, t: LocalTime): Pair<String, Long>? {
+        for (r in rules.timeRules) {
+            if (r.kind != "free") continue
+            val (_, end) = ruleSpan(r, engine, day, t) ?: continue
+            return r.name to end
         }
         return null
     }

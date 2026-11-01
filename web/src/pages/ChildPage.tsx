@@ -30,6 +30,9 @@ export default function ChildPage() {
         <Link to="/rules/lock" className="btn small">
           🔒 Kilit
         </Link>
+        <Link to="/rules/music" className="btn small">
+          🎵 Müzik
+        </Link>
         <Link to={`/child/${child.id}/vault`} className="btn small">
           <Icon name="key" size={16} /> Şifreler
         </Link>

@@ -8,6 +8,7 @@ import { timerElapsed, timerRemaining } from "../lib/types";
 import { minutesText, relTime } from "../lib/util";
 import { Ring } from "../components/Ring";
 import { Icon } from "../components/Icon";
+import { Info } from "../components/Info";
 import type { Child } from "../lib/types";
 
 const COLORS = ["#4F7CFF", "#FF7A59", "#2BB673", "#C25BFF"];
@@ -163,11 +164,7 @@ function SeedCard() {
   const [err, setErr] = useState("");
   return (
     <div className="card soft">
-      <h2>Başlangıç kuralları</h2>
-      <p className="muted small">
-        Hafta içi 1 sa 30 dk, hafta sonu 2 sa günlük süre; Ders, Dinlenme ve Uyku durumları; her gece uyku saati. Hepsini
-        sonradan değiştirebilirsin.
-      </p>
+      <h2>Başlangıç kuralları <Info>Hafta içi ve hafta sonu süreleri, temel durumlar ve uyku saati oluşturulur; sonradan değiştirebilirsin.</Info></h2>
       {err && <p className="error">{err}</p>}
       <button
         className="btn primary"

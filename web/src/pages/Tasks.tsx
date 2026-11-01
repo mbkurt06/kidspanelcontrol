@@ -3,7 +3,7 @@ import { DateField } from "../components/DateTime";
 import { Link, useNavigate } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
-import { agendaDateText, dateText, dateTimeText, minutesText, relTime, todayISO } from "../lib/util";
+import { agendaDateText, dateTimeText, minutesText, relTime, todayISO } from "../lib/util";
 import {
   PROOF_LABEL,
   STATUS_LABEL,
@@ -15,6 +15,7 @@ import {
   type TaskTemplate,
 } from "../lib/types";
 import { Icon } from "../components/Icon";
+import { Info } from "../components/Info";
 import { RecordingList } from "../components/RecordingPlayer";
 import { STARTER_TEMPLATES } from "../lib/templates";
 
@@ -162,10 +163,6 @@ export default function Tasks() {
                 {t.child_ids.map(childName).join(", ")}
                 {` · ${dateTimeText(t.created_at)}`}
                 {t.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}
-                {t.assign_mode === "first" ? " · ilk yapan alır" : ""} ·{" "}
-                {t.recurrence === "once" ? `tek sefer${t.due_date ? `, ${dateText(t.due_date)}'e kadar` : ""}` : "tekrarlı"} ·{" "}
-                {PROOF_LABEL[t.proof]}
-                {t.before_after ? " (öncesi/sonrası)" : ""}
                 {!t.active ? " · durduruldu" : ""}
               </div>
             </div>
@@ -176,9 +173,8 @@ export default function Tasks() {
 
       <div className="card">
         <div className="row between">
-          <h2>Şablonlar</h2>
+          <h2>Şablonlar <Info>Sık verilen görevler. Bir şablona dokununca ayarları hazır yeni görev formu açılır.</Info></h2>
         </div>
-        <p className="muted small">Sık verilen görevler. Dokununca tüm ayarlarıyla yeni görev formu açılır.</p>
         {templates.map((t) => (
           <div className="app-row" key={t.id}>
             <div className="grow">

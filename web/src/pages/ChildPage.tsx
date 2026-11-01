@@ -7,6 +7,7 @@ import { fromPatch, grantMinutes, insertGrant, nowPatch, sendCommand, type Grant
 import { dateText, hhmm, minutesText, relTime, todayISO } from "../lib/util";
 import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type DayOverride, type Device, type ExtraTarget, type Section, type TimeGrant } from "../lib/types";
 import { Icon } from "../components/Icon";
+import { Info } from "../components/Info";
 import TimerTab from "./TimerTab";
 import { currentSectionFor, suggestGroup, timedPossible } from "../lib/sections";
 
@@ -168,12 +169,8 @@ function ParentModeCard({ childId }: { childId: string }) {
     <div className={`card ${active ? "parent-mode-on" : ""}`}>
       <div className="row gap-s wrap" style={{ alignItems: "center" }}>
         <div className="grow">
-          <h2 style={{ margin: 0 }}>Ebeveyn modu{active ? " açık" : ""}</h2>
-          <p className="muted small" style={{ margin: "4px 0 0" }}>
-            {active
-              ? `${until!.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}'e kadar bütün sınırlamalar kalktı. Süre bitince kurallar kendiliğinden geri gelir.`
-              : "Telefonda sen işlem yaparken bütün sınırlamaları kaldırır: tüm uygulamalar açık, süre sayılmaz, uygulama yükleme, ayarlar ve izinler serbest."}
-          </p>
+          <h2 style={{ margin: 0 }}>Ebeveyn modu{active ? " açık" : ""} <Info>Telefonda işlem yaparken sınırlamaları geçici olarak kaldırır. Süre bitince kurallar geri gelir.</Info></h2>
+          {active && <p className="muted tiny" style={{ margin: "4px 0 0" }}>{until!.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}'e kadar açık.</p>}
         </div>
         {active ? (
           <button className="btn" disabled={busy} onClick={stop}>
@@ -290,27 +287,24 @@ function AppsTab({ childId }: { childId: string }) {
       <input className="search" placeholder="Uygulama ara" value={q} onChange={(e) => setQ(e.target.value)} />
       {pending.length > 0 && (
         <div className="card attention">
-          <h2>Onay bekleyen ({pending.length})</h2>
-          <p className="muted small">
-            Grubunu seç ve onayla. "Kurallara göre" uygulamalar grubunun bölüm kurallarına uyar. Onaylanmayan uygulama kapalı kalır.
-          </p>
+          <h2>Onay bekleyen ({pending.length}) <Info>Grubunu seçip onayla. “Kurallara göre” uygulamalar grubunun bölüm kurallarına uyar.</Info></h2>
           {pending.map((a) => (
-            <div className="app-row wrap" key={a.package}>
-              <div className="grow">
+            <div className="app-setting-row" key={a.package}>
+              <div className="app-setting-name">
                 <b>{a.label}</b>
                 <div className="muted tiny">{a.package}</div>
               </div>
-              {groupSelect(pendingGroup[a.package] ?? fam.members[a.package] ?? suggestedId(a), (v) =>
-                setPendingGroup((m) => ({ ...m, [a.package]: v }))
-              )}
-              <select value="" onChange={(e) => e.target.value && approve(a, e.target.value as Mode3)} aria-label="Onayla">
-                <option value="">Onayla…</option>
-                {(["rules", "always_open", "blocked"] as Mode3[]).map((m) => (
-                  <option key={m} value={m}>
-                    {MODE3_LABEL[m]}
-                  </option>
-                ))}
-              </select>
+              <div className="app-setting-controls">
+                {groupSelect(pendingGroup[a.package] ?? fam.members[a.package] ?? suggestedId(a), (v) =>
+                  setPendingGroup((m) => ({ ...m, [a.package]: v }))
+                )}
+                <select value="" onChange={(e) => e.target.value && approve(a, e.target.value as Mode3)} aria-label="Onayla">
+                  <option value="">Onayla…</option>
+                  {(["rules", "always_open", "blocked"] as Mode3[]).map((m) => (
+                    <option key={m} value={m}>{MODE3_LABEL[m]}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           ))}
         </div>
@@ -324,30 +318,30 @@ function AppsTab({ childId }: { childId: string }) {
               <span className="dot" style={{ background: g.color }} /> {g.name} <span className="muted small">· {list.length}</span>
             </h2>
             {list.map((a) => (
-              <div className="app-row wrap" key={a.package}>
-                <div className="grow">
+              <div className="app-setting-row" key={a.package}>
+                <div className="app-setting-name">
                   <b>{a.label}</b>
                   <div className="muted tiny">{a.package}</div>
                 </div>
-                {groupSelect(fam.members[a.package] ?? "", (v) => setGroup(a.package, v))}
-                <select value={mode3(a.app_group)} onChange={(e) => update(a, { app_group: fromMode3(e.target.value as Mode3) })} aria-label="Durum">
-                  {(["rules", "always_open", "blocked"] as Mode3[]).map((m) => (
-                    <option key={m} value={m}>
-                      {MODE3_LABEL[m]}
-                    </option>
-                  ))}
-                </select>
-                {mode3(a.app_group) === "rules" && (
-                  <input
-                    className="mini"
-                    type="number"
-                    min={0}
-                    placeholder="gün dk"
-                    value={a.daily_limit_minutes ?? ""}
-                    onChange={(e) => update(a, { daily_limit_minutes: e.target.value === "" ? null : Number(e.target.value) })}
-                    aria-label="Bu uygulama için günlük üst sınır (dakika)"
-                  />
-                )}
+                <div className="app-setting-controls">
+                  {groupSelect(fam.members[a.package] ?? "", (v) => setGroup(a.package, v))}
+                  <select value={mode3(a.app_group)} onChange={(e) => update(a, { app_group: fromMode3(e.target.value as Mode3) })} aria-label="Durum">
+                    {(["rules", "always_open", "blocked"] as Mode3[]).map((m) => (
+                      <option key={m} value={m}>{MODE3_LABEL[m]}</option>
+                    ))}
+                  </select>
+                  {mode3(a.app_group) === "rules" ? (
+                    <input
+                      className="mini"
+                      type="number"
+                      min={0}
+                      placeholder="gün dk"
+                      value={a.daily_limit_minutes ?? ""}
+                      onChange={(e) => update(a, { daily_limit_minutes: e.target.value === "" ? null : Number(e.target.value) })}
+                      aria-label="Bu uygulama için günlük üst sınır (dakika)"
+                    />
+                  ) : <span />}
+                </div>
               </div>
             ))}
           </div>
@@ -432,8 +426,7 @@ function ProgramTab({ childId }: { childId: string }) {
     <div className="stack">
       {err && <p className="error">{err}</p>}
       <div className="card">
-        <h2>Haftalık program</h2>
-        <p className="muted small">Her gün için bir gün tipi seç. Gün tiplerini (bölümler ve kurallar) Kurallar sekmesinden düzenleyebilirsin.</p>
+        <h2>Haftalık program <Info>Her gün için bir gün tipi seç. Gün tiplerini Kurallar sekmesinden düzenleyebilirsin.</Info></h2>
         {WEEKDAYS_LONG.map((d, i) => (
           <div className="app-row" key={d}>
             <span className="grow">{d}</span>
@@ -450,8 +443,7 @@ function ProgramTab({ childId }: { childId: string }) {
       </div>
 
       <div className="card">
-        <h2>Durumu şimdi başlat</h2>
-        <p className="muted small">Örneğin "Oyun zamanı"nı programı beklemeden şimdi açabilirsin.</p>
+        <h2>Durumu şimdi başlat <Info>Bir durumu programa bağlı kalmadan geçici olarak başlatır.</Info></h2>
         <div className="row gap-s wrap">
           <select value={modeId} onChange={(e) => setModeId(e.target.value)} className="grow">
             <option value="">Durum seç</option>
@@ -491,8 +483,7 @@ function ProgramTab({ childId }: { childId: string }) {
       </div>
 
       <div className="card">
-        <h2>Gün istisnaları</h2>
-        <p className="muted small">Tek bir gün için başka profil veya farklı günlük süre (örneğin bayram günü 3 saat).</p>
+        <h2>Gün istisnaları <Info>Tek bir gün için farklı profil veya günlük süre belirler.</Info></h2>
         {overrides.map((o) => (
           <div className="app-row" key={o.id}>
             <div className="grow">
@@ -802,8 +793,7 @@ function TimeTab({ childId }: { childId: string }) {
       </div>
 
       <div className="card">
-        <h2>Çocuğun cüzdanı</h2>
-        <p className="muted small">Cüzdandaki süreyi çocuk kendisi "bugün kullan" diyerek açabilir; sadece izin verilen (açık) saatlerde kullanılır.</p>
+          <h2>Çocuğun cüzdanı <Info>Çocuk bu süreyi kendisi açabilir; yalnızca izin verilen saatlerde kullanılır.</Info></h2>
         {!wallet.length && <p className="muted small">Cüzdanda süre yok.</p>}
         {wallet.length > 0 && (
           <p>
@@ -822,8 +812,7 @@ function TimeTab({ childId }: { childId: string }) {
       </div>
 
       <div className="card">
-        <h2>Süre kasası</h2>
-        <p className="muted small">Kasadaki süreyi çocuk kendisi kullanamaz. "Şimdi ver" ile hemen açarsın ya da bir güne / bölüme / saate planlarsın; istersen bir kısmını.</p>
+        <h2>Süre kasası <Info>Bu süreyi çocuk kendisi kullanamaz. Hemen verebilir veya ileriye planlayabilirsin.</Info></h2>
         {!vault.length && <p className="muted small">Kasada süre yok.</p>}
         {vault.length > 0 && (
           <p>
@@ -1062,10 +1051,7 @@ function DeviceTab({ childId }: { childId: string }) {
     <div className="stack">
       {err && <p className="error">{err}</p>}
       <div className="card">
-        <h2>Telefonu eşleştir</h2>
-        <p className="muted small">
-          Orbit çocuğun telefonuna kurulunca eşleştirme kodunu ister. Kod 15 dakika geçerli ve tek kullanımlık.
-        </p>
+        <h2>Telefonu eşleştir <Info>Kod 15 dakika geçerli ve tek kullanımlıktır.</Info></h2>
         {code ? (
           <div className="code">{code.slice(0, 4)} {code.slice(4)}</div>
         ) : (
@@ -1077,8 +1063,7 @@ function DeviceTab({ childId }: { childId: string }) {
       <UpdateCard childId={childId} current={devices[0]?.app_version ?? null} />
 
       <div className="card">
-        <h2>Kuralları gönder</h2>
-        <p className="muted small">Telefon kuralları zaten 30 saniyede bir alır; beklemek istemezsen hemen gönderir.</p>
+        <h2>Kuralları gönder <Info>Telefon kuralları normalde 30 saniyede bir alır; burada hemen gönderebilirsin.</Info></h2>
         <button
           className="btn ghost"
           onClick={async () => {

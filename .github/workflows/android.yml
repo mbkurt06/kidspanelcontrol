@@ -87,6 +87,7 @@ jobs:
               json.dump({"version": version, "url": "https://orbit-panel-nu.vercel.app/kurulum/orbit.apk"}, f, separators=(",", ":"))
               f.write("\n")
           PY
+          cd ..
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add web/public/kurulum/orbit.apk web/public/kurulum/version.json

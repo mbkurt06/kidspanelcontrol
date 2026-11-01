@@ -145,9 +145,6 @@ data class Command(
     /** Tam kilit: çocuğa mesaj ve açık Orbit ekranları (null = varsayılan) */
     val message: String? = null,
     val screens: Set<String>? = null,
-    /** Geçerlilik aralığı (ör. tatil); null = sınırsız */
-    val startDate: java.time.LocalDate? = null,
-    val endDate: java.time.LocalDate? = null,
 )
 
 /** Sunucudan alınan kuralların tamamı (telefonda saklanır, internet yokken de kullanılır). */
@@ -203,12 +200,15 @@ data class KioskSettings(
 data class TimeRule(
     val id: String,
     val name: String,
-    /** kiosk | music_off | music_on */
+    /** kiosk | limit | free | music_off | music_on */
     val kind: String,
     val days: Set<Int>,
     val window: TimeWindow,
     val message: String? = null,
     val screens: Set<String>? = null,
+    /** Geçerlilik aralığı (ör. tatil); null = sınırsız */
+    val startDate: java.time.LocalDate? = null,
+    val endDate: java.time.LocalDate? = null,
 )
 
 /** Telefonda gün boyunca tutulan sayaçlar (saniye). Gece yarısı sıfırlanır. */

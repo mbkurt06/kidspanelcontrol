@@ -164,6 +164,8 @@ data class Rules(
     val groupLimits: Map<String, Map<String, Int>> = emptyMap(),
     /** Çalışan sayacın odak profili */
     val focus: Focus? = null,
+    /** Çocuğun cüzdandan günde en fazla kullanabileceği dakika (null = sınır yok) */
+    val walletDailyMax: Int? = null,
 )
 
 /** Telefonda gün boyunca tutulan sayaçlar (saniye). Gece yarısı sıfırlanır. */

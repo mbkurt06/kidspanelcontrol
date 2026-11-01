@@ -62,6 +62,8 @@ data class Snapshot(
     val capLeftSeconds: Long? = null,
     /** Bölümde açık ya da süreli hiçbir şey yok (Uyku / Kapalı gibi) */
     val sectionClosed: Boolean = false,
+    /** Açık bölümde geçerli saat aralıklı süreler: kullanım bu sayaçlara da yazılır */
+    val windowBuckets: List<String> = emptyList(),
 )
 
 /** "Sınırsız" kalan süre (bölüm süresi ve günlük sınır yok) */
@@ -196,16 +198,31 @@ class RuleEngine(private val rules: Rules) {
 
     // --- Bölümler ---
 
-    /** Şu anki bölüm: bugünün bölümleri önce; yoksa dünden taşan (gece yarısını geçen) bölüm. */
-    /** Ebeveynin belirli saat aralığına verdiği ekstra süre o an geçerliyse, o aralık sanal bir bölüm olur. */
-    fun windowSection(day: LocalDate, t: LocalTime): SectionNow? {
-        val g = rules.grants.firstOrNull { !it.vault && it.validOn == day && it.window?.contains(t) == true } ?: return null
+    /** Saat aralıklı ekstra süre, sanal bir bölüm olarak (bölüm kapalıyken o aralıkta telefon açılır). */
+    private fun windowAsSection(g: Grant, day: LocalDate): SectionNow {
         val w = g.window!!
         val sec = Section(
             "grant:${g.id}", profileFor(day).id, g.note?.takeIf { it.isNotBlank() } ?: "Ekstra süre",
             w.start, w.end, g.minutes, false, SecRule.TIMED, 0, "🎁", "Ebeveynin verdiği ekstra süre",
         )
         return SectionNow(sec, day, w.end)
+    }
+
+    /** Bölümde süreli uygulama kullanılabilir mi */
+    fun timedPossible(sec: Section): Boolean =
+        sec.defaultRule == SecRule.TIMED || rules.sectionRules.any { it.sectionId == sec.id && it.rule == SecRule.TIMED }
+
+    /** Şu an geçerli saat aralıklı süreler */
+    fun activeWindows(day: LocalDate, t: LocalTime): List<Grant> = dayWindows(day).filter { it.window!!.contains(t) }
+
+    /**
+     * Saat aralığı sanal bölümü: sadece o an normal bölüm kapalıysa (süreli kullanım yoksa).
+     * Açık bölümde aralık süresi bölümün kalanına eklenir (bkz. sectionSnapshot).
+     */
+    fun windowSection(day: LocalDate, t: LocalTime): SectionNow? {
+        val reg = regularSection(day, t)
+        if (reg != null && timedPossible(reg.section)) return null
+        return activeWindows(day, t).firstOrNull()?.let { windowAsSection(it, day) }
     }
 
     /** Bugünün bölümleri (saat sırasıyla) — çocuğun "Günüm" ekranı için. */
@@ -215,8 +232,10 @@ class RuleEngine(private val rules: Rules) {
     /** Bugün için saat aralıklı ekstra süreler. */
     fun dayWindows(day: LocalDate): List<Grant> = rules.grants.filter { !it.vault && it.validOn == day && it.window != null }
 
-    fun currentSection(day: LocalDate, t: LocalTime): SectionNow? {
-        windowSection(day, t)?.let { return it }
+    fun currentSection(day: LocalDate, t: LocalTime): SectionNow? = windowSection(day, t) ?: regularSection(day, t)
+
+    /** Şu anki bölüm: bugünün bölümleri önce; yoksa dünden taşan (gece yarısını geçen) bölüm. */
+    fun regularSection(day: LocalDate, t: LocalTime): SectionNow? {
         val today = profileFor(day).id
         val todays = rules.sections.filter { it.profileId == today }
         todays.firstOrNull { !it.crossesMidnight && t >= it.start && t < it.end }?.let { return SectionNow(it, day, it.end) }
@@ -248,6 +267,16 @@ class RuleEngine(private val rules: Rules) {
             .sumOf { it.minutes ?: 0 }
         // Havuz: bölümü olmayan (ya da bugün olmayan bir bölüme verilmiş) süreler + cüzdandan bugün kullanılanlar + düzeltmeler
         val poolMin = dayGrants.filter { it.activatedOn == day || it.sectionId == null || it.sectionId !in todayIds }.sumOf { it.minutes } + adjust
+        // Saat aralıklı süreler: açık bölümdeyken o anki kalana eklenir; aralık bitince kullanılmayan kısım düşer
+        val virtualWin = cur?.section?.id?.startsWith("grant:") == true
+        val overlay = if (virtualWin || cur == null || !timedPossible(cur.section)) emptyList() else activeWindows(day, t)
+        var winCredit = 0L
+        for (g in dayWindows(day)) {
+            val sv = bucket(usage, "s:grant:${g.id}@$day")
+            val w = bucket(usage, "w:${g.id}")
+            val avail = (g.minutes * 60L - sv).coerceAtLeast(0)
+            winCredit += if (g in overlay) avail else minOf(w, avail)
+        }
         val allExtra = dayGrants.sumOf { it.minutes } + adjust + dayWindows(day).sumOf { it.minutes }
 
         // Bölüm zinciri: sırayla etkin süre, devreden, havuzdan taşan
@@ -268,18 +297,21 @@ class RuleEngine(private val rules: Rules) {
             if (cur?.key == key) { curLeft = left; curEff = eff }
             carry = if (sec.carryOver) left else 0
         }
-        // Dünden taşan gece bölümü: kendi süresi (devretme yok)
-        if (cur != null && cur.section.id !in todayIds && cur.section.budgetMinutes != null) {
+        if (virtualWin) {
+            val gid = cur!!.section.id.removePrefix("grant:")
+            curEff = cur.section.budgetMinutes!! * 60L
+            curLeft = (curEff - bucket(usage, "s:${cur.key}") - bucket(usage, "w:$gid")).coerceAtLeast(0)
+        } else if (cur != null && cur.section.id !in todayIds && cur.section.budgetMinutes != null) {
+            // Dünden taşan gece bölümü: kendi süresi (devretme yok)
             val eff = cur.section.budgetMinutes * 60L
             val used = bucket(usage, "s:${cur.key}")
             poolUsed += (used - eff).coerceAtLeast(0)
             curLeft = (eff - used).coerceAtLeast(0); curEff = eff
         }
-        val poolLeft = (poolMin * 60L - poolUsed).coerceAtLeast(0)
+        val poolLeft = if (virtualWin) 0L else (poolMin * 60L + winCredit - poolUsed).coerceAtLeast(0)
         val capLeft = profile.maxTotalMinutes?.let { ((it + allExtra) * 60L - usage.countedSeconds).coerceAtLeast(0) }
         // Bölümde süreli hiçbir şey yoksa (ör. "Kapalı" / "Uyku") kalan süre 0 gösterilir
-        val timedPossible = cur != null && (cur.section.defaultRule == SecRule.TIMED ||
-            rules.sectionRules.any { it.sectionId == cur.section.id && it.rule == SecRule.TIMED })
+        val timedPossible = cur != null && timedPossible(cur.section)
         val sectionPart = if (!timedPossible) 0L else (curLeft ?: UNLIMITED_SECONDS)
         var remaining = if (!timedPossible) 0L else (sectionPart + poolLeft).coerceAtMost(UNLIMITED_SECONDS)
         if (capLeft != null) remaining = minOf(remaining, capLeft)
@@ -298,6 +330,7 @@ class RuleEngine(private val rules: Rules) {
             sectionMode = true, section = cur, sectionLeftSeconds = curLeft, poolLeftSeconds = poolLeft, capLeftSeconds = capLeft,
             sectionClosed = cur != null && !timedPossible && cur.section.defaultRule == SecRule.BLOCKED &&
                 rules.sectionRules.none { it.sectionId == cur.section.id && it.rule == SecRule.OPEN },
+            windowBuckets = overlay.map { "w:${it.id}" },
         )
     }
 
@@ -327,6 +360,7 @@ class RuleEngine(private val rules: Rules) {
                 }
                 app.dailyLimitMinutes?.let { if ((usage.perAppCounted[pkg] ?: 0) >= it * 60L) return AppVerdict(false, "Bu uygulamanın günlük sınırı doldu") }
                 val b = mutableListOf("s:$k", "sa:$k|$pkg")
+                b += s.windowBuckets
                 if (grp != null) { b += "g:$grp"; b += "sg:$k|$grp" }
                 AppVerdict(true, countsDaily = true, buckets = b)
             }

@@ -110,10 +110,10 @@ function ChildCard({ child }: { child: Child }) {
             <Icon name="lock" size={18} /> Şimdi kilitle
           </button>
         )}
-        <button className="btn" disabled={!!busy} onClick={() => run("15", () => quickGrant(child, 15, fam.sections), (r) => `+15 dk ${r} verildi`)}>
+        <button className="btn" disabled={!!busy} onClick={() => run("15", () => quickGrant(child, 15, fam), (r) => `+15 dk verildi (${r})`)}>
           +15 dk
         </button>
-        <button className="btn" disabled={!!busy} onClick={() => run("30", () => quickGrant(child, 30, fam.sections), (r) => `+30 dk ${r} verildi`)}>
+        <button className="btn" disabled={!!busy} onClick={() => run("30", () => quickGrant(child, 30, fam), (r) => `+30 dk verildi (${r})`)}>
           +30 dk
         </button>
       </div>

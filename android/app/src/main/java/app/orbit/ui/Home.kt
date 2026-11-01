@@ -5,6 +5,7 @@ import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -414,22 +415,45 @@ private fun WalletScreen() {
     val vaultMin = rules.grants.filter { it.vault }.sumOf { it.minutes }
     val today = rules.grants.filter { !it.vault && (it.validOn == s.day || it.activatedOn == s.day) }
 
+    val walletTotal = s.walletGrants.sumOf { it.minutes }
+    val usedToday = rules.grants.filter { it.activatedOn == s.day }.sumOf { it.minutes }
+    val limitLeft = rules.walletDailyMax?.let { (it - usedToday).coerceAtLeast(0) }
+    val maxUse = minOf(walletTotal, limitLeft ?: walletTotal)
+    var busy by remember { mutableStateOf(false) }
     Card {
         Title("Cüzdanım")
-        if (s.walletGrants.isEmpty()) Muted("Cüzdanında süre yok. Görevlerini yaparak süre kazanabilirsin.")
-        for (g in s.walletGrants) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(minutesText(g.minutes.toLong()), color = C.text, fontWeight = FontWeight.SemiBold)
-                    Muted(listOfNotNull(g.note, g.expiresOn?.let { "son gün $it" }).joinToString(" · "), 12)
-                }
-                Button(onClick = {
-                    scope.launch {
-                        val ok = withContext(Dispatchers.IO) { Sync.activateGrant(g.id, s.day.toString()) }
-                        msg = if (ok) "Süre bugüne eklendi" else "İnternet gerekli"
-                        Live.syncRequested = true
+        if (s.walletGrants.isEmpty()) {
+            Muted("Cüzdanında süre yok. Görevlerini yaparak süre kazanabilirsin.")
+        } else {
+            Text(minutesText(walletTotal.toLong()), color = C.text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            for (g in s.walletGrants) {
+                Muted("${minutesText(g.minutes.toLong())}" + listOfNotNull(g.note, g.expiresOn?.let { "son gün $it" }).joinToString(" · ", prefix = " · ").removeSuffix(" · "), 12)
+            }
+            rules.walletDailyMax?.let {
+                Muted("Günde en fazla ${minutesText(it.toLong())} kullanabilirsin · bugün kalan ${minutesText((limitLeft ?: 0).toLong())}", 13)
+            }
+            Muted("Bugüne eklenir; izin verilen saatlerde kullanırsın.", 13)
+            if (maxUse > 0) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    for (m in listOf(10, 15, 30).filter { it < maxUse } + maxUse) {
+                        Button(
+                            enabled = !busy,
+                            onClick = {
+                                busy = true
+                                scope.launch {
+                                    val err = withContext(Dispatchers.IO) { Sync.useWallet(m) }
+                                    msg = err ?: "+${minutesText(m.toLong())} bugüne eklendi"
+                                    busy = false
+                                    Live.syncRequested = true
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = C.accent),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        ) { Text("$m dk", fontSize = 13.sp) }
                     }
-                }, colors = ButtonDefaults.buttonColors(containerColor = C.accent)) { Text("Bugün kullan") }
+                }
+            } else if (limitLeft == 0) {
+                Muted("Bugünkü cüzdan sınırın doldu.", 13)
             }
         }
         if (msg.isNotEmpty()) Text(msg, color = C.good)

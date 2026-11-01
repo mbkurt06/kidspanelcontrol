@@ -26,9 +26,10 @@ object Sync {
             val fam = Api.get("families?select=timezone&limit=1")
             val tz = fam.optJSONObject(0)?.optString("timezone") ?: "Europe/Berlin"
             val today = java.time.LocalDate.now(java.time.ZoneId.of(tz)).toString()
-            val kid = Api.get("children?select=name&id=eq.$child")
+            val kid = runCatching { Api.get("children?select=name,wallet_daily_max&id=eq.$child") }.getOrElse { Api.get("children?select=name&id=eq.$child") }
             val bundle = JSONObject()
                 .put("timezone", fam.optJSONObject(0)?.optString("timezone") ?: "Europe/Berlin")
+                .put("wallet_daily_max", kid.optJSONObject(0)?.takeIf { it.has("wallet_daily_max") && !it.isNull("wallet_daily_max") }?.optInt("wallet_daily_max") ?: JSONObject.NULL)
                 .put("apps", Api.get("child_apps?child_id=eq.$child&select=package,label,app_group,approved,daily_limit_minutes"))
                 .put("profiles", Api.get("rule_profiles?select=*"))
                 .put("modes", Api.get("modes?select=*"))
@@ -141,8 +142,20 @@ object Sync {
         Api.rpc("device_submit_run", JSONObject().put("p_run", runId))
     }
 
-    fun activateGrant(id: String, day: String): Boolean =
-        runCatching { Api.patch("time_grants?id=eq.$id&activated_on=is.null", JSONObject().put("activated_on", day)); true }.getOrDefault(false)
+    /** Cüzdandan bugün kullan. Başarılıysa null, değilse çocuğa gösterilecek hata. */
+    fun useWallet(minutes: Int): String? = runCatching {
+        Api.rpc("device_use_wallet", JSONObject().put("p_minutes", minutes)); null
+    }.getOrElse { e ->
+        val m = e.message ?: ""
+        when {
+            "wallet_limit" in m -> {
+                val left = Regex("wallet_limit:(\\d+)").find(m)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                if (left > 0) "Bugün cüzdandan en fazla $left dk daha kullanabilirsin" else "Bugünkü cüzdan sınırın doldu"
+            }
+            "wallet_empty" in m -> "Cüzdanında süre yok"
+            else -> "İnternet gerekli"
+        }
+    }
 
     fun event(type: String, payload: JSONObject = JSONObject()): Boolean {
         val c = Store.creds ?: return false

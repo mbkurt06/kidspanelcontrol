@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 import { todayISO } from "./util";
-import type { Section } from "./types";
+import type { Section, SectionRule } from "./types";
 
 /** "HH:MM" → dakika */
 export function mins(t: string) {
@@ -26,8 +26,13 @@ export function sectionContains(s: Section, m: number) {
 
 /** Çocuğun bugünkü gün tipi (gün değişikliği varsa o). */
 export async function todayProfileId(childId: string): Promise<string | null> {
-  const today = todayISO();
-  const { weekday } = nowBerlin();
+  return profileIdOn(childId, todayISO(), nowBerlin().weekday);
+}
+
+/** Çocuğun belirli bir gündeki gün tipi. */
+export async function profileIdOn(childId: string, day: string, weekdayHint?: number): Promise<string | null> {
+  const today = day;
+  const weekday = weekdayHint ?? (new Date(`${day}T12:00:00Z`).getUTCDay() || 7);
   const [{ data: ov }, { data: as }] = await Promise.all([
     supabase.from("day_overrides").select("profile_id").eq("child_id", childId).eq("day", today).maybeSingle(),
     supabase.from("profile_assignments").select("profile_id").eq("child_id", childId).eq("weekday", weekday).maybeSingle(),
@@ -42,6 +47,16 @@ export async function currentSectionFor(childId: string, sections: Section[]): P
   const { minute } = nowBerlin();
   const list = sections.filter((s) => s.profile_id === pid);
   return list.find((s) => mins(s.start_time) < mins(s.end_time) && sectionContains(s, minute)) ?? list.find((s) => sectionContains(s, minute)) ?? null;
+}
+
+/** Bölümde süreli uygulama kullanılabilir mi (telefon "açık" sayılır mı). */
+export function timedPossible(s: Section, rules: SectionRule[]) {
+  return s.default_rule === "timed" || rules.some((r) => r.section_id === s.id && r.rule === "timed");
+}
+
+/** dakika → "HH:MM" */
+export function hm(m: number) {
+  return fmt(Math.max(0, Math.min(1439, m)));
 }
 
 /** Bölümler arasında boşluk ve çakışma kontrolü (uyarı metinleri). */

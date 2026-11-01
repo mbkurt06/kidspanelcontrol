@@ -2,8 +2,8 @@ export type AppGroup = "always_open" | "unlimited" | "timed" | "blocked";
 
 export type Window = { start: string; end: string };
 
-export type ExtraTarget = "current" | "pool" | "wallet";
-export type Child = { id: string; family_id: string; name: string; color: string; sort_order: number; extra_default: ExtraTarget; timer_defaults?: { allow_stop: "no" | "yes" | "notify"; pause_mode: "none" | "limit" | "child"; pause_max_minutes: number | null; focus_change: "no" | "stricter" | "free" } };
+export type ExtraTarget = "now" | "current" | "pool" | "wallet";
+export type Child = { id: string; family_id: string; name: string; color: string; sort_order: number; extra_default: ExtraTarget; wallet_daily_max?: number | null; timer_defaults?: { allow_stop: "no" | "yes" | "notify"; pause_mode: "none" | "limit" | "child"; pause_max_minutes: number | null; focus_change: "no" | "stricter" | "free" } };
 
 export type ChildApp = {
   child_id: string;

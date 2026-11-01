@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
-import { currentSectionFor } from "./sections";
-import type { Child, Section } from "./types";
+import { currentSectionFor, hm, mins, nowBerlin, profileIdOn, sectionContains, timedPossible } from "./sections";
+import type { Child, Section, SectionRule } from "./types";
 import { todayISO } from "./util";
 
 export async function sendCommand(childId: string, type: string, payload: Record<string, unknown> = {}, untilAt: string | null = null) {
@@ -44,13 +44,81 @@ export async function grantMinutes(
   if (error) throw error;
 }
 
-/** Hızlı ekstra süre: çocuğun varsayılan yerine (şu anki bölüm / gün boyu / cüzdan). Nereye gittiğini döner. */
-export async function quickGrant(child: Child, minutes: number, sections: Section[]): Promise<string> {
+type FamLike = { sections: Section[]; sectionRules: SectionRule[] };
+export type GrantPatch = { valid_on: string | null; section_id: string | null; vault: boolean; window_start: string | null; window_end: string | null };
+
+/**
+ * "Hemen kullanılsın": telefon şu an açık saatlerdeyse süre o anki bölüme eklenir (kalan süre hemen artar);
+ * kapalı saatlerdeyse şu andan itibaren `minutes` dakikalık bir aralık açılır, bitince telefon yine kapanır.
+ */
+export async function nowPatch(childId: string, minutes: number, fam: FamLike): Promise<{ patch: GrantPatch; text: string }> {
+  const sec = await currentSectionFor(childId, fam.sections);
+  if (sec && timedPossible(sec, fam.sectionRules)) {
+    return { patch: { valid_on: todayISO(), section_id: sec.id, vault: false, window_start: null, window_end: null }, text: `hemen · ${sec.name}` };
+  }
+  const { minute } = nowBerlin();
+  const end = Math.min(minute + minutes, 1439);
+  return {
+    patch: { valid_on: todayISO(), section_id: null, vault: false, window_start: hm(minute), window_end: hm(end > minute ? end : minute + 1) },
+    text: `hemen · ${hm(minute)}–${hm(end)} arası açık`,
+  };
+}
+
+/**
+ * Belirli saatten itibaren: o saatten sonra `minutes` dk; bitiş "open" (açık saatler bitene kadar),
+ * "until" (verilen saate kadar) ya da "eod" (gün sonuna kadar).
+ */
+export async function fromPatch(
+  childId: string,
+  fam: FamLike,
+  day: string,
+  start: string,
+  endMode: "open" | "until" | "eod",
+  until?: string
+): Promise<{ patch: GrantPatch; text: string }> {
+  let end = "23:59";
+  if (endMode === "until") {
+    if (!until || mins(until) <= mins(start)) throw new Error("Bitiş saati başlangıçtan sonra olmalı.");
+    end = until;
+  } else if (endMode === "open") {
+    const pid = await profileIdOn(childId, day);
+    const sec = fam.sections.find((x) => x.profile_id === pid && sectionContains(x, mins(start)) && timedPossible(x, fam.sectionRules));
+    if (!sec) throw new Error("Bu saatte telefon açık değil. Bitiş için bir saat seç.");
+    end = mins(sec.end_time) > mins(start) ? sec.end_time.slice(0, 5) : "23:59";
+  }
+  return {
+    patch: { valid_on: day, section_id: null, vault: false, window_start: start, window_end: end },
+    text: `${start}–${end} arası`,
+  };
+}
+
+/** Yeni süre ekle (hazır hedefle). */
+export async function insertGrant(childId: string, minutes: number, patch: GrantPatch, note?: string, expiresOn?: string | null) {
+  const { data: u } = await supabase.auth.getUser();
+  const { error } = await supabase.from("time_grants").insert({
+    child_id: childId,
+    minutes,
+    note: note || null,
+    expires_on: expiresOn ?? null,
+    source: "manual",
+    created_by: u.user?.id,
+    ...patch,
+  });
+  if (error) throw error;
+}
+
+/** Hızlı ekstra süre: çocuğun varsayılan yerine (hemen / şu anki bölüm / gün boyu / cüzdan). Nereye gittiğini döner. */
+export async function quickGrant(child: Child, minutes: number, fam: FamLike): Promise<string> {
   if (child.extra_default === "wallet") {
     await grantMinutes(child.id, minutes, { validOn: null });
     return "cüzdana";
   }
-  const sec = child.extra_default === "current" ? await currentSectionFor(child.id, sections) : null;
+  if (child.extra_default === "now") {
+    const { patch, text } = await nowPatch(child.id, minutes, fam);
+    await insertGrant(child.id, minutes, patch);
+    return text;
+  }
+  const sec = child.extra_default === "current" ? await currentSectionFor(child.id, fam.sections) : null;
   await grantMinutes(child.id, minutes, { sectionId: sec?.id ?? null });
   return sec ? `${sec.name} bölümüne` : "bugüne (gün boyu)";
 }

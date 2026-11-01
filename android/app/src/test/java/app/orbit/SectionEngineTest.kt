@@ -228,6 +228,27 @@ class SectionEngineTest {
     }
 
     @Test
+    fun timeWindowInOpenSectionAddsToRemainingAndLapsesAfter() {
+        val w = Grant("w2", 20, day, null, null, null, null, window = app.orbit.engine.TimeWindow(t("16:30"), t("17:30")))
+        val e = RuleEngine(rules(grants = listOf(w)))
+        var u = use(e, DayUsage(day), "com.insta", at(16, 0), 50)
+        // Aralıktan önce: sadece bölümden kalan 10 dk
+        assertEquals(10 * 60L, e.snapshot(at(16, 20), u).remainingSeconds)
+        // Aralıkta: 10 + 20 = 30 dk, hâlâ Serbest bölümü
+        val s = e.snapshot(at(16, 40), u)
+        assertEquals("Serbest", s.section?.section?.name)
+        assertEquals(30 * 60L, s.remainingSeconds)
+        // Aralıkta 25 dk kullan: önce aralık süresi (20), sonra bölüm (5)
+        u = use(e, u, "com.insta", at(16, 40), 25)
+        assertEquals(5 * 60L, e.snapshot(at(17, 10), u).remainingSeconds)
+        // Aralık bitti: bölümden kalan 5 dk aynen durur
+        assertEquals(5 * 60L, e.snapshot(at(17, 45), u).remainingSeconds)
+        // Aralıkta hiç kullanılmazsa süre düşer
+        val u2 = use(e, DayUsage(day), "com.insta", at(16, 0), 50)
+        assertEquals(10 * 60L, e.snapshot(at(17, 45), u2).remainingSeconds)
+    }
+
+    @Test
     fun focusOnlyRestrictsFurther() {
         val e = RuleEngine(rules().copy(focus = app.orbit.engine.Focus("Ders", setOf("g-video"), setOf("com.wa"))))
         // Serbest bölümünde: Video grubu ve WhatsApp açık kalır, diğerleri odak yüzünden kapanır

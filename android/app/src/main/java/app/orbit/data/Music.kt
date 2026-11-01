@@ -117,6 +117,30 @@ object Music {
         }.onFailure { Log.w(TAG, "klasörler gönderilemedi", it) }
     }
 
+    /** Metadata sync only. Keep removed songs as missing so the child can remove them from playlists. */
+    fun syncCatalog(list: List<Track>) {
+        val child = Store.creds?.childId ?: return
+        runCatching {
+            val existing = Api.get("music_meta?child_id=eq.$child&select=track_key,missing")
+            val seen = list.map { it.id.toString() }.toSet()
+            for (track in list) {
+                val key = track.id.toString()
+                val body = JSONObject().put("child_id", child).put("track_key", key)
+                    .put("title", track.title).put("file_name", track.fileName)
+                    .put("relative_path", track.folder).put("duration_ms", track.durationMs)
+                    .put("missing", false).put("last_seen_at", java.time.Instant.now().toString())
+                Api.post("music_meta?on_conflict=child_id,track_key", body, upsert = true)
+            }
+            for (i in 0 until existing.length()) {
+                val row = existing.getJSONObject(i)
+                val key = row.optString("track_key")
+                if (key !in seen && !row.optBoolean("missing")) {
+                    Api.patch("music_meta?child_id=eq.$child&track_key=eq.$key", JSONObject().put("missing", true))
+                }
+            }
+        }.onFailure { Log.w(TAG, "Müzik kataloğu eşitlenemedi", it) }
+    }
+
     /** Rename the actual file; ID3 tags are not changed. */
     fun rename(ctx: Context, track: Track, newName: String): Boolean {
         val base = newName.trim()

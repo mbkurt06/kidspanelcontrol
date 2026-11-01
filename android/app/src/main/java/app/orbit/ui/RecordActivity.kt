@@ -70,7 +70,7 @@ class RecordActivity : ComponentActivity() {
         setContent { OrbitTheme { Screen(runId) } }
     }
 
-    private fun setDim(on: Boolean) {
+    private fun applyDim(on: Boolean) {
         dim = on
         window.attributes = window.attributes.apply { screenBrightness = if (on) 0.02f else WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE }
     }
@@ -82,7 +82,7 @@ class RecordActivity : ComponentActivity() {
         val s = state?.takeIf { it.runId == runId || runId == null }
         Column(
             Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding()
-                .clickable(enabled = s?.status == "recording") { setDim(!dim) },
+                .clickable(enabled = s?.status == "recording") { applyDim(!dim) },
         ) {
             when {
                 s != null && s.active -> Recording()

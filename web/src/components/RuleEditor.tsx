@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { DateField, TimeField } from "./DateTime";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { hhmm, todayISO } from "../lib/util";
@@ -156,9 +157,9 @@ export function RuleCard({ r, kinds, open, onToggle, onErr }: { r: TimeRule; kin
           </div>
           <p className="muted tiny">{RULE_KIND[r.kind].hint}</p>
           <div className="row gap-s" style={{ alignItems: "center" }}>
-            <input type="time" defaultValue={hhmm(r.start_time)} key={`s${r.start_time}`} onBlur={(e) => e.target.value && e.target.value !== hhmm(r.start_time) && patch({ start_time: e.target.value })} aria-label="Başlangıç" />
+            <TimeField value={hhmm(r.start_time)} onCommit={(v) => v && v !== hhmm(r.start_time) && patch({ start_time: v })} label="Başlangıç" />
             <span className="muted">–</span>
-            <input type="time" defaultValue={hhmm(r.end_time)} key={`e${r.end_time}`} onBlur={(e) => e.target.value && e.target.value !== hhmm(r.end_time) && patch({ end_time: e.target.value })} aria-label="Bitiş" />
+            <TimeField value={hhmm(r.end_time)} onCommit={(v) => v && v !== hhmm(r.end_time) && patch({ end_time: v })} label="Bitiş" />
             {mins(r.end_time) <= mins(r.start_time) && <span className="muted tiny">ertesi gün biter</span>}
           </div>
           <label className="field">
@@ -173,17 +174,17 @@ export function RuleCard({ r, kinds, open, onToggle, onErr }: { r: TimeRule; kin
           </label>
           {rep === "days" && <DayPicker value={r.days} onChange={(d) => patch({ days: d })} />}
           {rep === "once" ? (
-            <input type="date" value={r.start_date ?? ""} onChange={(e) => e.target.value && patch({ start_date: e.target.value, end_date: e.target.value })} aria-label="Gün" />
+            <DateField value={r.start_date ?? ""} onChange={(v) => v && patch({ start_date: v, end_date: v })} label="Gün" />
           ) : (
             <div className="grid2">
-              <label className="field">
+              <div className="field">
                 <span>Başlangıç tarihi (isteğe bağlı)</span>
-                <input type="date" value={r.start_date ?? ""} onChange={(e) => patch({ start_date: e.target.value || null })} />
-              </label>
-              <label className="field">
+                <DateField clearable value={r.start_date ?? ""} onChange={(v) => patch({ start_date: v || null })} placeholder="Yok" />
+              </div>
+              <div className="field">
                 <span>Bitiş tarihi (isteğe bağlı)</span>
-                <input type="date" value={r.end_date ?? ""} onChange={(e) => patch({ end_date: e.target.value || null })} />
-              </label>
+                <DateField clearable value={r.end_date ?? ""} onChange={(v) => patch({ end_date: v || null })} placeholder="Yok" />
+              </div>
             </div>
           )}
           <div className="row gap-xs wrap">

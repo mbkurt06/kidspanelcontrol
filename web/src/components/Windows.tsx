@@ -1,4 +1,5 @@
 import type { Window } from "../lib/types";
+import { TimeField } from "./DateTime";
 import { Icon } from "./Icon";
 
 // Saat aralıkları düzenleyici. Boş liste = gün boyu.
@@ -8,9 +9,9 @@ export function WindowsEditor({ value, onChange, emptyText }: { value: Window[];
       {!value.length && <p className="muted small">{emptyText}</p>}
       {value.map((w, i) => (
         <div className="row gap-s" key={i}>
-          <input type="time" value={w.start} onChange={(e) => onChange(value.map((x, j) => (j === i ? { ...x, start: e.target.value } : x)))} />
+          <TimeField value={w.start} onChange={(v) => onChange(value.map((x, j) => (j === i ? { ...x, start: v } : x)))} />
           <span className="muted">–</span>
-          <input type="time" value={w.end} onChange={(e) => onChange(value.map((x, j) => (j === i ? { ...x, end: e.target.value } : x)))} />
+          <TimeField value={w.end} onChange={(v) => onChange(value.map((x, j) => (j === i ? { ...x, end: v } : x)))} />
           <button className="icon-btn" aria-label="Sil" onClick={() => onChange(value.filter((_, j) => j !== i))}>
             <Icon name="trash" size={18} />
           </button>

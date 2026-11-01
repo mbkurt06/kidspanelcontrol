@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { TimeField } from "../components/DateTime";
 import { Link } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
@@ -203,7 +204,7 @@ function NowCard({ child, onErr }: { child: Child; onErr: (e: string) => void })
           <option value="until">Saate kadar</option>
           <option value="none">Ben kaldırana kadar</option>
         </select>
-        {dur === "until" && <input type="time" value={until} onChange={(e) => setUntil(e.target.value)} aria-label="Bitiş" />}
+        {dur === "until" && <TimeField value={until} onChange={(v) => setUntil(v)} label="Bitiş" />}
       </div>
       <div className="row gap-s wrap">
         <button className="btn primary" onClick={() => go("kiosk")}>

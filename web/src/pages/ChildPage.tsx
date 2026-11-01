@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { DateField, TimeField } from "../components/DateTime";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
@@ -518,10 +519,10 @@ function ProgramTab({ childId }: { childId: string }) {
           </div>
         ))}
         <div className="grid2">
-          <label className="field">
+          <div className="field">
             <span>Gün</span>
-            <input type="date" value={od.day} onChange={(e) => setOd({ ...od, day: e.target.value })} />
-          </label>
+            <DateField value={od.day} onChange={(v) => setOd({ ...od, day: v })} />
+          </div>
           <label className="field">
             <span>Profil</span>
             <select value={od.profile_id} onChange={(e) => setOd({ ...od, profile_id: e.target.value })}>
@@ -727,7 +728,7 @@ function TimeTab({ childId }: { childId: string }) {
                 <option value="tomorrow">Yarın</option>
               </select>
               <span className="small">saat</span>
-              <input type="time" value={start} onChange={(e) => setStart(e.target.value)} aria-label="Başlangıç" />
+              <TimeField value={start} onChange={(v) => setStart(v)} label="Başlangıç" />
               <span className="small">'den itibaren</span>
             </div>
             <label className="field">
@@ -738,15 +739,15 @@ function TimeTab({ childId }: { childId: string }) {
                 <option value="eod">Gün sonuna kadar</option>
               </select>
             </label>
-            {endMode === "until" && <input type="time" value={until} onChange={(e) => setUntil(e.target.value)} aria-label="Bitiş" />}
+            {endMode === "until" && <TimeField value={until} onChange={(v) => setUntil(v)} label="Bitiş" />}
             <p className="muted tiny">O saat gelince süre çocuğun kalan süresine eklenir. Bitiş saatine kadar kullanmazsa düşer. Kapalı saatlere denk gelirse o aralıkta telefon bu süre kadar açılır.</p>
           </>
         )}
         {when === "date" && (
-          <label className="field">
+          <div className="field">
             <span>Gün</span>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </label>
+            <DateField value={date} onChange={(v) => setDate(v)} />
+          </div>
         )}
         {(when === "today" || when === "tomorrow" || when === "date") && (
           <label className="field">
@@ -763,10 +764,10 @@ function TimeTab({ childId }: { childId: string }) {
           </label>
         )}
         {when === "child" && (
-          <label className="field">
+          <div className="field">
             <span>Son kullanma (isteğe bağlı)</span>
-            <input type="date" value={expires} onChange={(e) => setExpires(e.target.value)} />
-          </label>
+            <DateField clearable value={expires} onChange={(v) => setExpires(v)} placeholder="Son kullanma yok" />
+          </div>
         )}
         <label className="field">
           <span>Not</span>
@@ -1004,11 +1005,11 @@ function PlanSheet({
             </select>
           </label>
         )}
-        {dated && day === "date" && <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />}
+        {dated && day === "date" && <DateField value={date} onChange={(v) => setDate(v)} />}
         {where === "window" && (
           <>
             <div className="row gap-s" style={{ alignItems: "center" }}>
-              <input type="time" value={start} onChange={(e) => setStart(e.target.value)} aria-label="Başlangıç" />
+              <TimeField value={start} onChange={(v) => setStart(v)} label="Başlangıç" />
               <span className="small">'den itibaren</span>
             </div>
             <select value={endMode} onChange={(e) => setEndMode(e.target.value as typeof endMode)} aria-label="Bitiş">
@@ -1016,7 +1017,7 @@ function PlanSheet({
               <option value="until">Belirli saate kadar</option>
               <option value="eod">Gün sonuna kadar</option>
             </select>
-            {endMode === "until" && <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} aria-label="Bitiş saati" />}
+            {endMode === "until" && <TimeField value={end} onChange={(v) => setEnd(v)} label="Bitiş saati" />}
           </>
         )}
         {err && <p className="error">{err}</p>}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { DateField, TimeField } from "../components/DateTime";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
@@ -262,32 +263,32 @@ export default function TaskEdit() {
           <>
             <DayPicker value={f.days} onChange={(d) => set("days", d)} />
             <div className="grid2">
-              <label className="field">
+              <div className="field">
                 <span>Başlangıç</span>
-                <input type="date" value={f.start_date} onChange={(e) => set("start_date", e.target.value)} />
-              </label>
-              <label className="field">
+                <DateField value={f.start_date} onChange={(v) => set("start_date", v)} />
+              </div>
+              <div className="field">
                 <span>Bitiş (isteğe bağlı)</span>
-                <input type="date" value={f.end_date} onChange={(e) => set("end_date", e.target.value)} />
-              </label>
+                <DateField clearable value={f.end_date} onChange={(v) => set("end_date", v)} placeholder="Bitiş yok" />
+              </div>
             </div>
           </>
         ) : (
           <div className="grid2">
-            <label className="field">
+            <div className="field">
               <span>Başlangıç</span>
-              <input type="date" value={f.start_date} onChange={(e) => set("start_date", e.target.value)} />
-            </label>
-            <label className="field">
+              <DateField value={f.start_date} onChange={(v) => set("start_date", v)} />
+            </div>
+            <div className="field">
               <span>Son gün</span>
-              <input type="date" value={f.due_date} onChange={(e) => set("due_date", e.target.value)} />
-            </label>
+              <DateField value={f.due_date} onChange={(v) => set("due_date", v)} />
+            </div>
           </div>
         )}
-        <label className="field">
+        <div className="field">
           <span>Saat (isteğe bağlı, ör. 18:00'e kadar)</span>
-          <input type="time" value={f.due_time} onChange={(e) => set("due_time", e.target.value)} />
-        </label>
+          <TimeField clearable value={f.due_time} onChange={(v) => set("due_time", v)} label="Saat" />
+        </div>
         <label className="check">
           <input type="checkbox" checked={f.mandatory} onChange={(e) => set("mandatory", e.target.checked)} />
           Zorunlu: bu görev yapılmadan süreli uygulamalar açılmasın
@@ -378,10 +379,10 @@ export default function TaskEdit() {
           </label>
         </div>
         {f.reward_validity === "date" && (
-          <label className="field">
+          <div className="field">
             <span>Gün</span>
-            <input type="date" value={f.reward_date} onChange={(e) => set("reward_date", e.target.value)} />
-          </label>
+            <DateField value={f.reward_date} onChange={(v) => set("reward_date", v)} />
+          </div>
         )}
         {f.reward_validity === "vault" && (
           <p className="muted small">Süre çocuğun süre kasasına kaydedilir; çocuk kendisi kullanamaz. Çocuğun Süre sekmesinden istediğin güne, bölüme ya da saat aralığına aktarırsın.</p>

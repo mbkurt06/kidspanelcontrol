@@ -1086,3 +1086,131 @@ select:focus {
 .rule-card.inactive {
   opacity: 0.6;
 }
+
+/* Saat ve tarih seçici */
+.tf {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: nowrap;
+}
+.tf-seg {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--surface2, var(--line));
+  border-radius: 12px;
+  padding: 2px;
+}
+.tf-arrow {
+  background: none;
+  border: 0;
+  color: var(--muted);
+  font-size: 13px;
+  width: 52px;
+  height: 30px;
+  border-radius: 10px;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.tf-arrow:active {
+  background: var(--accent);
+  color: #fff;
+}
+.tf-num {
+  width: 52px;
+  text-align: center;
+  font-size: 24px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  padding: 2px 0;
+}
+.tf-num:focus {
+  outline: 2px solid var(--accent);
+  border-radius: 8px;
+}
+.tf-colon {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.tf-more {
+  background: var(--line);
+  border: 0;
+  color: var(--text);
+  min-width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.tf-big {
+  font-size: 40px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.tf-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+.df {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.df-value {
+  flex: 1;
+  min-height: 44px;
+  text-align: left;
+  background: var(--line);
+  border: 0;
+  border-radius: 12px;
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  padding: 0 12px;
+  cursor: pointer;
+}
+.cal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 4px;
+}
+.cal {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+.cal-wd {
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+  padding: 4px 0;
+}
+.cal-day {
+  aspect-ratio: 1;
+  min-height: 42px;
+  border: 0;
+  border-radius: 12px;
+  background: var(--line);
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
+}
+.cal-day.today {
+  outline: 2px solid var(--accent);
+}
+.cal-day.on {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+}

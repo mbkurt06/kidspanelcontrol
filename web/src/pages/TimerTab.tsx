@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { DateField, TimeField } from "../components/DateTime";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { minutesText, todayISO } from "../lib/util";
@@ -425,7 +426,7 @@ function AlarmsCard({ childId }: { childId: string }) {
               🔔 Hatırlatıcı (bildirim)
             </button>
           </div>
-          <input type="time" value={(edit.at_time ?? "07:00").slice(0, 5)} onChange={(e) => setEdit({ ...edit, at_time: e.target.value })} />
+          <TimeField value={(edit.at_time ?? "07:00").slice(0, 5)} onChange={(v) => setEdit({ ...edit, at_time: v })} />
           <div className="row gap-xs wrap">
             {DAYS.map((n, i) => {
               const d = i + 1;
@@ -438,10 +439,10 @@ function AlarmsCard({ childId }: { childId: string }) {
             })}
           </div>
           {!(edit.days ?? []).length && (
-            <label className="field">
+            <div className="field">
               <span>Tek seferlik: tarih</span>
-              <input type="date" value={edit.on_date ?? todayISO("Europe/Berlin", 1)} onChange={(e) => setEdit({ ...edit, on_date: e.target.value })} />
-            </label>
+              <DateField value={edit.on_date ?? todayISO("Europe/Berlin", 1)} onChange={(v) => setEdit({ ...edit, on_date: v })} />
+            </div>
           )}
           <label className="check">
             <input type="checkbox" checked={!!edit.child_can_edit} onChange={(e) => setEdit({ ...edit, child_can_edit: e.target.checked })} /> {child.name} değiştirebilir

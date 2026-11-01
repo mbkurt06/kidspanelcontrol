@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { DateField } from "../components/DateTime";
 import { Link, useNavigate } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
@@ -344,10 +345,10 @@ function ReviewCard({ run, task, childName, color, onDone }: { run: TaskRun; tas
             </label>
           </div>
           {validity === "date" && (
-            <label className="field">
+            <div className="field">
               <span>Gün</span>
-              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </label>
+              <DateField value={date} onChange={(v) => setDate(v)} />
+            </div>
           )}
           {validity !== "wallet" && validity !== "vault" && Number(minutes) > 0 && (
             <label className="field">

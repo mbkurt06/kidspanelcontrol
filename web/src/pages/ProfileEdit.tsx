@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { TimeField } from "../components/DateTime";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
@@ -86,9 +87,9 @@ function SectionsEditor({ profile, sections }: { profile: Profile; sections: Sec
             </button>
           </div>
           <div className="row gap-s wrap">
-            <input type="time" value={hhmm(s.start_time)} onChange={(e) => e.target.value && patch(s, { start_time: e.target.value })} aria-label="Başlangıç" />
+            <TimeField value={hhmm(s.start_time)} onCommit={(v) => v && patch(s, { start_time: v })} label="Başlangıç" />
             <span className="muted">–</span>
-            <input type="time" value={hhmm(s.end_time)} onChange={(e) => e.target.value && patch(s, { end_time: e.target.value })} aria-label="Bitiş" />
+            <TimeField value={hhmm(s.end_time)} onCommit={(v) => v && patch(s, { end_time: v })} label="Bitiş" />
             <label className="row gap-xs">
               <input
                 className="mini"
@@ -374,9 +375,9 @@ export default function ProfileEdit() {
             ))}
           </select>
           <div className="row gap-s">
-            <input type="time" value={slot.start} onChange={(e) => setSlot({ ...slot, start: e.target.value })} />
+            <TimeField value={slot.start} onChange={(v) => setSlot({ ...slot, start: v })} />
             <span className="muted">–</span>
-            <input type="time" value={slot.end} onChange={(e) => setSlot({ ...slot, end: e.target.value })} />
+            <TimeField value={slot.end} onChange={(v) => setSlot({ ...slot, end: v })} />
           </div>
           <DayPicker value={slot.days} onChange={(d) => setSlot({ ...slot, days: d })} />
           <button className="btn" onClick={addSlot}>

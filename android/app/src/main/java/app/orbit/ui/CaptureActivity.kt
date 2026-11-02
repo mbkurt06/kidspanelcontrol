@@ -104,15 +104,15 @@ class CaptureActivity : ComponentActivity() {
                         AndroidView(factory = { ctx ->
                             PreviewView(ctx).also { previewView = it; bind() }
                         }, modifier = Modifier.fillMaxSize())
-                    if (recordingSecs >= 0) {
+                        if (recordingSecs >= 0) {
                             Text(
                                 "● ${recordingSecs}s / ${MAX_VIDEO_SECONDS}s", color = C.bad, fontWeight = FontWeight.Bold,
                                 modifier = Modifier.align(Alignment.TopCenter).padding(12.dp),
                             )
                         }
-                    }
-                    if (multiPhoto && photos.isNotEmpty()) {
-                        Text("Fotoğraf ${photos.size}/$maxPhotos", color = C.text, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp))
+                        if (multiPhoto && photos.isNotEmpty()) {
+                            Text("Fotoğraf ${photos.size}/$maxPhotos", color = C.text, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp))
+                        }
                     }
                     if (error.isNotEmpty()) Text(error, color = C.bad, modifier = Modifier.padding(12.dp))
                     Controls(media)
@@ -242,7 +242,7 @@ class CaptureActivity : ComponentActivity() {
                     busy = false
                     recording = null
                     val ok = !ev.hasError() || ev.error == VideoRecordEvent.Finalize.ERROR_DURATION_LIMIT_REACHED
-                    if (ok && out.exists() && out.length() > 0) done(out, "video") else error = "Video kaydedilemedi"
+                    if (ok && out.exists() && out.length() > 0) done(listOf(out.absolutePath), "video") else error = "Video kaydedilemedi"
                 }
             }
         }

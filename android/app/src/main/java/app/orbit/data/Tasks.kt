@@ -27,8 +27,6 @@ data class TaskItem(
     val dueDate: String?,
     val createdAt: String?,
     val firstWins: Boolean,
-    val hasBefore: Boolean get() = beforeCount > 0,
-    val hasAfter: Boolean get() = afterCount > 0,
     /** Kamera kaydı: süre (dk); null = kayıt yok */
     val recordMinutes: Int? = null,
     /** back | front | choose */
@@ -41,6 +39,8 @@ data class TaskItem(
     val recStatus: String? = null,
     val recSeconds: Int = 0,
 ) {
+    val hasBefore get() = beforeCount > 0
+    val hasAfter get() = afterCount > 0
     val needsRecording get() = recordMinutes != null
     val recordingDone get() = recStatus == "done"
     val open get() = status in setOf("open", "started", "rejected")

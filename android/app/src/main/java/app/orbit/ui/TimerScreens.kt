@@ -34,6 +34,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -53,6 +55,8 @@ import app.orbit.service.Live
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalTime
@@ -302,18 +306,22 @@ private val DAY_NAMES = listOf("Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz")
 fun AlarmsScreen() {
     val scope = rememberCoroutineScope()
     val live by Live.state.collectAsState()
+    val writeLock = remember { Mutex() }
+    val pendingByAlarm = remember { mutableStateMapOf<String, Long>() }
+    var pendingWrites by remember { mutableIntStateOf(0) }
     var list by remember(live.lastSync) { mutableStateOf(Alarms.list()) }
     var editing by remember { mutableStateOf<AlarmDef?>(null) }
     var creating by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
 
-    fun run(label: String, f: () -> Boolean, onFailure: () -> Unit = {}) {
+    fun run(f: () -> Boolean, onFailure: () -> Unit = {}) {
+        pendingWrites++
         scope.launch {
-            val ok = withContext(Dispatchers.IO) { f() }
+            val ok = writeLock.withLock { withContext(Dispatchers.IO) { f() } }
             if (!ok) onFailure()
             msg = if (ok) "" else "Olmadı (internet ya da izin yok)"
-            if (ok) { editing = null; creating = false }
-            Live.syncRequested = true
+            pendingWrites--
+            if (pendingWrites == 0) Live.syncRequested = true
         }
     }
 
@@ -329,11 +337,14 @@ fun AlarmsScreen() {
         editing = null
         creating = false
         scope.launch {
-            val ok = withContext(Dispatchers.IO) { Alarms.save(current?.id, title, kind, time, days, date, active) }
+            pendingWrites++
+            val ok = writeLock.withLock { withContext(Dispatchers.IO) { Alarms.save(current?.id, title, kind, time, days, date, active) } }
             if (!ok) {
                 list = old
                 msg = "Kaydedilemedi; bağlantıyı kontrol et"
-            } else Live.syncRequested = true
+            }
+            pendingWrites--
+            if (pendingWrites == 0) Live.syncRequested = true
         }
     }
 
@@ -369,9 +380,16 @@ fun AlarmsScreen() {
                     if (a.editable) Switch(
                         checked = a.active,
             onCheckedChange = { on ->
-                val old = list
+                val before = a.active
+                val token = System.nanoTime()
+                pendingByAlarm[a.id] = token
                 list = list.map { if (it.id == a.id) it.copy(active = on) else it }
-                run("", { Alarms.save(a.id, a.title, a.kind, a.time, a.days, a.onDate, on) }) { list = old }
+                run({ Alarms.save(a.id, a.title, a.kind, a.time, a.days, a.onDate, on) }) {
+                    if (pendingByAlarm[a.id] == token) {
+                        list = list.map { if (it.id == a.id) it.copy(active = before) else it }
+                        pendingByAlarm.remove(a.id)
+                    }
+                }
             },
                         colors = SwitchDefaults.colors(
                             checkedThumbColor = C.text,

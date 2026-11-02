@@ -28,6 +28,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -43,6 +45,8 @@ import app.orbit.data.AgendaItem
 import app.orbit.service.Live
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
@@ -60,6 +64,9 @@ private fun enteredText(value: String) = runCatching { Instant.parse(value).atZo
 fun AgendaScreen() {
     val live by Live.state.collectAsState()
     val scope = rememberCoroutineScope()
+    val writeLock = remember { Mutex() }
+    val pendingByItem = remember { mutableStateMapOf<String, Long>() }
+    var pendingWrites by remember { mutableIntStateOf(0) }
     var form by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<AgendaItem?>(null) }
     var items by remember(live.lastSync) { mutableStateOf(Agenda.current()) }
@@ -69,12 +76,19 @@ fun AgendaScreen() {
 
     fun toggle(item: AgendaItem) {
         val nextDone = item.status != "done"
-        val before = items
+        val before = item.status
+        val token = System.nanoTime()
+        pendingByItem[item.id] = token
         items = items.map { if (it.id == item.id) it.copy(status = if (nextDone) "done" else "open") else it }
+        pendingWrites++
         scope.launch {
-            val ok = withContext(Dispatchers.IO) { Agenda.setDone(item.id, nextDone) }
-            if (!ok) items = before
-            Live.syncRequested = true
+            val ok = writeLock.withLock { withContext(Dispatchers.IO) { Agenda.setDone(item.id, nextDone) } }
+            if (!ok && pendingByItem[item.id] == token) {
+                items = items.map { if (it.id == item.id) it.copy(status = before) else it }
+                pendingByItem.remove(item.id)
+            }
+            pendingWrites--
+            if (pendingWrites == 0) Live.syncRequested = true
         }
     }
 

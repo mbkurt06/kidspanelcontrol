@@ -470,7 +470,7 @@ function ThemeCard() {
   );
 }
 
-export function ProofCard() {
+function ProofCard() {
   const fam = useFamily();
   const [v, setV] = useState<number | null>(null);
   useEffect(() => {
@@ -498,7 +498,7 @@ export function ProofCard() {
   );
 }
 
-export function TaskPhotoDefaultsCard() {
+function TaskPhotoDefaultsCard() {
   const fam = useFamily();
   const f = fam.family;
   const [v, setV] = useState({ beforeMin: 1, beforeMax: 4, afterMin: 1, afterMax: 4 });

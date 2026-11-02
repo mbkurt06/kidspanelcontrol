@@ -37,6 +37,18 @@ export type ChildApp = {
   installed: boolean;
   first_seen_at: string;
   category: string | null;
+  usage_rule_id?: string | null;
+};
+
+export type AppUsageRule = {
+  id: string;
+  family_id: string;
+  name: string;
+  mode: "open" | "timed" | "blocked";
+  max_minutes: number | null;
+  counts_toward_daily: boolean;
+  start_time: string | null;
+  end_time: string | null;
 };
 
 // --- Gün bölümleri ve uygulama grupları ---
@@ -87,6 +99,7 @@ export type FamilySettings = {
   task_before_photo_max: number;
   task_after_photo_min: number;
   task_after_photo_max: number;
+  proof_retention_days: number;
 };
 
 export type RuleKind = "kiosk" | "limit" | "free" | "music_off" | "music_on";

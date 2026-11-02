@@ -19,6 +19,7 @@ import ChildSettings from "./pages/ChildSettings";
 import Tasks from "./pages/Tasks";
 import Agenda from "./pages/Agenda";
 import TaskEdit from "./pages/TaskEdit";
+import AppRuleEdit from "./pages/AppRuleEdit";
 import Vault from "./pages/Vault";
 import { Icon } from "./components/Icon";
 import { authenticateBiometric, biometricEnabled } from "./lib/biometric";
@@ -261,6 +262,7 @@ function ShellContent() {
           <Route path="/rules/lock" element={<Navigate to="/rules" replace />} />
           <Route path="/rules/music" element={<Navigate to="/child-settings" replace />} />
           <Route path="/rules/time" element={<Navigate to="/rules" replace />} />
+          <Route path="/rules/app-rule/:id" element={<AppRuleEdit />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/tasks/new" element={<TaskEdit />} />
           <Route path="/tasks/:id" element={<TaskEdit />} />

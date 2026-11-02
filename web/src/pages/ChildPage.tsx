@@ -346,7 +346,11 @@ function AppsTab({ childId }: { childId: string }) {
                       <option key={m} value={m}>{MODE3_LABEL[m]}</option>
                     ))}
                   </select>
-                  {mode3(a.app_group) === "rules" ? (
+                  <select value={a.usage_rule_id ?? ""} onChange={(e) => update(a, { usage_rule_id: e.target.value || null })} aria-label="Uygulama kullanım kuralı">
+                    <option value="">Özel kural yok</option>
+                    {fam.appUsageRules.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+                  {mode3(a.app_group) === "rules" && !a.usage_rule_id ? (
                     <input
                       className="mini"
                       type="number"

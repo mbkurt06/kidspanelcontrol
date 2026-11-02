@@ -42,7 +42,7 @@ private fun statusText(t: TaskItem) = when (t.status) {
     "open" -> null
     "started" -> "Başladın — bitince \"Tamamladım\"a bas"
     "submitted" -> "Ebeveyn onayı bekleniyor"
-    "approved" -> "Onaylandı" + (t.rewardMinutes?.let { " · +$it dk" } ?: "")
+    "approved" -> "Onaylandı" + (t.rewardMinutes?.let { " · ${if (it > 0) "+" else ""}$it dk" } ?: "")
     "rejected" -> "Tekrar yap" + (t.rejectNote?.let { ": $it" } ?: "")
     "claimed" -> "Kardeşin yaptı"
     "expired" -> "Süresi doldu"
@@ -52,7 +52,7 @@ private fun statusText(t: TaskItem) = when (t.status) {
 private fun rewardText(t: TaskItem): String? {
     val parts = mutableListOf<String>()
     t.rewardMinutes?.let {
-        parts += "+$it dk" + when (t.rewardValidity) {
+        parts += "${if (it > 0) "+" else ""}$it dk" + when (t.rewardValidity) {
             "tomorrow" -> " (yarın)"
             "wallet" -> " (cüzdana)"
             "vault" -> " (süre kasasına)"

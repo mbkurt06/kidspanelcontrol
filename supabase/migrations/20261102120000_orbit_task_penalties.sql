@@ -106,4 +106,3 @@ begin
 end;
 $$;
 grant execute on function orbit.device_use_wallet(int) to anon, authenticated;
-

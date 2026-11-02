@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import Music from "./Music";
-import { ProofCard, TaskPhotoDefaultsCard } from "./Settings";
+import TaskSettingsCard from "../components/TaskSettingsCard";
 
 const AVATARS = ["🙂", "😎", "🦊", "🐼", "🐯", "🦄", "🚀", "⭐"];
 
@@ -14,7 +14,7 @@ export default function ChildSettings() {
       {!fam.visibleChildren.length && <p className="muted small">Çocuk bulunamadı.</p>}
       <details className="card section-collapse-card" open>
         <summary className="section-collapse-head"><span>Görev ayarları</span><span>⌄</span></summary>
-        <div className="stack"><ProofCard /><TaskPhotoDefaultsCard /></div>
+        <div className="stack"><TaskSettingsCard /></div>
       </details>
       <details className="card section-collapse-card" open>
         <summary className="section-collapse-head"><span>Müzik</span><span>⌄</span></summary>

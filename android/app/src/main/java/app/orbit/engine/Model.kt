@@ -26,7 +26,10 @@ data class AppRule(
     val group: Group,
     val approved: Boolean,
     val dailyLimitMinutes: Int?,
+    val usageRuleId: String? = null,
 )
+
+data class AppUsageRule(val id: String, val mode: String, val maxMinutes: Int?, val countsTowardDaily: Boolean, val window: TimeWindow? = null)
 
 data class Profile(
     val id: String,
@@ -164,6 +167,7 @@ data class Command(
 data class Rules(
     val timezone: String = "Europe/Berlin",
     val apps: Map<String, AppRule> = emptyMap(),
+    val usageRules: Map<String, AppUsageRule> = emptyMap(),
     val profiles: Map<String, Profile> = emptyMap(),
     val modes: Map<String, Mode> = emptyMap(),
     val slots: List<ModeSlot> = emptyList(),

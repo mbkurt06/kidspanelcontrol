@@ -646,6 +646,12 @@ select:focus {
   text-align: left;
   font: inherit;
 }
+.section-collapse-card > summary { list-style: none; cursor: pointer; }
+.section-collapse-card > summary::-webkit-details-marker { display: none; }
+.section-collapse-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 20px; font-weight: 700; }
+.section-collapse-card[open] > .section-collapse-head > span:last-child { transform: rotate(180deg); }
+.collapse-title { border: 0; background: transparent; color: inherit; cursor: pointer; padding: 0; text-align: left; }
+.templates-head { font-size: 18px; font-weight: 600; }
 .date-edit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
 .date-edit-grid label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
 .date-edit-grid input { width: 100%; text-align: center; }

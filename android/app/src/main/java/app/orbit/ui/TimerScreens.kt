@@ -26,6 +26,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -262,7 +263,7 @@ fun AlarmsScreen() {
     fun run(label: String, f: () -> Boolean) {
         scope.launch {
             val ok = withContext(Dispatchers.IO) { f() }
-            msg = if (ok) label else "Olmadı (internet ya da izin yok)"
+            msg = if (ok) "" else "Olmadı (internet ya da izin yok)"
             if (ok) { editing = null; creating = false }
             Live.syncRequested = true
         }
@@ -277,7 +278,7 @@ fun AlarmsScreen() {
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            if (msg.isNotEmpty()) Text(msg, color = C.good)
+            if (msg.isNotEmpty()) Text(msg, color = C.bad)
             if (list.isEmpty()) Muted("Henüz alarm yok.")
             for (a in list) {
                 Row(
@@ -297,7 +298,17 @@ fun AlarmsScreen() {
                             ).joinToString(" · "), 12,
                         )
                     }
-                    if (a.editable) Switch(checked = a.active, onCheckedChange = { on -> run(if (on) "Açıldı" else "Kapatıldı") { Alarms.save(a.id, a.title, a.kind, a.time, a.days, a.onDate, on) } })
+                    if (a.editable) Switch(
+                        checked = a.active,
+                        onCheckedChange = { on -> run("") { Alarms.save(a.id, a.title, a.kind, a.time, a.days, a.onDate, on) } },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = C.text,
+                            checkedTrackColor = C.accent,
+                            uncheckedThumbColor = C.muted,
+                            uncheckedTrackColor = C.surface2,
+                            uncheckedBorderColor = C.line,
+                        ),
+                    )
                 }
             }
         }

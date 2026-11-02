@@ -19,7 +19,8 @@ export default function ChildPage() {
   const { id } = useParams();
   const fam = useFamily();
   const child = fam.children.find((c) => c.id === id);
-  const [tab, setTab] = useState<Tab>("apps");
+  const [tab, setTab] = useState<Tab>(() => (localStorage.getItem(`orbit.childTab.${id}`) as Tab | null) ?? "apps");
+  useEffect(() => { if (id) localStorage.setItem(`orbit.childTab.${id}`, tab); }, [id, tab]);
 
   if (!child) return <div className="page"><p className="muted">Çocuk bulunamadı.</p></div>;
 
@@ -324,19 +325,19 @@ function AppsTab({ childId }: { childId: string }) {
           <div className="card" key={g.id || "none"}>
             <div
               className="row between link-card group-toggle"
-              onClick={() => setOpenGroups((m) => ({ ...m, [g.id]: !(m[g.id] ?? true) }))}
-              aria-expanded={openGroups[g.id] ?? true}
+              onClick={() => setOpenGroups((m) => ({ ...m, [g.id]: !(m[g.id] ?? false) }))}
+              aria-expanded={openGroups[g.id] ?? false}
               role="button"
               tabIndex={0}
-              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setOpenGroups((m) => ({ ...m, [g.id]: !(m[g.id] ?? true) }))}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setOpenGroups((m) => ({ ...m, [g.id]: !(m[g.id] ?? false) }))}
             >
               <span>
               <span className="dot" style={{ background: g.color }} /> {g.name} <span className="muted small">· {list.length}</span>
               <Info>Günlük sınır girilirse bu uygulama, kuralların izin verdiği toplam süreden ayrıca bu dakika kadar kullanılır.</Info>
               </span>
-              <Icon name="chevron" size={18} />
+              <span aria-hidden="true">{openGroups[g.id] ?? false ? "⌃" : "⌄"}</span>
             </div>
-            {(openGroups[g.id] ?? true) && list.map((a) => (
+            {(openGroups[g.id] ?? false) && list.map((a) => (
               <div className="app-setting-row" key={a.package}>
                 <div className="app-setting-controls">
                   {groupSelect(fam.members[a.package] ?? "", (v) => setGroup(a.package, v))}
@@ -444,8 +445,8 @@ function ProgramTab({ childId }: { childId: string }) {
   return (
     <div className="stack">
       {err && <p className="error">{err}</p>}
-      <div className="card">
-        <h2>Haftalık program <Info>Her gün için bir gün tipi seç. Gün tiplerini Kurallar sekmesinden düzenleyebilirsin.</Info></h2>
+      <details className="card section-collapse-card">
+        <summary className="section-collapse-head"><span>Haftalık program <Info>Her gün için bir gün tipi seç. Gün tiplerini Kurallar sekmesinden düzenleyebilirsin.</Info></span><span>⌄</span></summary>
         {WEEKDAYS_LONG.map((d, i) => (
           <div className="app-row" key={d}>
             <span className="grow">{d}</span>
@@ -459,10 +460,10 @@ function ProgramTab({ childId }: { childId: string }) {
             </select>
           </div>
         ))}
-      </div>
+      </details>
 
-      <div className="card">
-        <h2>Durumu şimdi başlat <Info>Bir durumu programa bağlı kalmadan geçici olarak başlatır.</Info></h2>
+      <details className="card section-collapse-card">
+        <summary className="section-collapse-head"><span>Durumu şimdi başlat <Info>Bir durumu programa bağlı kalmadan geçici olarak başlatır.</Info></span><span>⌄</span></summary>
         <div className="row gap-s wrap">
           <select value={modeId} onChange={(e) => setModeId(e.target.value)} className="grow">
             <option value="">Durum seç</option>
@@ -499,10 +500,10 @@ function ProgramTab({ childId }: { childId: string }) {
           </button>
         </div>
         {msg && <p className="ok small">{msg}</p>}
-      </div>
+      </details>
 
-      <div className="card">
-        <h2>Gün istisnaları <Info>Tek bir gün için farklı profil veya günlük süre belirler.</Info></h2>
+      <details className="card section-collapse-card">
+        <summary className="section-collapse-head"><span>Gün istisnaları <Info>Tek bir gün için farklı profil veya günlük süre belirler.</Info></span><span>⌄</span></summary>
         {overrides.map((o) => (
           <div className="app-row" key={o.id}>
             <div className="grow">
@@ -528,7 +529,7 @@ function ProgramTab({ childId }: { childId: string }) {
         <div className="grid2">
           <div className="field">
             <span>Gün</span>
-            <DateField value={od.day} onChange={(v) => setOd({ ...od, day: v })} />
+            <DateField value={od.day} onChange={(v) => setOd({ ...od, day: v })} defaultMode="wheel" />
           </div>
           <label className="field">
             <span>Profil</span>
@@ -553,7 +554,7 @@ function ProgramTab({ childId }: { childId: string }) {
         <button className="btn" onClick={addOverride}>
           İstisna ekle
         </button>
-      </div>
+      </details>
     </div>
   );
 }

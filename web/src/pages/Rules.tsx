@@ -13,6 +13,7 @@ export default function Rules() {
   const fam = useFamily();
   const nav = useNavigate();
   const [err, setErr] = useState("");
+  const [open, setOpen] = useState({ days: false, focus: false, modes: false });
 
   async function newProfile() {
     const { data, error } = await supabase
@@ -93,12 +94,14 @@ export default function Rules() {
 
       <section className="stack">
         <div className="row between">
-          <h2 className="section-title">Gün tipleri <Info>Bir gün tipi bölümleri ve her bölümdeki kuralları tutar. Hangi güne hangisinin geçerli olduğunu çocuğun Program sekmesinden seçersin.</Info></h2>
-          <button className="btn small" onClick={newProfile}>
-            <Icon name="plus" size={16} /> Yeni
+          <button type="button" className="section-title row gap-xs collapse-title" onClick={() => setOpen((v) => ({ ...v, days: !v.days }))}>
+            <span>{open.days ? "⌃" : "⌄"}</span><span>Gün tipleri</span><Info>Bir gün tipi bölümleri ve her bölümdeki kuralları tutar. Hangi güne hangisinin geçerli olduğunu çocuğun Program sekmesinden seçersin.</Info>
           </button>
+          {open.days && <button className="btn small" onClick={newProfile}>
+            <Icon name="plus" size={16} /> Yeni
+          </button>}
         </div>
-        {fam.profiles.map((p) => {
+        {open.days && fam.profiles.map((p) => {
           const slots = fam.slots.filter((s) => s.profile_id === p.id);
           const secs = fam.sections.filter((s) => s.profile_id === p.id).sort((a, b) => mins(a.start_time) - mins(b.start_time));
           return (
@@ -141,12 +144,14 @@ export default function Rules() {
 
       <section className="stack">
         <div className="row between">
-          <h2 className="section-title">Odak profilleri <Info>Sayaç çalışırken telefonda nelerin açık kalacağını belirler. Kuralların üstüne yalnızca ek kısıt koyar.</Info></h2>
-          <button className="btn small" onClick={newFocus}>
-            <Icon name="plus" size={16} /> Yeni
+          <button type="button" className="section-title row gap-xs collapse-title" onClick={() => setOpen((v) => ({ ...v, focus: !v.focus }))}>
+            <span>{open.focus ? "⌃" : "⌄"}</span><span>Odak profilleri</span><Info>Sayaç çalışırken telefonda nelerin açık kalacağını belirler. Kuralların üstüne yalnızca ek kısıt koyar.</Info>
           </button>
+          {open.focus && <button className="btn small" onClick={newFocus}>
+            <Icon name="plus" size={16} /> Yeni
+          </button>}
         </div>
-        {fam.focusProfiles.map((f) => (
+        {open.focus && fam.focusProfiles.map((f) => (
           <Link to={`/rules/focus/${f.id}`} className="card link-card" key={f.id}>
             <span style={{ fontSize: 22 }}>{f.icon ?? "🎯"}</span>
             <div className="grow">
@@ -164,7 +169,7 @@ export default function Rules() {
             <Icon name="chevron" size={18} />
           </Link>
         ))}
-        <Link to="/rules/activities" className="card link-card">
+        {open.focus && <Link to="/rules/activities" className="card link-card">
           <div className="grow">
             <b>Etkinlikler</b>
             <div className="row wrap gap-s">
@@ -176,17 +181,19 @@ export default function Rules() {
             </div>
           </div>
           <Icon name="chevron" size={18} />
-        </Link>
+        </Link>}
       </section>
 
       <section className="stack">
         <div className="row between">
-          <h2 className="section-title">Durumlar <Info>Ders, uyku ve oyun zamanı gibi durumlarda hangi uygulamaların açık kalacağını ve sürenin nasıl sayılacağını belirler.</Info></h2>
-          <button className="btn small" onClick={newMode}>
-            <Icon name="plus" size={16} /> Yeni
+          <button type="button" className="section-title row gap-xs collapse-title" onClick={() => setOpen((v) => ({ ...v, modes: !v.modes }))}>
+            <span>{open.modes ? "⌃" : "⌄"}</span><span>Durumlar</span><Info>Ders, uyku ve oyun zamanı gibi durumlarda hangi uygulamaların açık kalacağını ve sürenin nasıl sayılacağını belirler.</Info>
           </button>
+          {open.modes && <button className="btn small" onClick={newMode}>
+            <Icon name="plus" size={16} /> Yeni
+          </button>}
         </div>
-        {fam.modes.map((m) => (
+        {open.modes && fam.modes.map((m) => (
           <Link to={`/rules/mode/${m.id}`} className="card link-card" key={m.id}>
             <span className="dot" style={{ background: m.color }} />
             <div className="grow">

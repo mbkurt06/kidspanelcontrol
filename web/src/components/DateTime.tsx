@@ -233,15 +233,17 @@ export function DateField({
   clearable,
   label,
   placeholder = "Tarih seç",
+  defaultMode = "calendar",
 }: {
   value: string;
   onChange: (v: string) => void;
   clearable?: boolean;
   label?: string;
   placeholder?: string;
+  defaultMode?: "calendar" | "write" | "wheel";
 }) {
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<"calendar" | "write" | "wheel">("calendar");
+  const [mode, setMode] = useState<"calendar" | "write" | "wheel">(defaultMode);
   const base = value ? fromIso(value) : new Date();
   const [view, setView] = useState({ y: base.getFullYear(), m: base.getMonth() });
   const [dayText, setDayText] = useState(String(base.getDate()).padStart(2, "0"));
@@ -254,9 +256,9 @@ export function DateField({
       setDayText(String(b.getDate()).padStart(2, "0"));
       setMonthText(String(b.getMonth() + 1).padStart(2, "0"));
       setYearText(String(b.getFullYear()));
-      setMode("calendar");
+      setMode(defaultMode);
     }
-  }, [open, value]);
+  }, [open, value, defaultMode]);
   useEffect(() => {
     if (!open) return;
     const close = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);

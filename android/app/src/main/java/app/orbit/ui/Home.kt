@@ -211,11 +211,12 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                 } else MessagesScreen()
                 return@Column
             }
-            if (screen == Screen.AGENDA || screen == Screen.ALARMS) {
+            if (screen == Screen.AGENDA || screen == Screen.ALARMS || screen == Screen.TIMER) {
                 Box(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                     when (screen) {
                         Screen.AGENDA -> AgendaScreen()
                         Screen.ALARMS -> AlarmsScreen()
+                        Screen.TIMER -> TimerScreen()
                         else -> Unit
                     }
                 }

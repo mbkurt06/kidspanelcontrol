@@ -119,7 +119,9 @@ function StartTimer({ childId }: { childId: string }) {
   const [open, setOpen] = useState(false);
   const [activity, setActivity] = useState(fam.activities[0]?.id ?? "");
   const [title, setTitle] = useState("");
-  const [minutes, setMinutes] = useState("30");
+  const [hours, setHours] = useState(0);
+  const [minutePart, setMinutePart] = useState(30);
+  const [durationOpen, setDurationOpen] = useState(false);
   const [focus, setFocus] = useState<string>("");
   const [allowStop, setAllowStop] = useState<AllowStop>(d.allow_stop);
   const [pauseMode, setPauseMode] = useState<PauseMode>(d.pause_mode);
@@ -144,7 +146,7 @@ function StartTimer({ childId }: { childId: string }) {
   async function start() {
     setErr("");
     const a = fam.activities.find((x) => x.id === activity);
-    const m = Number(minutes);
+    const m = hours * 60 + minutePart;
     const { error } = await supabase.from("timer_sessions").insert({
       family_id: child.family_id,
       child_id: childId,
@@ -174,8 +176,9 @@ function StartTimer({ childId }: { childId: string }) {
   }
 
   return (
-    <div className="card">
-      <h2>Sayaç başlat</h2>
+    <div className="sheet-backdrop" onClick={() => setOpen(false)}>
+    <div className="sheet compact-sheet" onClick={(e) => e.stopPropagation()}>
+      <div className="row between"><h2>Sayaç başlat</h2><button className="icon-btn" onClick={() => setOpen(false)} aria-label="Kapat">×</button></div>
       <div className="row gap-s wrap">
         {fam.activities.map((a) => (
           <button key={a.id} className={`chip ${activity === a.id ? "on" : ""}`} onClick={() => setActivity(a.id)}>
@@ -187,16 +190,17 @@ function StartTimer({ childId }: { childId: string }) {
         </button>
       </div>
       {activity === "other" && <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ne çalışacak?" />}
-      <div className="row gap-s wrap">
-        {["15", "25", "30", "45", "60", "90"].map((m) => (
-          <button key={m} className={`chip ${minutes === m ? "on" : ""}`} onClick={() => setMinutes(m)}>
-            {m} dk
-          </button>
-        ))}
-        <button className={`chip ${minutes === "0" ? "on" : ""}`} onClick={() => setMinutes("0")}>
-          Kronometre
-        </button>
-      </div>
+      <button className="chip on" onClick={() => setDurationOpen(true)}>
+        {hours === 0 && minutePart === 0 ? "⏱ Kronometre" : `${hours ? `${hours} sa ` : ""}${minutePart} dk`}
+      </button>
+      {durationOpen && <div className="sheet-backdrop" onClick={() => setDurationOpen(false)}><div className="sheet compact-sheet" onClick={(e) => e.stopPropagation()}>
+        <h2>Süre seç</h2>
+        <div className="date-wheel">
+          <select size={5} value={hours} onChange={(e) => setHours(Number(e.target.value))}>{Array.from({ length: 25 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")} sa</option>)}</select>
+          <select size={5} value={minutePart} onChange={(e) => setMinutePart(Number(e.target.value))}>{Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")} dk</option>)}</select>
+        </div>
+        <button className="btn primary wide" onClick={() => setDurationOpen(false)}>Tamam</button>
+      </div></div>}
       <label className="field">
         <span>Odak profili</span>
         <select value={focus} onChange={(e) => setFocus(e.target.value)}>
@@ -253,6 +257,7 @@ function StartTimer({ childId }: { childId: string }) {
         </button>
       </div>
       {msg && <p className="ok small">{msg}</p>}
+    </div>
     </div>
   );
 }
@@ -408,11 +413,6 @@ function AlarmsCard({ childId }: { childId: string }) {
     <div className="card">
       <div className="row between">
         <h2>Hatırlatıcılar <Info>Alarm tam ekran ve sesli çalışır; hatırlatıcı yalnızca bildirim gönderir.</Info></h2>
-        {!edit && (
-          <button className="btn small" onClick={() => setEdit(emptyAlarm(childId, child.family_id))}>
-            <Icon name="plus" size={16} /> Yeni
-          </button>
-        )}
       </div>
       {edit && (
         <div className="sub-card">
@@ -508,6 +508,7 @@ function AlarmsCard({ childId }: { childId: string }) {
         </details>
       )}
       <p className="muted tiny">Alarm telefonda internet olmasa da çalar (bir kez telefona ulaşmış olması yeter).</p>
+      <button className="agenda-fab" aria-label="Hatırlatıcı ekle" onClick={() => setEdit(emptyAlarm(childId, child.family_id))}>+</button>
     </div>
   );
 }

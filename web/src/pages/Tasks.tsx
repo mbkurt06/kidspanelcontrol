@@ -85,9 +85,6 @@ export default function Tasks() {
     <div className="page">
       <header className="page-head">
         <h1>Görevler</h1>
-        <button className="btn small primary" onClick={() => nav("/tasks/new")}>
-          <Icon name="plus" size={16} /> Yeni görev
-        </button>
       </header>
       {err && <p className="error">{err}</p>}
 
@@ -194,7 +191,7 @@ export default function Tasks() {
 
       <div className="card">
         <div className="row between">
-          <button className="section-title row gap-xs" type="button" onClick={() => setTemplatesOpen((v) => !v)} aria-expanded={templatesOpen}>
+          <button className="section-title row gap-xs templates-head" type="button" onClick={() => setTemplatesOpen((v) => !v)} aria-expanded={templatesOpen}>
             <span aria-hidden="true">{templatesOpen ? "⌃" : "⌄"}</span>
             <span>Şablonlar</span>
             <Info>Sık verilen görevler. Bir şablonu açınca ayarları hazır yeni görev formu açılır.</Info>
@@ -234,6 +231,7 @@ export default function Tasks() {
           </button>
         )}
       </div>
+      <button className="agenda-fab" aria-label="Yeni görev ekle" onClick={() => nav("/tasks/new")}>+</button>
     </div>
   );
 }

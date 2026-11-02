@@ -17,6 +17,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
+import app.orbit.BuildConfig
 import app.orbit.R
 import app.orbit.data.Store
 import app.orbit.data.Sync

@@ -171,15 +171,15 @@ fun TimerScreen() {
                 }, enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = C.good)) { Text("Bitir ve kaydet") }
             }
         }
-        if (active.canStop) TextButton(onClick = { act("İptal edildi") { Timers.cancel(active, Timers.currentCounts(active.id)) } }, enabled = !busy) { Text("İptal et", color = C.bad) }
+        if (active.canStop) TextButton(onClick = { act("İptal edildi", { Timers.cancel(active, Timers.currentCounts(active.id)) }) }, enabled = !busy) { Text("İptal et", color = C.bad) }
         else Muted("Bu sayacı ebeveynin başlattı; bitene kadar durdurulamaz.", 13)
         if (active.byParent && active.allowStop == "notify") Muted("Erken bitirirsen ebeveynine bildirilir.", 12)
         if (canPickFocus && active.canChangeFocus && profiles.isNotEmpty()) {
             Card {
                 Title("Odak")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (!(active.byParent && active.focusChange == "stricter")) Chip("Serbest", active.focusId == null) { act("Odak kaldırıldı") { Timers.changeFocus(active, null) } }
-                    for (p in profiles.values) Chip("${p.icon ?: "🎯"} ${p.name}", active.focusId == p.id) { act("Odak: ${p.name}") { Timers.changeFocus(active, p.id) } }
+                    if (!(active.byParent && active.focusChange == "stricter")) Chip("Serbest", active.focusId == null) { act("Odak kaldırıldı", { Timers.changeFocus(active, null) }) }
+                    for (p in profiles.values) Chip("${p.icon ?: "🎯"} ${p.name}", active.focusId == p.id) { act("Odak: ${p.name}", { Timers.changeFocus(active, p.id) }) }
                 }
             }
         }
@@ -295,7 +295,7 @@ fun AlarmsScreen() {
 
     if (creating || editing != null) {
         AlarmForm(editing, onCancel = { editing = null; creating = false }) { title, kind, time, days, date, active ->
-            run("Kaydedildi") { Alarms.save(editing?.id, title, kind, time, days, date, active) }
+            run("Kaydedildi", { Alarms.save(editing?.id, title, kind, time, days, date, active) })
         }
         return
     }

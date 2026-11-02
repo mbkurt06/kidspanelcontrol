@@ -198,8 +198,8 @@ export function TimeField({
               ))}
             </div>
             <span className="small muted">Dakika</span>
-            <div className="tf-grid">
-              {Array.from({ length: 12 }, (_, i) => i * 5).map((i) => (
+            <div className="tf-grid tf-minute-grid">
+              {Array.from({ length: 60 }, (_, i) => i).map((i) => (
                 <button type="button" key={i} className={`chip small ${i === m ? "on" : ""}`} onClick={() => emit(h, i)}>
                   {pad(i)}
                 </button>

@@ -103,7 +103,7 @@ fun PinDialog(onClose: () -> Unit) {
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
                 )
                 if (err.isNotEmpty()) Text(err, color = C.bad, fontSize = 13.sp)
-                Muted("Doğru PIN ile ${Store.rules().pinMinutes} dakika boyunca bütün kısıtlamalar kalkar (ayarlar dahil).", 12)
+                Info("Doğru PIN ile ${Store.rules().pinMinutes} dakika boyunca bütün kısıtlamalar kalkar (ayarlar dahil).")
             }
         },
         confirmButton = {

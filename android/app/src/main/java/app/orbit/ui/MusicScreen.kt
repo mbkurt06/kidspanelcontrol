@@ -218,7 +218,9 @@ fun MusicScreen() {
             }
         }
         if (selectedPlaylist != null) {
-            Muted("Seçili listeye şarkı eklemek için aşağıdaki şarkıların ＋ düğmesine dokun. Uzun basıp sürükleyerek sırala.", 12)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Info("Seçili listeye şarkı eklemek için aşağıdaki şarkıların ＋ düğmesine dokun. Uzun basıp sürükleyerek sırala.")
+            }
             playlistSongs.forEachIndexed { index, track ->
                 PlaylistTrackRow(track, index, onMove = { from, to ->
                     if (to in playlistSongs.indices) playlistSongs = playlistSongs.toMutableList().also { it.add(to, it.removeAt(from)) }
@@ -234,7 +236,9 @@ fun MusicScreen() {
 
     if (missingTracks.isNotEmpty()) Card {
         Title("Eksik dosyalar")
-        Muted("SD karttan silinen şarkılar burada tutulur; kaldırınca playlist kayıtlarından da çıkar.", 12)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Info("SD karttan silinen şarkılar burada tutulur; kaldırınca playlist kayıtlarından da çıkar.")
+        }
         missingTracks.forEach { missing ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("⚠️ ${missing.label}", color = C.text, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)

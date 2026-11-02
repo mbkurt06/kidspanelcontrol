@@ -1386,6 +1386,11 @@ select:focus {
   grid-template-columns: repeat(7, 1fr);
   gap: 6px;
 }
+.tf-minute-grid {
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
 .df {
   display: flex;
   align-items: center;

@@ -375,8 +375,8 @@ class OrbitService : Service() {
                 }
             }
         }
-        // shortcut: 5 dk yoklama, anında cihaz komutu için servis anahtarı gerektirmeden otomatik güncelleme sağlar.
-        if (nowMs - Store.lastUpdateCheck > 5 * 60_000L) {
+        // 1 dk yoklama; canlı bağlantı kopsa bile yeni APK kısa sürede otomatik alınır.
+        if (nowMs - Store.lastUpdateCheck > 60_000L) {
             Store.lastUpdateCheck = nowMs
             val checkOnly = Store.updateCheckOnly
             Store.updateCheckOnly = false

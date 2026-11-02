@@ -135,7 +135,9 @@ class VaultActivity : ComponentActivity() {
                 null -> Muted(if (busy) "Açılıyor…" else "")
                 Vault.State.None -> Card {
                     Title("Kasa henüz yok")
-                    Muted("Uygulama hesaplarının kullanıcı adı ve şifrelerini burada saklayabilirsin. Sadece sen ve ebeveynlerin görebilir.")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Info("Uygulama hesaplarının kullanıcı adı ve şifrelerini burada saklayabilirsin. Sadece sen ve ebeveynlerin görebilir.")
+                    }
                     Button(onClick = {
                         busy = true
                         lifecycleScope.launch {
@@ -146,7 +148,9 @@ class VaultActivity : ComponentActivity() {
                 }
                 Vault.State.Locked -> Card {
                     Title("Kasa anahtarı bekleniyor")
-                    Muted("Ebeveynin panelde \"Şifreler\" sayfasını açınca kasa bu telefona da açılır.")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Info("Ebeveynin panelde \"Şifreler\" sayfasını açınca kasa bu telefona da açılır.")
+                    }
                     OutlinedButton(onClick = { load() }) { Text("Tekrar dene") }
                 }
                 is Vault.State.Open -> {

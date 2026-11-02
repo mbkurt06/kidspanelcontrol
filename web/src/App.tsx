@@ -19,6 +19,7 @@ import { useFamily } from "./lib/family";
 import Settings from "./pages/Settings";
 import Tasks from "./pages/Tasks";
 import TaskEdit from "./pages/TaskEdit";
+import AppRuleEdit from "./pages/AppRuleEdit";
 import Vault from "./pages/Vault";
 import { Icon } from "./components/Icon";
 import { consumeKeyFromUrl, hasAccess, rememberAccess, tryKey } from "./lib/accessKey";
@@ -184,6 +185,7 @@ function Shell() {
           <Route path="/rules/groups" element={<Groups />} />
           <Route path="/rules/focus/:id" element={<FocusEdit />} />
           <Route path="/rules/activities" element={<ActivitiesPage />} />
+          <Route path="/rules/app-rule/:id" element={<AppRuleEdit />} />
           <Route path="/rules/lock" element={<Lock />} />
           <Route path="/rules/music" element={<Music />} />
           <Route path="/rules/time" element={<Lock />} />

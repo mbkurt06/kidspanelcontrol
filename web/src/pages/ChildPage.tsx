@@ -30,6 +30,9 @@ export default function ChildPage() {
         <Link to="/rules/lock" className="btn small">
           🔒 Kilit
         </Link>
+        <Link to="/rules/music" className="btn small">
+          🎵 Müzik
+        </Link>
         <Link to={`/child/${child.id}/vault`} className="btn small">
           <Icon name="key" size={16} /> Şifreler
         </Link>
@@ -327,30 +330,22 @@ function AppsTab({ childId }: { childId: string }) {
               <span className="dot" style={{ background: g.color }} /> {g.name} <span className="muted small">· {list.length}</span>
             </h2>
             {list.map((a) => (
-              <div className="app-row wrap" key={a.package}>
-                <div className="grow">
+              <div className="app-row wrap" key={a.package} style={{ alignItems: "stretch" }}>
+                <div className="grow" style={{ flexBasis: "100%" }}>
                   <b>{a.label}</b>
                   <div className="muted tiny">{a.package}</div>
                 </div>
-                {groupSelect(fam.members[a.package] ?? "", (v) => setGroup(a.package, v))}
-                <select value={mode3(a.app_group)} onChange={(e) => update(a, { app_group: fromMode3(e.target.value as Mode3) })} aria-label="Durum">
-                  {(["rules", "always_open", "blocked"] as Mode3[]).map((m) => (
-                    <option key={m} value={m}>
-                      {MODE3_LABEL[m]}
-                    </option>
-                  ))}
-                </select>
-                {mode3(a.app_group) === "rules" && (
-                  <input
-                    className="mini"
-                    type="number"
-                    min={0}
-                    placeholder="gün dk"
-                    value={a.daily_limit_minutes ?? ""}
-                    onChange={(e) => update(a, { daily_limit_minutes: e.target.value === "" ? null : Number(e.target.value) })}
-                    aria-label="Bu uygulama için günlük üst sınır (dakika)"
-                  />
-                )}
+                <div className="row gap-xs wrap" style={{ width: "100%" }}>
+                  {groupSelect(fam.members[a.package] ?? "", (v) => setGroup(a.package, v))}
+                  <select value={mode3(a.app_group)} onChange={(e) => update(a, { app_group: fromMode3(e.target.value as Mode3) })} aria-label="Durum">
+                    {(["rules", "always_open", "blocked"] as Mode3[]).map((m) => <option key={m} value={m}>{MODE3_LABEL[m]}</option>)}
+                  </select>
+                  <select value={a.usage_rule_id ?? ""} onChange={(e) => update(a, { usage_rule_id: e.target.value || null })} aria-label="Özel uygulama kuralı">
+                    <option value="">Özel kural yok</option>
+                    {fam.appUsageRules.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  </select>
+                  {!a.usage_rule_id && mode3(a.app_group) === "rules" && <input className="mini" type="number" min={0} placeholder="gün dk" value={a.daily_limit_minutes ?? ""} onChange={(e) => update(a, { daily_limit_minutes: e.target.value === "" ? null : Number(e.target.value) })} aria-label="Bu uygulama için günlük üst sınır (dakika)" />}
+                </div>
               </div>
             ))}
           </div>

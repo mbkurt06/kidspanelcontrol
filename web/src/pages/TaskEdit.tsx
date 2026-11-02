@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DateField, TimeField } from "../components/DateTime";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { todayISO } from "../lib/util";
-import { PROOF_LABEL, VALIDITY_LABEL, type ProofType, type RewardValidity, type Task } from "../lib/types";
+import { PENALTY_VALIDITY_LABEL, PROOF_LABEL, VALIDITY_LABEL, type ProofType, type RewardValidity, type Task } from "../lib/types";
 import { DayPicker } from "../components/Windows";
 import { Icon } from "../components/Icon";
 
@@ -21,6 +21,10 @@ type Form = {
   due_time: string;
   proof: ProofType;
   before_after: boolean;
+  before_photo_min: string;
+  before_photo_max: string;
+  after_photo_min: string;
+  after_photo_max: string;
   reward_minutes: string;
   reward_text: string;
   reward_validity: RewardValidity;
@@ -48,7 +52,11 @@ const empty = (childIds: string[]): Form => ({
   due_date: todayISO(),
   due_time: "",
   proof: "photo",
-  before_after: false,
+  before_after: true,
+  before_photo_min: "1",
+  before_photo_max: "4",
+  after_photo_min: "1",
+  after_photo_max: "4",
   reward_minutes: "15",
   reward_text: "",
   reward_validity: "today",
@@ -83,6 +91,19 @@ export default function TaskEdit() {
   const [saveTemplate, setSaveTemplate] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const appliedNewDefaults = useRef(false);
+
+  useEffect(() => {
+    if (!isNew || params.get("template") || !fam.family || appliedNewDefaults.current) return;
+    appliedNewDefaults.current = true;
+    setF((x) => ({
+      ...x,
+      before_photo_min: String(fam.family?.task_before_photo_min ?? 1),
+      before_photo_max: String(fam.family?.task_before_photo_max ?? 4),
+      after_photo_min: String(fam.family?.task_after_photo_min ?? 1),
+      after_photo_max: String(fam.family?.task_after_photo_max ?? 4),
+    }));
+  }, [fam.family, isNew, params]);
 
   useEffect(() => {
     (async () => {
@@ -103,6 +124,10 @@ export default function TaskEdit() {
             due_time: t.due_time?.slice(0, 5) ?? "",
             proof: t.proof,
             before_after: t.before_after,
+            before_photo_min: String(t.before_photo_min ?? fam.family?.task_before_photo_min ?? 1),
+            before_photo_max: String(t.before_photo_max ?? fam.family?.task_before_photo_max ?? 4),
+            after_photo_min: String(t.after_photo_min ?? fam.family?.task_after_photo_min ?? 1),
+            after_photo_max: String(t.after_photo_max ?? fam.family?.task_after_photo_max ?? 4),
             reward_minutes: t.reward_minutes?.toString() ?? "",
             reward_text: t.reward_text ?? "",
             reward_validity: t.reward_validity,
@@ -124,6 +149,10 @@ export default function TaskEdit() {
               description: data.description ?? "",
               proof: data.proof,
               before_after: data.before_after,
+              before_photo_min: String(data.before_photo_min ?? fam.family?.task_before_photo_min ?? 1),
+              before_photo_max: String(data.before_photo_max ?? fam.family?.task_before_photo_max ?? 4),
+              after_photo_min: String(data.after_photo_min ?? fam.family?.task_after_photo_min ?? 1),
+              after_photo_max: String(data.after_photo_max ?? fam.family?.task_after_photo_max ?? 4),
               reward_minutes: data.reward_minutes?.toString() ?? "",
               reward_text: data.reward_text ?? "",
               reward_validity: data.reward_validity,
@@ -159,12 +188,16 @@ export default function TaskEdit() {
       due_time: f.due_time || null,
       proof: f.proof,
       before_after: f.proof !== "none" && f.before_after,
-      reward_minutes: f.reward_minutes ? Number(f.reward_minutes) : null,
+      before_photo_min: Math.min(4, Math.max(1, Number(f.before_photo_min) || 1)),
+      before_photo_max: Math.min(4, Math.max(Number(f.before_photo_min) || 1, Number(f.before_photo_max) || 4)),
+      after_photo_min: Math.min(4, Math.max(1, Number(f.after_photo_min) || 1)),
+      after_photo_max: Math.min(4, Math.max(Number(f.after_photo_min) || 1, Number(f.after_photo_max) || 4)),
+      reward_minutes: f.reward_minutes.trim() === "" ? null : Number(f.reward_minutes),
       reward_text: f.reward_text.trim() || null,
       reward_validity: f.reward_validity,
       reward_date: f.reward_validity === "date" ? f.reward_date : null,
       reward_expires_days: f.reward_validity === "wallet" && f.reward_expires_days ? Number(f.reward_expires_days) : null,
-      reward_section_id: f.reward_validity !== "wallet" && f.reward_validity !== "vault" && f.reward_section_id ? f.reward_section_id : null,
+      reward_section_id: Number(f.reward_minutes) >= 0 && f.reward_validity !== "wallet" && f.reward_validity !== "vault" && f.reward_section_id ? f.reward_section_id : null,
       mandatory: f.mandatory,
       active: f.active,
       record_minutes: f.record_on ? Math.min(240, Math.max(1, Number(f.record_minutes) || 60)) : null,
@@ -180,6 +213,10 @@ export default function TaskEdit() {
         description: row.description,
         proof: row.proof,
         before_after: row.before_after,
+        before_photo_min: row.before_photo_min,
+        before_photo_max: row.before_photo_max,
+        after_photo_min: row.after_photo_min,
+        after_photo_max: row.after_photo_max,
         reward_minutes: row.reward_minutes,
         reward_text: row.reward_text,
         reward_validity: row.reward_validity === "date" ? "today" : row.reward_validity,
@@ -289,10 +326,6 @@ export default function TaskEdit() {
           <span>Saat (isteğe bağlı, ör. 18:00'e kadar)</span>
           <TimeField clearable value={f.due_time} onChange={(v) => set("due_time", v)} label="Saat" />
         </div>
-        <label className="check">
-          <input type="checkbox" checked={f.mandatory} onChange={(e) => set("mandatory", e.target.checked)} />
-          Zorunlu: bu görev yapılmadan süreli uygulamalar açılmasın
-        </label>
       </div>
 
       <div className="card">
@@ -305,10 +338,10 @@ export default function TaskEdit() {
           ))}
         </div>
         {f.proof !== "none" && (
-          <label className="check">
-            <input type="checkbox" checked={f.before_after} onChange={(e) => set("before_after", e.target.checked)} />
-            Öncesi ve sonrası istensin
-          </label>
+          <>
+            <label className="check"><input type="checkbox" checked={f.before_after} onChange={(e) => set("before_after", e.target.checked)} />Öncesi ve sonrası istensin</label>
+            {f.before_after && <div className="grid2"><label className="field"><span>Başlangıç fotoğrafı: en az / en fazla</span><div className="row gap-xs"><input type="number" min={1} max={4} value={f.before_photo_min} onChange={(e) => set("before_photo_min", e.target.value)} /><input type="number" min={1} max={4} value={f.before_photo_max} onChange={(e) => set("before_photo_max", e.target.value)} /></div></label><label className="field"><span>Tamamlanma fotoğrafı: en az / en fazla</span><div className="row gap-xs"><input type="number" min={1} max={4} value={f.after_photo_min} onChange={(e) => set("after_photo_min", e.target.value)} /><input type="number" min={1} max={4} value={f.after_photo_max} onChange={(e) => set("after_photo_max", e.target.value)} /></div></label></div>}
+          </>
         )}
         <p className="muted tiny">Çocuk kanıtı Orbit'in kamerasıyla çeker; galeriden eski foto seçemez. Onay veya retten sonra dosya silinir.</p>
       </div>
@@ -361,18 +394,18 @@ export default function TaskEdit() {
       </div>
 
       <div className="card">
-        <h2>Ödül</h2>
+        <h2>Süre ödülü / ceza</h2>
         <div className="grid2">
           <label className="field">
             <span>Ekstra süre (dk)</span>
-            <input type="number" min={0} value={f.reward_minutes} onChange={(e) => set("reward_minutes", e.target.value)} placeholder="yok" />
+            <input type="number" min={-1440} max={1440} value={f.reward_minutes} onChange={(e) => { const value = e.target.value; setF((x) => ({ ...x, reward_minutes: value, reward_validity: Number(value) < 0 && !["today", "wallet", "vault"].includes(x.reward_validity) ? "today" : x.reward_validity })); }} placeholder="0" />
           </label>
           <label className="field">
             <span>Geçerli</span>
             <select value={f.reward_validity} onChange={(e) => set("reward_validity", e.target.value as RewardValidity)}>
-              {(Object.keys(VALIDITY_LABEL) as RewardValidity[]).map((v) => (
+              {(Object.keys(VALIDITY_LABEL) as RewardValidity[]).filter((v) => Number(f.reward_minutes) < 0 ? ["today", "wallet", "vault"].includes(v) : true).map((v) => (
                 <option key={v} value={v}>
-                  {VALIDITY_LABEL[v]}
+                  {Number(f.reward_minutes) < 0 ? PENALTY_VALIDITY_LABEL[v] : VALIDITY_LABEL[v]}
                 </option>
               ))}
             </select>
@@ -385,9 +418,9 @@ export default function TaskEdit() {
           </div>
         )}
         {f.reward_validity === "vault" && (
-          <p className="muted small">Süre çocuğun süre kasasına kaydedilir; çocuk kendisi kullanamaz. Çocuğun Süre sekmesinden istediğin güne, bölüme ya da saat aralığına aktarırsın.</p>
+          <p className="muted small">Pozitifse süre çocuğun kasasına eklenir; negatifse borç olarak tutulur. Çocuk kasayı kullanamaz, ebeveyn Süre sekmesinden yönetir.</p>
         )}
-        {f.reward_validity !== "wallet" && f.reward_validity !== "vault" && (
+        {Number(f.reward_minutes) >= 0 && f.reward_validity !== "wallet" && f.reward_validity !== "vault" && (
           <label className="field">
             <span>Kazandığı süre nereye eklensin</span>
             <select value={f.reward_section_id} onChange={(e) => set("reward_section_id", e.target.value)}>

@@ -420,6 +420,8 @@ class RuleEngine(private val rules: Rules) {
             }
         }
 
+        customAppRule(app, pkg, s, usage)?.let { return it }
+
         if (s.sectionMode) return sectionVerdict(pkg, app, s, usage)
         if (!approved) return AppVerdict(false, "Ebeveyn onayı bekliyor")
         return when (group) {
@@ -435,6 +437,22 @@ class RuleEngine(private val rules: Rules) {
                 val limit = app?.dailyLimitMinutes
                 if (limit != null && (usage.perAppCounted[pkg] ?: 0) >= limit * 60L) return AppVerdict(false, "Bu uygulamanın günlük sınırı doldu")
                 AppVerdict(true, countsDaily = true)
+            }
+        }
+    }
+
+    private fun customAppRule(app: AppRule?, pkg: String, s: Snapshot, usage: DayUsage): AppVerdict? {
+        val rule = app?.usageRuleId?.let { rules.usageRules[it] } ?: return null
+        if (app.approved != true) return AppVerdict(false, "Ebeveyn onayı bekliyor")
+        if (rule.window != null && !rule.window.contains(s.now)) return AppVerdict(false, "Bu saatlerde kapalı")
+        return when (rule.mode) {
+            "open" -> AppVerdict(true)
+            "blocked" -> AppVerdict(false, "Bu uygulama kapalı")
+            else -> {
+                val spent = if (rule.countsTowardDaily) usage.perAppCounted[pkg] ?: 0L else usage.perAppTotal[pkg] ?: 0L
+                if (rule.maxMinutes != null && spent >= rule.maxMinutes * 60L) return AppVerdict(false, "Bu uygulamanın süresi doldu")
+                if (rule.countsTowardDaily && s.remainingSeconds <= 0) return AppVerdict(false, "Günlük süren bitti")
+                AppVerdict(true, countsDaily = rule.countsTowardDaily)
             }
         }
     }

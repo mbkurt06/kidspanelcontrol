@@ -18,6 +18,8 @@ import { Icon } from "../components/Icon";
 import { RecordingList } from "../components/RecordingPlayer";
 import { STARTER_TEMPLATES } from "../lib/templates";
 
+function signedMinutes(m: number | null | undefined) { if (m == null) return ""; return `${m > 0 ? "+" : ""}${minutesText(m)}`; }
+
 export default function Tasks() {
   const fam = useFamily();
   const nav = useNavigate();
@@ -137,7 +139,7 @@ export default function Tasks() {
                         {t?.mandatory ? " · zorunlu" : ""}
                       </b>
                       <div className="muted tiny">
-                        {t?.reward_minutes ? `+${minutesText(t.reward_minutes)}` : ""}
+                        {t?.reward_minutes != null ? signedMinutes(t.reward_minutes) : ""}
                         {t?.reward_text ? ` ${t.reward_text}` : ""}
                         {r.reject_note ? ` · "${r.reject_note}"` : ""}
                       </div>
@@ -186,7 +188,7 @@ export default function Tasks() {
               <div className="muted tiny">
                 {PROOF_LABEL[t.proof]}
                 {t.before_after ? " (öncesi/sonrası)" : ""}
-                {t.reward_minutes ? ` · +${minutesText(t.reward_minutes)}` : ""}
+                {t.reward_minutes != null ? ` · ${signedMinutes(t.reward_minutes)}` : ""}
                 {t.reward_text ? ` · ${t.reward_text}` : ""}
                 {t.mandatory ? " · zorunlu" : ""}
               </div>
@@ -331,7 +333,7 @@ function ReviewCard({ run, task, childName, color, onDone }: { run: TaskRun; tas
           <div className="grid2">
             <label className="field">
               <span>Ekstra süre (dk)</span>
-              <input type="number" min={0} value={minutes} onChange={(e) => setMinutes(e.target.value)} placeholder="yok" />
+              <input type="number" min={0} value={minutes} onChange={(e) => setMinutes(e.target.value)} placeholder="0" />
             </label>
             <label className="field">
               <span>Ne zaman</span>

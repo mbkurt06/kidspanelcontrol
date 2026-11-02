@@ -1,6 +1,7 @@
 package app.orbit
 
 import app.orbit.engine.AppRule
+import app.orbit.engine.AppUsageRule
 import app.orbit.engine.Command
 import app.orbit.engine.CommandType
 import app.orbit.engine.DayOverride
@@ -88,6 +89,19 @@ class RuleEngineTest {
         val v = e.verdict("com.wa", e.snapshot(at(15), u), u)
         assertTrue(v.allowed); assertFalse(v.countsDaily)
         assertFalse(e.verdict("com.wa", e.snapshot(at(22), u), u).allowed)
+    }
+
+    @Test
+    fun namedAppRuleCanLimitWithoutReducingDailyAllowance() {
+        val customId = "rule-homework"
+        val app = AppRule("com.custom", "Özel", Group.TIMED, true, null, customId)
+        val r = rules().copy(apps = apps + (app.pkg to app), usageRules = mapOf(customId to AppUsageRule(customId, "timed", 20, false)))
+        val e = RuleEngine(r)
+        val u = DayUsage(day)
+        val v = e.verdict("com.custom", e.snapshot(at(15), u), u)
+        assertTrue(v.allowed)
+        assertFalse(v.countsDaily)
+        assertEquals(0L, e.account(u, "com.custom", v, 10 * 60).countedSeconds)
     }
 
     @Test

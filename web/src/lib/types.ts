@@ -18,6 +18,18 @@ export type ChildApp = {
   installed: boolean;
   first_seen_at: string;
   category: string | null;
+  usage_rule_id?: string | null;
+};
+
+export type AppUsageRule = {
+  id: string;
+  family_id: string;
+  name: string;
+  mode: "open" | "timed" | "blocked";
+  max_minutes: number | null;
+  counts_toward_daily: boolean;
+  start_time: string | null;
+  end_time: string | null;
 };
 
 // --- Gün bölümleri ve uygulama grupları ---
@@ -64,6 +76,11 @@ export type FamilySettings = {
   lock_button_minutes: number | null;
   pin_unlock_minutes: number;
   parent_pin_hash: string | null;
+  proof_retention_days?: number;
+  task_before_photo_min?: number;
+  task_before_photo_max?: number;
+  task_after_photo_min?: number;
+  task_after_photo_max?: number;
 };
 
 export type RuleKind = "kiosk" | "limit" | "free" | "music_off" | "music_on";
@@ -253,6 +270,10 @@ export type TaskTemplate = {
   description: string | null;
   proof: ProofType;
   before_after: boolean;
+  before_photo_min?: number;
+  before_photo_max?: number;
+  after_photo_min?: number;
+  after_photo_max?: number;
   reward_minutes: number | null;
   reward_text: string | null;
   reward_validity: RewardValidity;
@@ -342,6 +363,14 @@ export const VALIDITY_LABEL: Record<RewardValidity, string> = {
   date: "Belirli gün",
   wallet: "Çocuk istediği gün kullanır",
   vault: "Süre kasasına (sonra ben planlarım)",
+};
+
+export const PENALTY_VALIDITY_LABEL: Record<RewardValidity, string> = {
+  today: "Günlük süreden hemen düş",
+  tomorrow: "Yarın",
+  date: "Belirli gün",
+  wallet: "Cüzdana borç yaz",
+  vault: "Süre kasasına borç yaz",
 };
 
 export const STATUS_LABEL: Record<RunStatus, string> = {

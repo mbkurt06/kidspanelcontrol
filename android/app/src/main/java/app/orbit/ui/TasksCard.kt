@@ -39,7 +39,7 @@ private fun statusText(t: TaskItem) = when (t.status) {
     "open" -> null
     "started" -> "Başladın — bitince \"Tamamladım\"a bas"
     "submitted" -> "Ebeveyn onayı bekleniyor"
-    "approved" -> "Onaylandı" + (t.rewardMinutes?.let { " · +$it dk" } ?: "")
+    "approved" -> "Onaylandı" + (t.rewardMinutes?.let { " · ${if (it > 0) "+" else ""}$it dk" } ?: "")
     "rejected" -> "Tekrar yap" + (t.rejectNote?.let { ": $it" } ?: "")
     "claimed" -> "Kardeşin yaptı"
     "expired" -> "Süresi doldu"
@@ -49,7 +49,7 @@ private fun statusText(t: TaskItem) = when (t.status) {
 private fun rewardText(t: TaskItem): String? {
     val parts = mutableListOf<String>()
     t.rewardMinutes?.let {
-        parts += "+$it dk" + when (t.rewardValidity) {
+        parts += (if (it > 0) "+" else "") + "$it dk" + when (t.rewardValidity) {
             "tomorrow" -> " (yarın)"
             "wallet" -> " (cüzdana)"
             "vault" -> " (süre kasasına)"
@@ -103,13 +103,14 @@ fun TasksCard(tasks: List<TaskItem>) {
                     val f = File(path)
                     Sync.uploadProof(task.runId, stage, media, f.readBytes(), if (media == "video") "video/mp4" else "image/jpeg")
                     f.delete()
-                    if (stage != "before") Sync.submitTask(task.runId)
+                    if (stage != "before" && task.afterCount + 1 >= task.afterPhotoMin) Sync.submitTask(task.runId)
                 }
             }
             busyRun = null
             msg = when {
                 r.isFailure -> "Yüklenemedi: ${r.exceptionOrNull()?.message ?: "internet?"}"
                 stage == "before" -> "Öncesi kaydedildi. Görevi yap, sonra \"Tamamladım\"a bas."
+                stage == "after" && task.afterCount + 1 < task.afterPhotoMin -> "Sonrası fotoğrafı kaydedildi; ${task.afterPhotoMin - task.afterCount - 1} fotoğraf daha gerekli"
                 else -> "\"${task.title}\" gönderildi, onay bekleniyor"
             }
             Live.syncRequested = true
@@ -117,6 +118,9 @@ fun TasksCard(tasks: List<TaskItem>) {
     }
 
     fun capture(t: TaskItem, stage: String) {
+        val count = if (stage == "before") t.beforeCount else t.afterCount
+        val max = if (stage == "before") t.beforePhotoMax else t.afterPhotoMax
+        if (count >= max) { msg = "En fazla $max fotoğraf ekleyebilirsin"; return }
         pending = t to stage
         val title = when (stage) {
             "before" -> "${t.title} — öncesi"
@@ -149,7 +153,7 @@ fun TasksCard(tasks: List<TaskItem>) {
                 if (t.open && t.needsRecording) {
                     val rec = app.orbit.data.Recorder.current()?.takeIf { it.runId == t.runId }
                     when {
-                        rec?.active == true || (!t.recordingDone && !(t.needsProof && t.beforeAfter && !t.hasBefore)) -> Button(
+                        rec?.active == true || (!t.recordingDone && !(t.needsProof && t.beforeAfter && t.beforeCount < t.beforePhotoMin)) -> Button(
                             onClick = { ctx.startActivity(Intent(ctx, RecordActivity::class.java).putExtra("runId", t.runId)) },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = C.bad),
@@ -166,15 +170,16 @@ fun TasksCard(tasks: List<TaskItem>) {
                         t.recordingDone -> Text("📹 Kayıt tamam (${t.recSeconds / 60} dk)", color = C.good, fontSize = 13.sp)
                     }
                 }
-                val recordFirst = t.needsRecording && !t.recordingDone && !(t.needsProof && t.beforeAfter && !t.hasBefore)
+                val recordFirst = t.needsRecording && !t.recordingDone && !(t.needsProof && t.beforeAfter && t.beforeCount < t.beforePhotoMin)
                 if (t.open && !recordFirst && !(t.needsRecording && app.orbit.data.Recorder.current()?.let { it.runId == t.runId && it.active } == true)) {
                     val busy = busyRun == t.runId
-                    val needBefore = t.needsProof && t.beforeAfter && !t.hasBefore
+                    val needBefore = t.needsProof && t.beforeAfter && t.beforeCount < t.beforePhotoMin
+                    val needAfter = t.needsProof && t.afterCount < t.afterPhotoMin
                     Button(
                         onClick = {
                             when {
                                 needBefore -> capture(t, "before")
-                                t.needsProof -> capture(t, if (t.beforeAfter) "after" else "single")
+                                needAfter -> capture(t, if (t.beforeAfter) "after" else "single")
                                 else -> submit(t)
                             }
                         },
@@ -186,6 +191,7 @@ fun TasksCard(tasks: List<TaskItem>) {
                             when {
                                 busy -> "Gönderiliyor…"
                                 needBefore -> "Başla (öncesi ${if (t.proof == "video") "videosu" else "fotoğrafı"})"
+                                needAfter -> "Fotoğraf ekle (${t.afterCount}/${t.afterPhotoMin})"
                                 t.needsProof -> "Tamamladım (${if (t.beforeAfter) "sonrası " else ""}${if (t.proof == "video") "video" else "fotoğraf"})"
                                 else -> "Tamamladım"
                             }

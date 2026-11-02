@@ -92,7 +92,12 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add web/public/kurulum/orbit.apk web/public/kurulum/version.json
           git diff --cached --quiet || git commit -m "chore(release): publish Orbit $ORBIT_VERSION_CODE installer"
-          git push origin HEAD:main
+          # Yeni kaynak commit'i derleme sürerken ana dala geldiyse release commit'ini onun üstüne al.
+          for attempt in 1 2 3 4 5; do
+            git push origin HEAD:main && exit 0
+            git pull --rebase origin main
+          done
+          exit 1
 
       - uses: actions/upload-artifact@v4
         if: success()

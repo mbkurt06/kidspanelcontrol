@@ -36,7 +36,8 @@ export default function ChildPage() {
         </Link>
       </header>
       <ParentModeCard childId={child.id} />
-      <div className="segmented child-tabs">
+      <div className="child-tabs-wrap">
+        <div className="segmented child-tabs">
         {(
           [
             ["apps", "Uygulamalar"],
@@ -54,6 +55,7 @@ export default function ChildPage() {
             {l}
           </button>
         ))}
+        </div>
       </div>
       {tab === "apps" && <AppsTab childId={child.id} />}
       {tab === "program" && <ProgramTab childId={child.id} />}

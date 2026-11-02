@@ -28,9 +28,10 @@ export default function Tasks() {
   const [templatesOpen, setTemplatesOpen] = useState(false);
   const [err, setErr] = useState("");
   const today = todayISO();
-  const [historyView, setHistoryView] = useState<"week" | "open" | "done" | "all" | "range">("week");
+  const [historyView, setHistoryView] = useState<"day" | "week" | "month" | "range">("day");
   const [rangeFrom, setRangeFrom] = useState(todayISO("Europe/Berlin", -7));
   const [rangeTo, setRangeTo] = useState(today);
+  const monthStart = `${today.slice(0, 7)}-01`;
 
   const load = useCallback(async () => {
     await supabase.rpc("parent_ensure_runs", { p_day: today });
@@ -67,10 +68,7 @@ export default function Tasks() {
   const rewards = runs.filter((r) => r.status === "approved" && r.reward_text && !r.reward_delivered_at && visibleChildIds.has(r.child_id));
   const history = runs.filter((r) => {
     if (!visibleChildIds.has(r.child_id)) return false;
-    if (historyView === "open") return ["open", "started", "submitted", "rejected"].includes(r.status);
-    if (historyView === "done") return ["approved", "claimed"].includes(r.status);
-    if (historyView === "all") return true;
-    const from = historyView === "range" ? rangeFrom : todayISO("Europe/Berlin", -7);
+    const from = historyView === "range" ? rangeFrom : historyView === "month" ? monthStart : historyView === "week" ? todayISO("Europe/Berlin", -6) : today;
     const to = historyView === "range" ? rangeTo : today;
     return r.day >= from && r.day <= to;
   });
@@ -163,11 +161,11 @@ export default function Tasks() {
 
       <div className="card">
         <div className="row between wrap">
-          <h2>Görev geçmişi <Info>Bugünkü, açık, tamamlanan veya seçtiğin tarih aralığındaki görev kayıtları.</Info></h2>
+          <h2>Görev geçmişi <Info>Bugün, son 7 gün, bu ay veya seçtiğin tarih aralığındaki görev kayıtları.</Info></h2>
           <div className="row gap-xs wrap">
-            {(["week", "open", "done", "all", "range"] as const).map((v) => (
+            {(["day", "week", "month", "range"] as const).map((v) => (
               <button key={v} className={`chip small ${historyView === v ? "on" : ""}`} onClick={() => setHistoryView(v)}>
-                {v === "week" ? "Bu hafta" : v === "open" ? "Açık" : v === "done" ? "Tamamlanan" : v === "all" ? "Tümü" : "Aralık"}
+                {v === "day" ? "Bugün" : v === "week" ? "7 gün" : v === "month" ? "1 ay" : "Özel"}
               </button>
             ))}
           </div>

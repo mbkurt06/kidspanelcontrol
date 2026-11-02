@@ -714,6 +714,19 @@ select:focus {
 }
 .child-tabs { display: flex; overflow-x: auto; justify-content: flex-start; }
 .child-tabs button { flex: 0 0 auto; min-width: 92px; }
+.child-tabs-wrap { position: relative; min-width: 0; }
+.child-tabs-wrap::after {
+  content: "›";
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 4px 6px;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  pointer-events: none;
+}
 .segmented button {
   font: inherit;
   font-size: 13px;

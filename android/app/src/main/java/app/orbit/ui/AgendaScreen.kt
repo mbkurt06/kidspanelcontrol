@@ -60,20 +60,48 @@ fun AgendaScreen() {
     var detail by remember { mutableStateOf<AgendaItem?>(null) }
     val items = remember(live.lastSync) { Agenda.current() }
 
-    Box(Modifier.fillMaxWidth()) {
-        Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val openItems = items.filter { it.status != "done" }
+    val doneItems = items.filter { it.status == "done" }
+
+    fun toggle(item: AgendaItem) {
+        scope.launch {
+            withContext(Dispatchers.IO) { Agenda.setDone(item.id, item.status != "done") }
+            Live.syncRequested = true
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        Column(
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 76.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             if (items.isEmpty()) Card { Muted("Ajandada kayıt yok.") }
-            for (item in items) {
+            for (item in openItems) {
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).clickable { detail = item }.padding(12.dp),
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    val done = item.status == "done"
-                    Text(if (done) "☑" else "☐", color = if (done) C.good else C.muted, fontSize = 27.sp)
-                    Column(Modifier.weight(1f).padding(start = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    IconButton(onClick = { toggle(item) }) { Text("☐", color = C.muted, fontSize = 27.sp) }
+                    Column(Modifier.weight(1f).clickable { detail = item }.padding(start = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Muted(enteredText(item.enteredAt), 12)
                         Text(item.title, color = C.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
                         Muted("${dateText(item.dueDate)}${item.dueTime?.take(5)?.let { " · $it" } ?: ""}", 12)
+                    }
+                }
+            }
+            if (doneItems.isNotEmpty()) {
+                Title("Tamamlananlar")
+                for (item in doneItems) {
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        IconButton(onClick = { toggle(item) }) { Text("☑", color = C.good, fontSize = 27.sp) }
+                        Column(Modifier.weight(1f).clickable { detail = item }.padding(start = 6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Muted(enteredText(item.enteredAt), 12)
+                            Text(item.title, color = C.muted, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                            Muted("${dateText(item.dueDate)}${item.dueTime?.take(5)?.let { " · $it" } ?: ""}", 12)
+                        }
                     }
                 }
             }

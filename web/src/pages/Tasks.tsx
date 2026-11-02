@@ -25,6 +25,7 @@ export default function Tasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [runs, setRuns] = useState<TaskRun[]>([]);
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [err, setErr] = useState("");
   const today = todayISO();
   const [historyView, setHistoryView] = useState<"week" | "open" | "done" | "all" | "range">("week");
@@ -193,9 +194,13 @@ export default function Tasks() {
 
       <div className="card">
         <div className="row between">
-          <h2>Şablonlar <Info>Sık verilen görevler. Bir şablona dokununca ayarları hazır yeni görev formu açılır.</Info></h2>
+          <button className="section-title row gap-xs" type="button" onClick={() => setTemplatesOpen((v) => !v)} aria-expanded={templatesOpen}>
+            <span aria-hidden="true">{templatesOpen ? "⌃" : "⌄"}</span>
+            <span>Şablonlar</span>
+            <Info>Sık verilen görevler. Bir şablonu açınca ayarları hazır yeni görev formu açılır.</Info>
+          </button>
         </div>
-        {templates.map((t) => (
+        {templatesOpen && templates.map((t) => (
           <div className="app-row" key={t.id}>
             <div className="grow">
               <b>{t.title}</b>
@@ -223,7 +228,7 @@ export default function Tasks() {
             </button>
           </div>
         ))}
-        {!templates.length && (
+        {templatesOpen && !templates.length && (
           <button className="btn" onClick={seedTemplates}>
             Hazır şablonları ekle (Odanı topla, Ödevini yap…)
           </button>

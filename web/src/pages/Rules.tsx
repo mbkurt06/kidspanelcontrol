@@ -60,7 +60,7 @@ export default function Rules() {
           <div className="grow">
             <b>🔒 Kilit</b>
             <div className="muted small">
-              Kilitle · Sınırla · Serbest
+              Kilitle · Sınırla · Serbest <Info>Telefonun ne zaman kilitleneceğini, sınırlandırılacağını veya serbest kalacağını belirler.</Info>
               {fam.timeRules.filter((r) => ["kiosk", "limit", "free"].includes(r.kind)).length
                 ? ` · ${fam.timeRules.filter((r) => ["kiosk", "limit", "free"].includes(r.kind)).length} kural`
                 : ""}
@@ -71,7 +71,7 @@ export default function Rules() {
         <Link to="/rules/music" className="card link-card">
           <div className="grow">
             <b>🎵 Müzik</b>
-            <div className="muted small">Ne zaman çalar, klasör</div>
+            <div className="muted small">Ne zaman çalar, klasör <Info>Müzik klasörünü ve çalma zamanlarını belirler.</Info></div>
           </div>
           <Icon name="chevron" size={18} />
         </Link>

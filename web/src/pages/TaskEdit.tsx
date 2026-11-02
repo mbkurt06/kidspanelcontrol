@@ -224,7 +224,7 @@ export default function TaskEdit() {
           <input value={f.title} onChange={(e) => set("title", e.target.value)} placeholder="Odanı topla" />
         </label>
         <label className="field">
-          <span>Açıklama (isteğe bağlı)</span>
+          <span>Açıklama <Info>Çocuğun görevin ayrıntılarını görür.</Info></span>
           <input value={f.description} onChange={(e) => set("description", e.target.value)} placeholder="Yatağını yap, yerleri topla" />
         </label>
       </div>
@@ -287,7 +287,7 @@ export default function TaskEdit() {
           </div>
         )}
         <div className="field">
-          <span>Saat (isteğe bağlı, ör. 18:00'e kadar)</span>
+          <span>Saat <Info>İstersen son teslim saatini de belirle.</Info></span>
           <TimeField clearable value={f.due_time} onChange={(v) => set("due_time", v)} label="Saat" />
         </div>
         <label className="check">
@@ -297,7 +297,7 @@ export default function TaskEdit() {
       </div>
 
       <div className="card">
-        <h2>Kanıt</h2>
+        <h2>Kanıt <Info>Çocuk yalnızca Orbit kamerasıyla kanıt gönderir; onay veya redden sonra dosya silinir.</Info></h2>
         <div className="row gap-xs wrap">
           <button className={`chip small ${f.proof === "none" ? "on" : ""}`} onClick={() => { set("proof", "none"); set("before_after", false); }}>
             Kanıt yok
@@ -311,12 +311,11 @@ export default function TaskEdit() {
           {f.proof !== "none" && f.proof !== "photo" && <span className="pill quiet">{PROOF_LABEL[f.proof]}</span>}
         </div>
         {f.proof !== "none" && f.proof !== "photo" && <p className="muted tiny">Bu eski görev video kanıtı kullanıyor; değiştirmek için yukarıdaki fotoğraf seçeneğini seçebilirsin.</p>}
-        {f.proof === "photo" && <p className="muted tiny">Başlangıç seçilirse çocuk önce fotoğraf çeker; tamamlayınca ikinci fotoğrafı gönderir.</p>}
-        <p className="muted tiny">Çocuk kanıtı Orbit'in kamerasıyla çeker; galeriden eski foto seçemez. Onay veya retten sonra dosya silinir.</p>
+        {f.proof === "photo" && <p className="muted tiny"><Info>Başlangıç seçilirse çocuk önce fotoğraf çeker; tamamlayınca ikinci fotoğrafı gönderir.</Info></p>}
       </div>
 
       <div className="card">
-        <h2>📹 Kamera kaydı</h2>
+        <h2>📹 Kamera kaydı <Info>Kayıt görev boyunca telefondaki Orbit kamerasından alınır; galeri kullanılmaz.</Info></h2>
         <label className="check">
           <input type="checkbox" checked={f.record_on} onChange={(e) => set("record_on", e.target.checked)} />
           Görev süresince kamerayla kayıt yapsın
@@ -354,10 +353,6 @@ export default function TaskEdit() {
                 <span className="small">dk (dolunca kayıt kendiliğinden devam eder)</span>
               </div>
             )}
-            <p className="muted tiny">
-              Telefon saniyede 2 kare çeker; 1 saatlik kayıt yaklaşık 3 dakikalık, ~45 MB'lık bir video olur ve panelde 5x–40x hızda izlenir. Molalar kayda sayılmaz.
-              Kayıt sürerken telefonda diğer uygulamalar kapalıdır. Kayıt kesilirse ya da erken bitirilirse sana bildirim gelir.
-            </p>
           </>
         )}
       </div>

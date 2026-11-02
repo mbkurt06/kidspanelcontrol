@@ -36,6 +36,7 @@ export default function Vault() {
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [q, setQ] = useState("");
   const [copied, setCopied] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!fam.familyId || !id) return;
@@ -331,12 +332,13 @@ export default function Vault() {
                     <button
                       className="btn small danger-text"
                       onClick={async () => {
-                        if (!confirm(`"${r.v.app}" kaydı silinsin mi?`)) return;
+                        if (deleteId !== r.id) return setDeleteId(r.id);
                         await supabase.from("vault_entries").update({ removed_at: new Date().toISOString() }).eq("id", r.id);
+                        setDeleteId(null);
                         load();
                       }}
                     >
-                      Sil
+                      {deleteId === r.id ? "Tekrar bas: sil" : "Sil"}
                     </button>
                   </div>
                 </div>

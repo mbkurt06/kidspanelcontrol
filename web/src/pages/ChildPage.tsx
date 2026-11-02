@@ -297,10 +297,6 @@ function AppsTab({ childId }: { childId: string }) {
           <h2>Onay bekleyen ({pending.length}) <Info>Grubunu seçip onayla. “Kurallara göre” uygulamalar grubunun bölüm kurallarına uyar.</Info></h2>
           {pending.map((a) => (
             <div className="app-setting-row" key={a.package}>
-              <div className="app-setting-name">
-                <b>{a.label}</b>
-                <div className="muted tiny">{a.package}</div>
-              </div>
               <div className="app-setting-controls">
                 {groupSelect(pendingGroup[a.package] ?? fam.members[a.package] ?? suggestedId(a), (v) =>
                   setPendingGroup((m) => ({ ...m, [a.package]: v }))
@@ -311,6 +307,10 @@ function AppsTab({ childId }: { childId: string }) {
                     <option key={m} value={m}>{MODE3_LABEL[m]}</option>
                   ))}
                 </select>
+              </div>
+              <div className="app-setting-name">
+                <b>{a.label}</b>
+                <div className="muted tiny">{a.package}</div>
               </div>
             </div>
           ))}
@@ -323,13 +323,10 @@ function AppsTab({ childId }: { childId: string }) {
           <div className="card" key={g.id || "none"}>
             <h2>
               <span className="dot" style={{ background: g.color }} /> {g.name} <span className="muted small">· {list.length}</span>
+              <Info>Günlük sınır girilirse bu uygulama, kuralların izin verdiği toplam süreden ayrıca bu dakika kadar kullanılır.</Info>
             </h2>
             {list.map((a) => (
               <div className="app-setting-row" key={a.package}>
-                <div className="app-setting-name">
-                  <b>{a.label}</b>
-                  <div className="muted tiny">{a.package}</div>
-                </div>
                 <div className="app-setting-controls">
                   {groupSelect(fam.members[a.package] ?? "", (v) => setGroup(a.package, v))}
                   <select value={mode3(a.app_group)} onChange={(e) => update(a, { app_group: fromMode3(e.target.value as Mode3) })} aria-label="Durum">
@@ -342,12 +339,16 @@ function AppsTab({ childId }: { childId: string }) {
                       className="mini"
                       type="number"
                       min={0}
-                      placeholder="gün dk"
+                      placeholder="dk"
                       value={a.daily_limit_minutes ?? ""}
                       onChange={(e) => update(a, { daily_limit_minutes: e.target.value === "" ? null : Number(e.target.value) })}
                       aria-label="Bu uygulama için günlük üst sınır (dakika)"
                     />
                   ) : <span />}
+                </div>
+                <div className="app-setting-name">
+                  <b>{a.label}</b>
+                  <div className="muted tiny">{a.package}</div>
                 </div>
               </div>
             ))}
@@ -1061,6 +1062,8 @@ function DeviceTab({ childId }: { childId: string }) {
   const [err, setErr] = useState("");
   const [name, setName] = useState(child.name);
   const [color, setColor] = useState(child.color);
+  const [confirmDisconnect, setConfirmDisconnect] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("devices").select("*").eq("child_id", childId).order("created_at", { ascending: false });
@@ -1124,12 +1127,13 @@ function DeviceTab({ childId }: { childId: string }) {
               <button
                 className="btn small danger-text"
                 onClick={async () => {
-                  if (!confirm("Bu telefonun bağlantısı kesilsin mi? Telefon kuralları almayı durdurur.")) return;
+                  if (confirmDisconnect !== d.id) return setConfirmDisconnect(d.id);
                   await supabase.from("devices").update({ status: "revoked" }).eq("id", d.id);
+                  setConfirmDisconnect(null);
                   load();
                 }}
               >
-                Bağlantıyı kes
+                {confirmDisconnect === d.id ? "Kesilsin" : "Bağlantıyı kes"}
               </button>
             ) : (
               <span className="pill quiet">kesildi</span>
@@ -1160,13 +1164,13 @@ function DeviceTab({ childId }: { childId: string }) {
         <button
           className="btn ghost danger-text"
           onClick={async () => {
-            if (!confirm(`${child.name} ve tüm kayıtları silinsin mi? Bu geri alınamaz.`)) return;
+            if (!confirmDelete) return setConfirmDelete(true);
             await supabase.from("children").delete().eq("id", childId);
             await fam.reload();
             nav("/");
           }}
         >
-          Çocuğu sil
+          {confirmDelete ? "Tekrar bas: kalıcı sil" : "Çocuğu sil"}
         </button>
       </div>
     </div>

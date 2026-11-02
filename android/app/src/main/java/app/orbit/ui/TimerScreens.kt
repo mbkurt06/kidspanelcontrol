@@ -11,14 +11,20 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -250,29 +256,39 @@ fun AlarmsScreen() {
         return
     }
 
-    Button(onClick = { creating = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = C.accent)) { Text("Yeni alarm / hatırlatıcı") }
-    if (msg.isNotEmpty()) Text(msg, color = C.good)
-    if (list.isEmpty()) Muted("Henüz alarm yok.")
-    for (a in list) {
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.surface)
-                .then(if (a.editable) Modifier.clickable { editing = a } else Modifier).padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(a.time.toString().take(5), color = if (a.active) C.text else C.muted, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-                Text((if (a.kind == "alarm") "⏰ " else "🔔 ") + a.title, color = C.text)
-                Muted(
-                    listOfNotNull(
-                        if (a.days.isEmpty()) a.onDate?.let { if (it == LocalDate.now()) "bugün" else if (it == LocalDate.now().plusDays(1)) "yarın" else it.toString() } ?: "tek sefer"
-                        else if (a.days.size == 7) "her gün" else a.days.sorted().joinToString(" ") { DAY_NAMES[it - 1] },
-                        if (a.byParent) "ebeveynin kurdu" else null,
-                        if (!a.editable) "değiştirilemez" else null,
-                    ).joinToString(" · "), 12,
-                )
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (msg.isNotEmpty()) Text(msg, color = C.good)
+            if (list.isEmpty()) Muted("Henüz alarm yok.")
+            for (a in list) {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.surface)
+                        .then(if (a.editable) Modifier.clickable { editing = a } else Modifier).padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(a.time.toString().take(5), color = if (a.active) C.text else C.muted, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                        Text((if (a.kind == "alarm") "⏰ " else "🔔 ") + a.title, color = C.text)
+                        Muted(
+                            listOfNotNull(
+                                if (a.days.isEmpty()) a.onDate?.let { if (it == LocalDate.now()) "bugün" else if (it == LocalDate.now().plusDays(1)) "yarın" else it.toString() } ?: "tek sefer"
+                                else if (a.days.size == 7) "her gün" else a.days.sorted().joinToString(" ") { DAY_NAMES[it - 1] },
+                                if (a.byParent) "ebeveynin kurdu" else null,
+                                if (!a.editable) "değiştirilemez" else null,
+                            ).joinToString(" · "), 12,
+                        )
+                    }
+                    if (a.editable) Switch(checked = a.active, onCheckedChange = { on -> run(if (on) "Açıldı" else "Kapatıldı") { Alarms.save(a.id, a.title, a.kind, a.time, a.days, a.onDate, on) } })
+                }
             }
-            if (a.editable) Switch(checked = a.active, onCheckedChange = { on -> run(if (on) "Açıldı" else "Kapatıldı") { Alarms.save(a.id, a.title, a.kind, a.time, a.days, a.onDate, on) } })
         }
+        FloatingActionButton(
+            onClick = { creating = true },
+            shape = CircleShape,
+            containerColor = C.accent,
+            contentColor = C.text,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).size(56.dp),
+        ) { Text("+", fontSize = 24.sp) }
     }
 }
 

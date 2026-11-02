@@ -74,7 +74,6 @@ enum class Screen(val icon: String, val title: String) {
     TIMER("⏱", "Sayaç"),
     ALARMS("⏰", "Alarmlarım"),
     MUSIC("🎵", "Müzik"),
-    DAY("🗓", "Günüm"),
     WALLET("⏳", "Süre cüzdanı"),
     ASK("🙋", "Ebeveynden iste"),
     PROFILE("👤", "Profil"),
@@ -111,13 +110,16 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
         drawerState = drawer,
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = C.surface) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         OrbitAvatar(profileRules.profileAvatar, Modifier.size(46.dp))
                         Spacer(Modifier.width(10.dp))
                         Text(Store.childName.ifBlank { "Orbit" }, color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     }
-                    Muted(if (live.online) "bağlı" else "çevrimdışı", 12)
+                    Box(
+                        Modifier.size(10.dp).clip(CircleShape)
+                            .background(if (live.online) C.good else C.bad),
+                    )
                     Spacer(Modifier.height(12.dp))
                     val focusNow = remember(live.lastSync, live.snapshot?.now?.minute) { app.orbit.data.Timers.activeFocus() }
                     for (s in Screen.entries) {
@@ -206,15 +208,21 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                 } else MessagesScreen()
                 return@Column
             }
-            Column(
+            if (screen == Screen.AGENDA || screen == Screen.ALARMS) {
+                Box(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                    when (screen) {
+                        Screen.AGENDA -> AgendaScreen()
+                        Screen.ALARMS -> AlarmsScreen()
+                        else -> Unit
+                    }
+                }
+            } else Column(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 when (screen) {
                     Screen.TODAY -> if (kiosk != null) KioskToday(kiosk) { screen = it } else TodayScreen { if (visible(it)) screen = it }
                     Screen.TASKS -> TasksCard(remember(live.lastSync, live.snapshot?.now?.minute) { Tasks.current() })
-                    Screen.AGENDA -> AgendaScreen()
-                    Screen.DAY -> DayScreen()
                     Screen.WALLET -> WalletScreen()
                     Screen.ASK -> AskScreen()
                     Screen.PROFILE -> ProfileScreen()
@@ -222,7 +230,6 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                     Screen.VAULT -> VaultScreen(onCancel = { screen = Screen.TODAY })
                     Screen.MESSAGES -> Unit
                     Screen.TIMER -> TimerScreen()
-                    Screen.ALARMS -> AlarmsScreen()
                     Screen.MUSIC -> MusicScreen()
                 }
             }
@@ -302,7 +309,7 @@ private fun TodayScreen(go: (Screen) -> Unit) {
     }
     if (next != null) {
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).clickable { go(Screen.DAY) }.padding(14.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(next.icon ?: "⏭", fontSize = 22.sp)

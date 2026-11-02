@@ -57,6 +57,7 @@ class VaultActivity : ComponentActivity() {
     private var editing by mutableStateOf<Vault.Entry?>(null)
     private var msg by mutableStateOf("")
     private var busy by mutableStateOf(false)
+    private var deleteArmed: String? by mutableStateOf(null)
     private val revealed = mutableStateMapOf<String, Boolean>()
     private val handler = Handler(Looper.getMainLooper())
 
@@ -182,11 +183,12 @@ class VaultActivity : ComponentActivity() {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = { editing = x }) { Text("Düzenle") }
                 TextButton(onClick = {
-                    lifecycleScope.launch {
+                    if (deleteArmed == x.id) lifecycleScope.launch {
                         withContext(Dispatchers.IO) { runCatching { Vault.remove(x.id!!) } }
+                        deleteArmed = null
                         load()
-                    }
-                }) { Text("Sil", color = C.bad) }
+                    } else deleteArmed = x.id
+                }) { Text(if (deleteArmed == x.id) "Tekrar bas: sil" else "Sil", color = C.bad) }
             }
         }
     }

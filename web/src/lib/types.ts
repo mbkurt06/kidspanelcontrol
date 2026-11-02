@@ -71,7 +71,6 @@ export const KIOSK_SCREENS: [KioskScreen, string][] = [
   ["music", "🎵 Müzik"],
   ["timer", "⏱ Sayaç"],
   ["alarms", "⏰ Alarmlar"],
-  ["day", "🗓 Günüm"],
   ["wallet", "⏳ Süre cüzdanı"],
   ["ask", "🙋 Ebeveynden iste"],
   ["vault", "🔑 Şifreler"],

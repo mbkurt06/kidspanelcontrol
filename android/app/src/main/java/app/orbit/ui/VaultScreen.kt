@@ -58,6 +58,7 @@ fun VaultScreen(onCancel: () -> Unit) {
     var busy by remember { mutableStateOf(false) }
     var clearAt by remember { mutableStateOf(0L) }
     var deleteEntry by remember { mutableStateOf<Vault.Entry?>(null) }
+    var deleteArmed by remember { mutableStateOf<String?>(null) }
     val revealed = remember { mutableStateMapOf<String, Boolean>() }
 
     fun load() {
@@ -197,7 +198,9 @@ fun VaultScreen(onCancel: () -> Unit) {
                         if (x.note.isNotEmpty()) Muted(x.note, 13)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = { editing = x }) { Text("Düzenle") }
-                            TextButton(onClick = { deleteEntry = x }) { Text("Sil", color = C.bad) }
+                        TextButton(onClick = {
+                            if (deleteArmed == x.id) deleteEntry = x else deleteArmed = x.id
+                        }) { Text(if (deleteArmed == x.id) "Tekrar bas: sil" else "Sil", color = C.bad) }
                         }
                     }
                 }

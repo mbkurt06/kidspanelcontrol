@@ -14,7 +14,7 @@ async function cfg() {
     const { data, error } = await admin.rpc("server_config");
     if (error) throw error;
     config = data as Record<string, string>;
-    webpush.setVapidDetails("mailto:orbit@invalid.local", config.orbit_vapid_public, config.orbit_vapid_private);
+    webpush.setVapidDetails("mailto:orbit@orbit-panel-nu.vercel.app", config.orbit_vapid_public, config.orbit_vapid_private);
   }
   return config;
 }
@@ -101,6 +101,7 @@ Deno.serve(async (req) => {
         }
       }
     }
+    console.log("push sonucu", { sent, total: (subs ?? []).length, type: ev.type });
     return Response.json({ sent });
   } catch (e) {
     console.error(e);

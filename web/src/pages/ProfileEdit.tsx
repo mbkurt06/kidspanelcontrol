@@ -13,6 +13,14 @@ import { mins, sectionWarnings } from "../lib/sections";
 
 const SECTION_COLORS = ["#4F7CFF", "#2BB673", "#F2B134", "#FF7A59", "#E85D9B", "#3FA7D6", "#6B5CE7"];
 
+function timeOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string) {
+  const spans = (start: string, end: string) => {
+    const s = mins(start); const e = mins(end);
+    return s < e ? [[s, e]] : [[s, 1440], [0, e]];
+  };
+  return spans(aStart, aEnd).some(([a, b]) => spans(bStart, bEnd).some(([c, d]) => a < d && c < b));
+}
+
 /** Yeni gün tipine başlangıç bölümleri (eski düzenden geçişte de kullanılır). */
 export async function createDefaultSections(p: Profile) {
   const start = p.timed_windows[0]?.start ?? "07:00";
@@ -189,6 +197,9 @@ export default function ProfileEdit() {
   async function addSlot() {
     if (!slot.mode_id || !slot.days.length) return setErr("Durum ve gün seç.");
     if (slot.start === slot.end) return setErr("Başlangıç ve bitiş aynı olamaz.");
+    if (slots.some((s) => s.days.some((d) => slot.days.includes(d)) && timeOverlap(s.start_time, s.end_time, slot.start, slot.end))) {
+      return setErr("Bu gün ve saat aralığı başka bir kullanım profiliyle çakışıyor.");
+    }
     const { error } = await supabase
       .from("mode_slots")
       .insert({ profile_id: p!.id, mode_id: slot.mode_id, days: slot.days, start_time: slot.start, end_time: slot.end });
@@ -250,7 +261,7 @@ export default function ProfileEdit() {
         <Link to="/rules" className="icon-btn" aria-label="Geri">
           <Icon name="back" />
         </Link>
-        <h1>Gün tipi</h1>
+        <h1>Günlük program</h1>
         <span />
       </header>
       {err && <p className="error">{err}</p>}
@@ -339,7 +350,7 @@ export default function ProfileEdit() {
       )}
 
       <div className="card">
-        <h2>Bu gün tipindeki durumlar <Info>Durumlar bölüm kurallarının üstüne geçer; örneğin oyun zamanı belirli saatlerde farklı kurallar uygulayabilir.</Info></h2>
+        <h2>Bu programdaki kullanım profilleri <Info>Aynı gün ve saatte iki profil çalıştırılamaz; çakışmalar kaydedilmez.</Info></h2>
         {slots.map((s) => {
           const m = fam.modes.find((x) => x.id === s.mode_id);
           return (
@@ -359,7 +370,7 @@ export default function ProfileEdit() {
         })}
         <div className="sub-card">
           <select value={slot.mode_id} onChange={(e) => setSlot({ ...slot, mode_id: e.target.value })}>
-            <option value="">Durum seç</option>
+            <option value="">Profil seç</option>
             {fam.modes.map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}

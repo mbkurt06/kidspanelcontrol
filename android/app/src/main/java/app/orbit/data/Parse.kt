@@ -83,6 +83,7 @@ object Parse {
             strings(o.optJSONArray("allowed_groups")).map { g -> Group.of(g) }.toSet(),
             o.intOrNull("budget_minutes"), o.optBoolean("counts_toward_daily"), o.optBoolean("others_blocked", true),
             o.optBoolean("extra_time_allowed"), ints(o.optJSONArray("warn_minutes")), o.optInt("priority", 50),
+            o.optBoolean("kiosk_enabled", false), strings(o.optJSONArray("kiosk_screens")).toSet(), o.optString("kiosk_calls", "emergency"),
         )
     }
 

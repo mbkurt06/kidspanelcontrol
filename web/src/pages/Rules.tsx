@@ -8,12 +8,13 @@ import { useState } from "react";
 import { createDefaultSections } from "./ProfileEdit";
 import { mins } from "../lib/sections";
 import type { Profile } from "../lib/types";
+import Lock from "./Lock";
 
 export default function Rules() {
   const fam = useFamily();
   const nav = useNavigate();
   const [err, setErr] = useState("");
-  const [open, setOpen] = useState({ days: false, focus: false, modes: false });
+  const [open, setOpen] = useState({ days: false, focus: false, modes: false, groups: false, lock: false });
 
   async function newProfile() {
     const { data, error } = await supabase
@@ -41,7 +42,7 @@ export default function Rules() {
   async function newMode() {
     const { data, error } = await supabase
       .from("modes")
-      .insert({ family_id: fam.familyId, name: "Yeni durum", allowed_groups: ["always_open"] })
+      .insert({ family_id: fam.familyId, name: "Yeni kullanım profili", allowed_groups: ["always_open"] })
       .select("id")
       .single();
     if (error) return setErr(errorText(error));
@@ -56,46 +57,25 @@ export default function Rules() {
       </header>
       {err && <p className="error">{err}</p>}
 
-      <div className="grid2">
-        <Link to="/rules/lock" className="card link-card">
-          <div className="grow">
-            <b>🔒 Kilit</b>
-            <div className="muted small">
-              Kilitle · Sınırla · Serbest <Info>Telefonun ne zaman kilitleneceğini, sınırlandırılacağını veya serbest kalacağını belirler.</Info>
-              {fam.timeRules.filter((r) => ["kiosk", "limit", "free"].includes(r.kind)).length
-                ? ` · ${fam.timeRules.filter((r) => ["kiosk", "limit", "free"].includes(r.kind)).length} kural`
-                : ""}
-            </div>
-          </div>
-          <Icon name="chevron" size={18} />
-        </Link>
-        <Link to="/rules/music" className="card link-card">
-          <div className="grow">
-            <b>🎵 Müzik</b>
-            <div className="muted small">Ne zaman çalar, klasör <Info>Müzik klasörünü ve çalma zamanlarını belirler.</Info></div>
-          </div>
-          <Icon name="chevron" size={18} />
-        </Link>
-      </div>
+      <details className="card section-collapse-card" open={open.lock} onToggle={(e) => setOpen((v) => ({ ...v, lock: e.currentTarget.open }))}>
+        <summary className="section-collapse-head"><span>🔒 Kilit <Info>Eski kilit kuralları korunur; yeni kullanım profilleri bunların yerine geçebilir.</Info></span><span>⌄</span></summary>
+        {open.lock && <Lock inline />}
+      </details>
 
-      <Link to="/rules/groups" className="card link-card">
-        <div className="grow">
-          <b>Uygulama grupları</b>
+      <details className="card section-collapse-card" open={open.groups} onToggle={(e) => setOpen((v) => ({ ...v, groups: e.currentTarget.open }))}>
+        <summary className="section-collapse-head"><span>Uygulama grupları</span><span>⌄</span></summary>
+        {open.groups && <Link to="/rules/groups" className="link-card inner-link">
           <div className="row wrap gap-s">
-            {fam.groups.map((g) => (
-              <span className="pill" key={g.id} style={{ borderColor: g.color }}>
-                {g.name} · {Object.values(fam.members).filter((x) => x === g.id).length}
-              </span>
-            ))}
+            {fam.groups.map((g) => <span className="pill" key={g.id} style={{ borderColor: g.color }}>{g.name} · {Object.values(fam.members).filter((x) => x === g.id).length}</span>)}
           </div>
-        </div>
-        <Icon name="chevron" size={18} />
-      </Link>
+          <Icon name="chevron" size={18} />
+        </Link>}
+      </details>
 
       <section className="stack">
         <div className="row between">
           <button type="button" className="section-title row gap-xs collapse-title" onClick={() => setOpen((v) => ({ ...v, days: !v.days }))}>
-            <span>{open.days ? "⌃" : "⌄"}</span><span>Gün tipleri</span><Info>Bir gün tipi bölümleri ve her bölümdeki kuralları tutar. Hangi güne hangisinin geçerli olduğunu çocuğun Program sekmesinden seçersin.</Info>
+            <span>{open.days ? "⌃" : "⌄"}</span><span>Günlük program</span><Info>Hafta içi, hafta sonu ve özel günlerin hangi kullanım profiline bağlanacağını ve saatlerini tutar.</Info>
           </button>
           {open.days && <button className="btn small" onClick={newProfile}>
             <Icon name="plus" size={16} /> Yeni
@@ -187,7 +167,7 @@ export default function Rules() {
       <section className="stack">
         <div className="row between">
           <button type="button" className="section-title row gap-xs collapse-title" onClick={() => setOpen((v) => ({ ...v, modes: !v.modes }))}>
-            <span>{open.modes ? "⌃" : "⌄"}</span><span>Durumlar</span><Info>Ders, uyku ve oyun zamanı gibi durumlarda hangi uygulamaların açık kalacağını ve sürenin nasıl sayılacağını belirler.</Info>
+            <span>{open.modes ? "⌃" : "⌄"}</span><span>Kullanım profilleri</span><Info>Uyku, ders, dinlenme ve serbest gibi profillerde kiosk, menü, uygulama ve süre davranışını belirler.</Info>
           </button>
           {open.modes && <button className="btn small" onClick={newMode}>
             <Icon name="plus" size={16} /> Yeni
@@ -204,6 +184,7 @@ export default function Rules() {
                 {m.counts_toward_daily ? "günlük süreden düşer" : "günlük süreyi etkilemez"}
                 {" · "}
                 {m.others_blocked ? "diğerleri kapalı" : "diğerleri normal"}
+                {m.kiosk_enabled ? ` · kiosk${m.kiosk_screens?.length ? ` · ${m.kiosk_screens.length} menü` : ""}` : ""}
               </div>
             </div>
             <Icon name="chevron" size={18} />

@@ -152,6 +152,9 @@ export type Mode = {
   extra_time_allowed: boolean;
   warn_minutes: number[];
   priority: number;
+  kiosk_enabled?: boolean;
+  kiosk_screens?: KioskScreen[];
+  kiosk_calls?: "emergency" | "all";
 };
 
 export type ModeSlot = {

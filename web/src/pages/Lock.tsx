@@ -37,7 +37,7 @@ export async function unlockNow(childId: string) {
 }
 
 /** Kilit sayfası: şimdi kilitle, haftalık program, kilit ekranı, ana sayfa tuşu. */
-export default function Lock({ embeddedChildId }: { embeddedChildId?: string } = {}) {
+export default function Lock({ embeddedChildId, inline = false }: { embeddedChildId?: string; inline?: boolean } = {}) {
   const fam = useFamily();
   const [params] = useSearchParams();
   const childParam = embeddedChildId ?? params.get("child");
@@ -59,8 +59,8 @@ export default function Lock({ embeddedChildId }: { embeddedChildId?: string } =
   }
 
   return (
-    <div className={embeddedChildId ? "stack" : "page"}>
-      {!embeddedChildId && <header className="page-head">
+    <div className={embeddedChildId || inline ? "stack" : "page"}>
+      {!embeddedChildId && !inline && <header className="page-head">
         <Link to="/rules" className="icon-btn" aria-label="Geri">
           <Icon name="back" />
         </Link>
@@ -109,10 +109,10 @@ export default function Lock({ embeddedChildId }: { embeddedChildId?: string } =
         <div className="stack">{shownChildren.map((c) => <KioskLook key={c.id} child={c} onErr={setErr} />)}</div>
       </details>
 
-      <details className="card section-collapse-card">
+      {!inline && <details className="card section-collapse-card">
         <summary className="section-collapse-head"><span>Ana sayfadaki kilit tuşu</span><span>⌄</span></summary>
         <LockButtonCard onErr={setErr} />
-      </details>
+      </details>}
     </div>
   );
 }

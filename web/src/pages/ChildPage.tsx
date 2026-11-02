@@ -9,17 +9,18 @@ import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment,
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
 import TimerTab from "./TimerTab";
-import Music from "./Music";
-import Lock from "./Lock";
 import { currentSectionFor, suggestGroup, timedPossible } from "../lib/sections";
 
-type Tab = "apps" | "program" | "time" | "timer" | "alarms" | "music" | "lock" | "report" | "device";
+type Tab = "apps" | "program" | "time" | "timer" | "alarms" | "report" | "device";
 
 export default function ChildPage() {
   const { id } = useParams();
   const fam = useFamily();
   const child = fam.children.find((c) => c.id === id);
-  const [tab, setTab] = useState<Tab>(() => (localStorage.getItem(`orbit.childTab.${id}`) as Tab | null) ?? "apps");
+  const [tab, setTab] = useState<Tab>(() => {
+    const stored = localStorage.getItem(`orbit.childTab.${id}`);
+    return stored && ["apps", "program", "time", "timer", "alarms", "report", "device"].includes(stored) ? stored as Tab : "apps";
+  });
   useEffect(() => { if (id) localStorage.setItem(`orbit.childTab.${id}`, tab); }, [id, tab]);
 
   if (!child) return <div className="page"><p className="muted">Çocuk bulunamadı.</p></div>;
@@ -45,8 +46,6 @@ export default function ChildPage() {
             ["time", "Süre"],
             ["timer", "Sayaç"],
             ["alarms", "Hatırlatıcılar"],
-            ["music", "Müzik"],
-            ["lock", "Kilit"],
             ["report", "Rapor"],
             ["device", "Telefon"],
           ] as [Tab, string][]
@@ -63,8 +62,6 @@ export default function ChildPage() {
       {tab === "report" && <ReportTab childId={child.id} />}
       {tab === "timer" && <TimerTab childId={child.id} />}
       {tab === "alarms" && <TimerTab childId={child.id} only="alarms" />}
-      {tab === "music" && <Music embeddedChildId={child.id} />}
-      {tab === "lock" && <Lock embeddedChildId={child.id} />}
       {tab === "device" && <DeviceTab childId={child.id} />}
     </div>
   );

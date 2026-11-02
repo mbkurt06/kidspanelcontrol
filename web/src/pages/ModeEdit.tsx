@@ -5,6 +5,8 @@ import { errorText, supabase } from "../lib/supabase";
 import { GROUP_LABEL, type AppGroup, type Mode } from "../lib/types";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
+import { ScreenPicker } from "../components/RuleEditor";
+import { KIOSK_SCREENS } from "../lib/types";
 
 type AppOpt = { package: string; label: string };
 type AppList = { id: string; name: string; packages: string[] };
@@ -67,6 +69,9 @@ export default function ModeEdit() {
         extra_time_allowed: m!.extra_time_allowed,
         warn_minutes: m!.warn_minutes,
         priority: m!.priority,
+        kiosk_enabled: !!m!.kiosk_enabled,
+        kiosk_screens: m!.kiosk_screens ?? KIOSK_SCREENS.map(([id]) => id),
+        kiosk_calls: m!.kiosk_calls ?? "emergency",
       })
       .eq("id", m!.id);
     if (error) return setErr(errorText(error));
@@ -113,10 +118,29 @@ export default function ModeEdit() {
         <Link to="/rules" className="icon-btn" aria-label="Geri">
           <Icon name="back" />
         </Link>
-        <h1>Durum</h1>
+        <h1>Kullanım profili</h1>
         <span />
       </header>
       {err && <p className="error">{err}</p>}
+      <div className="card">
+        <h2>Kiosk</h2>
+        <label className="check">
+          <input type="checkbox" checked={!!m.kiosk_enabled} onChange={(e) => setM({ ...m, kiosk_enabled: e.target.checked })} />
+          Bu profil saatinde Orbit kiosk modu açık
+        </label>
+        {m.kiosk_enabled && <>
+          <span className="muted small">Kiosk açıkken kullanılabilecek Orbit menüleri</span>
+          <ScreenPicker value={m.kiosk_screens ?? KIOSK_SCREENS.map(([id]) => id)} onChange={(v) => setM({ ...m, kiosk_screens: v })} />
+          <label className="field">
+            <span>Aramalar</span>
+            <select value={m.kiosk_calls ?? "emergency"} onChange={(e) => setM({ ...m, kiosk_calls: e.target.value as "emergency" | "all" })}>
+              <option value="emergency">Sadece acil arama</option>
+              <option value="all">Aramalar açık</option>
+            </select>
+          </label>
+        </>}
+      </div>
+
       <div className="card">
         <label className="field">
           <span>Ad</span>

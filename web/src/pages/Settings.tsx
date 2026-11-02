@@ -113,8 +113,6 @@ export default function Settings() {
       {msg && <p className="ok">{msg}</p>}
 
       <ThemeCard />
-      <ProofCard />
-      <TaskPhotoDefaultsCard />
       <BiometricCard />
 
       <div className="card">
@@ -472,7 +470,7 @@ function ThemeCard() {
   );
 }
 
-function ProofCard() {
+export function ProofCard() {
   const fam = useFamily();
   const [v, setV] = useState<number | null>(null);
   useEffect(() => {
@@ -500,7 +498,7 @@ function ProofCard() {
   );
 }
 
-function TaskPhotoDefaultsCard() {
+export function TaskPhotoDefaultsCard() {
   const fam = useFamily();
   const f = fam.family;
   const [v, setV] = useState({ beforeMin: 1, beforeMax: 4, afterMin: 1, afterMax: 4 });

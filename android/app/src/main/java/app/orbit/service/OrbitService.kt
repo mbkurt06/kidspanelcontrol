@@ -368,7 +368,8 @@ class OrbitService : Service() {
                 }
             }
         }
-        if (nowMs - Store.lastUpdateCheck > 3600_000L) {
+        // shortcut: 5 dk yoklama, anında cihaz komutu için servis anahtarı gerektirmeden otomatik güncelleme sağlar.
+        if (nowMs - Store.lastUpdateCheck > 5 * 60_000L) {
             Store.lastUpdateCheck = nowMs
             val checkOnly = Store.updateCheckOnly
             Store.updateCheckOnly = false

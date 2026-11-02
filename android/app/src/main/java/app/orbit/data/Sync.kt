@@ -44,7 +44,8 @@ object Sync {
             // Bu istekler birbirinden bağımsız. Seri çekim telefonda her değişikliği 5–7 sn geciktiriyordu.
             val bundle = coroutineScope {
                 val timeRules = async(Dispatchers.IO) { runCatching { Api.get("time_rules?select=*") }.getOrElse { JSONArray() } }
-                val apps = async(Dispatchers.IO) { Api.get("child_apps?child_id=eq.$child&select=package,label,app_group,approved,daily_limit_minutes") }
+                val apps = async(Dispatchers.IO) { Api.get("child_apps?child_id=eq.$child&select=package,label,app_group,approved,daily_limit_minutes,usage_rule_id") }
+                val usageRules = async(Dispatchers.IO) { runCatching { Api.get("app_usage_rules?select=id,mode,max_minutes,counts_toward_daily,start_time,end_time") }.getOrElse { JSONArray() } }
                 val profiles = async(Dispatchers.IO) { Api.get("rule_profiles?select=*") }
                 val modes = async(Dispatchers.IO) { Api.get("modes?select=*") }
                 val slots = async(Dispatchers.IO) { Api.get("mode_slots?select=*") }
@@ -72,6 +73,7 @@ object Sync {
                     .put("child_id", c.childId)
                     .put("time_rules", timeRules.await())
                     .put("apps", apps.await())
+                    .put("usage_rules", usageRules.await())
                     .put("profiles", profiles.await())
                     .put("modes", modes.await())
                     .put("slots", slots.await())
@@ -189,6 +191,15 @@ object Sync {
             )
         }
         Api.post("usage_daily?on_conflict=child_id,day,package", arr, upsert = true)
+    }
+
+    /** Gün sonunda kullanılmayan hakkı idempotent olarak süre kasasına aktarır. */
+    fun storeDailySurplus(day: java.time.LocalDate, minutes: Int): Boolean {
+        if (minutes <= 0) return true
+        return runCatching {
+            Api.rpc("device_store_daily_surplus", JSONObject().put("p_day", day.toString()).put("p_minutes", minutes))
+            true
+        }.onFailure { Log.w(TAG, "günlük artan süre kaydedilemedi", it) }.getOrDefault(false)
     }
 
     /** Kanıt dosyasını yükler ve görev kaydına ekler. */

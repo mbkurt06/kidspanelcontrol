@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { supabase } from "./supabase";
-import type { ActivityDef, FocusProfile, TimerSession, AppGroupDef, Child, DeviceStatus, GroupLimit, GroupMember, Mode, ModeSlot, OrbitEvent, Profile, Section, SectionRule, TimeRule, FamilySettings } from "./types";
+import type { ActivityDef, FocusProfile, TimerSession, AppGroupDef, AppUsageRule, Child, DeviceStatus, GroupLimit, GroupMember, Mode, ModeSlot, OrbitEvent, Profile, Section, SectionRule, TimeRule, FamilySettings } from "./types";
 
 type FamilyData = {
   familyId: string | null;
@@ -10,6 +10,7 @@ type FamilyData = {
   modes: Mode[];
   slots: ModeSlot[];
   groups: AppGroupDef[];
+  appUsageRules: AppUsageRule[];
   members: Record<string, string>;
   sections: Section[];
   sectionRules: SectionRule[];
@@ -41,6 +42,7 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
     modes: [],
     slots: [],
     groups: [],
+    appUsageRules: [],
     members: {},
     sections: [],
     sectionRules: [],
@@ -64,8 +66,8 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
 
   const reload = useCallback(async () => {
     supabase.rpc("touch_parent_device").then(() => {});
-    const [fam, ch, pr, mo, sl, st, ev, ap, gr, gm, se, sr, gl, um, fp, ac, ts, tr] = await Promise.all([
-      supabase.from("families").select("id,lock_button,lock_button_minutes,pin_unlock_minutes,parent_pin_hash,task_before_photo_min,task_before_photo_max,task_after_photo_min,task_after_photo_max").limit(1).maybeSingle(),
+    const [fam, ch, pr, mo, sl, st, ev, ap, gr, gm, se, sr, gl, um, fp, ac, ts, tr, ar] = await Promise.all([
+      supabase.from("families").select("id,lock_button,lock_button_minutes,pin_unlock_minutes,parent_pin_hash,task_before_photo_min,task_before_photo_max,task_after_photo_min,task_after_photo_max,proof_retention_days").limit(1).maybeSingle(),
       supabase.from("children").select("*").order("sort_order").order("created_at"),
       supabase.from("rule_profiles").select("*").order("created_at"),
       supabase.from("modes").select("*").order("priority", { ascending: false }),
@@ -83,6 +85,7 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
       supabase.from("activities").select("*").order("sort_order").order("created_at"),
       supabase.from("timer_sessions").select("*").in("status", ["running", "paused"]),
       supabase.from("time_rules").select("*").order("start_time"),
+      supabase.from("app_usage_rules").select("*").order("name"),
     ]);
     const timers: Record<string, TimerSession> = {};
     for (const t of (ts.data ?? []) as TimerSession[]) timers[t.child_id] = t;
@@ -98,6 +101,7 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
       modes: (mo.data ?? []) as Mode[],
       slots: (sl.data ?? []) as ModeSlot[],
       groups: (gr.data ?? []) as AppGroupDef[],
+      appUsageRules: (ar.data ?? []) as AppUsageRule[],
       members,
       sections: (se.data ?? []) as Section[],
       sectionRules: (sr.data ?? []) as SectionRule[],

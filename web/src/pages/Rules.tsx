@@ -8,6 +8,7 @@ import { useState } from "react";
 import { createDefaultSections } from "./ProfileEdit";
 import { mins } from "../lib/sections";
 import type { Profile } from "../lib/types";
+import TaskSettingsCard from "../components/TaskSettingsCard";
 
 export default function Rules() {
   const fam = useFamily();
@@ -47,6 +48,13 @@ export default function Rules() {
     if (error) return setErr(errorText(error));
     await fam.reload();
     nav(`/rules/mode/${data.id}`);
+  }
+
+  async function newAppRule() {
+    const { data, error } = await supabase.from("app_usage_rules").insert({ family_id: fam.familyId, name: "Yeni uygulama kuralı", mode: "timed", max_minutes: 30, counts_toward_daily: true }).select("id").single();
+    if (error) return setErr(errorText(error));
+    await fam.reload();
+    nav(`/rules/app-rule/${data.id}`);
   }
 
   return (
@@ -91,6 +99,14 @@ export default function Rules() {
         </div>
         <Icon name="chevron" size={18} />
       </Link>
+
+      <TaskSettingsCard />
+
+      <section className="stack">
+        <div className="row between"><h2 className="section-title">Uygulama kullanım kuralları</h2><button className="btn small" onClick={newAppRule}><Icon name="plus" size={16} /> Yeni</button></div>
+        <p className="muted small">Uygulamanın ne kadar açık kalacağını ve günlük süreden düşüp düşmeyeceğini tek bir kural olarak tanımla; Uygulamalar ekranından ata.</p>
+        {fam.appUsageRules.map((r) => <Link to={`/rules/app-rule/${r.id}`} className="card link-card" key={r.id}><div className="grow"><b>{r.name}</b><div className="muted small">{r.mode === "open" ? "Açık" : r.mode === "blocked" ? "Kapalı" : `${r.max_minutes == null ? "Sınırsız" : `${r.max_minutes} dk`} · ${r.counts_toward_daily ? "günlük süreden düşer" : "günlük süreden düşmez"}`}{r.start_time && r.end_time ? ` · ${r.start_time.slice(0, 5)}–${r.end_time.slice(0, 5)}` : ""}</div></div><Icon name="chevron" size={18} /></Link>)}
+      </section>
 
       <section className="stack">
         <div className="row between">

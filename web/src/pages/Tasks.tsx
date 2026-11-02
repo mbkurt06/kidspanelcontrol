@@ -202,7 +202,7 @@ export default function Tasks() {
               <div className="muted tiny">
                 {PROOF_LABEL[t.proof]}
                 {t.before_after ? " (öncesi/sonrası)" : ""}
-                {t.reward_minutes ? ` · ${t.reward_minutes > 0 ? "+" : ""}${minutesText(t.reward_minutes)}` : ""}
+                {t.reward_minutes != null ? ` · ${t.reward_minutes > 0 ? "+" : ""}${minutesText(t.reward_minutes)}` : ""}
                 {t.reward_text ? ` · ${t.reward_text}` : ""}
               </div>
             </div>

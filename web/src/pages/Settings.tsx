@@ -113,8 +113,6 @@ export default function Settings() {
       {msg && <p className="ok">{msg}</p>}
 
       <ThemeCard />
-      <ProofCard />
-      <TaskPhotoDefaultsCard />
       <BiometricCard />
 
       <div className="card">

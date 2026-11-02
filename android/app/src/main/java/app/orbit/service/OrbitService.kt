@@ -109,6 +109,7 @@ class OrbitService : Service() {
     private var mediaFocus: AudioFocusRequest? = null
     private var lastMediaLocked: Boolean? = null
     private val pushBusy = java.util.concurrent.atomic.AtomicBoolean(false)
+    private val surplusBusy = java.util.concurrent.atomic.AtomicBoolean(false)
     private var lastLockLaunch = 0L
     private var lastLockPkg: String? = null
 
@@ -243,8 +244,24 @@ class OrbitService : Service() {
         val zone = engine.zone()
         val now = ZonedDateTime.now(zone)
 
-        // 2) Gün değiştiyse sayaçları sıfırla (dünkü son durumu gönder)
-        Store.rollover(now.toLocalDate())
+        // 2) Gün değiştiyse kalan hakkı kasaya ayır, sonra sayaçları sıfırla.
+        val rolled = Store.rollover(now.toLocalDate())
+        if (rolled != null) {
+            val oldEngine = RuleEngine(rules)
+            val surplus = oldEngine.surplusMinutes(rolled.day, rolled)
+            Store.addPendingSurplus(rolled.day, surplus)
+        }
+        if (surplusBusy.compareAndSet(false, true)) {
+            val pending = Store.pendingSurpluses().entries.firstOrNull()
+            if (pending == null) surplusBusy.set(false)
+            else scope.launch(Dispatchers.IO) {
+                try {
+                    if (Sync.storeDailySurplus(pending.key, pending.value)) Store.clearPendingSurplus(pending.key)
+                } finally {
+                    surplusBusy.set(false)
+                }
+            }
+        }
         var usage = Store.usage(now.toLocalDate())
 
         // 3) Ön plandaki uygulama ve süre sayımı

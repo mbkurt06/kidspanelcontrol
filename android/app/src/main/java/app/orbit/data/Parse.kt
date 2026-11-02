@@ -1,6 +1,7 @@
 package app.orbit.data
 
 import app.orbit.engine.AppRule
+import app.orbit.engine.AppUsageRule
 import app.orbit.engine.Command
 import app.orbit.engine.CommandType
 import app.orbit.engine.DayOverride
@@ -61,8 +62,10 @@ object Parse {
     fun apps(a: JSONArray): Map<String, AppRule> = (0 until a.length()).associate {
         val o = a.getJSONObject(it)
         val p = o.getString("package")
-        p to AppRule(p, o.optString("label", p), Group.of(o.str("app_group")), o.optBoolean("approved"), o.intOrNull("daily_limit_minutes"))
+        p to AppRule(p, o.optString("label", p), Group.of(o.str("app_group")), o.optBoolean("approved"), o.intOrNull("daily_limit_minutes"), o.str("usage_rule_id"))
     }
+
+    fun usageRules(a: JSONArray): Map<String, AppUsageRule> = (0 until a.length()).associate { val o = a.getJSONObject(it); val w = runCatching { if (o.isNull("start_time") || !o.has("start_time")) null else TimeWindow(time(o.getString("start_time")), time(o.getString("end_time"))) }.getOrNull(); o.getString("id") to AppUsageRule(o.getString("id"), o.optString("mode", "timed"), o.intOrNull("max_minutes"), o.optBoolean("counts_toward_daily", true), w) }
 
     fun profiles(a: JSONArray): Map<String, Profile> = (0 until a.length()).associate {
         val o = a.getJSONObject(it)
@@ -164,6 +167,7 @@ object Parse {
     fun rulesFromBundle(b: JSONObject): Rules = Rules(
         timezone = b.optString("timezone", "Europe/Berlin"),
         apps = apps(b.optJSONArray("apps") ?: JSONArray()),
+        usageRules = usageRules(b.optJSONArray("usage_rules") ?: JSONArray()),
         profiles = profiles(b.optJSONArray("profiles") ?: JSONArray()),
         modes = modes(b.optJSONArray("modes") ?: JSONArray()),
         slots = slots(b.optJSONArray("slots") ?: JSONArray()),

@@ -201,7 +201,7 @@ a {
 .side-menu-bottom { margin-top: auto; border-top: 1px solid var(--line); padding-top: 12px; }
 .side-menu-bottom a { color: var(--muted); display: grid; place-items: center; width: 40px; height: 40px; }
 .content {
-  padding: calc(env(safe-area-inset-top) + 60px) 16px calc(env(safe-area-inset-bottom) + 88px);
+  padding: calc(env(safe-area-inset-top) + 10px) 16px calc(env(safe-area-inset-bottom) + 88px);
   max-width: 680px;
   margin: 0 auto;
 }
@@ -213,7 +213,7 @@ a {
 .page-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 12px;
   min-height: 44px;
   padding-left: 52px;
@@ -223,8 +223,11 @@ a {
 }
 .page-head h1 {
   min-width: 0;
-  flex: 1;
-  text-align: center;
+  flex: 0 1 auto;
+  text-align: left;
+}
+.page-head > :last-child:not(h1) {
+  margin-left: auto;
 }
 .section-title {
   font-size: 20px;
@@ -407,11 +410,11 @@ a {
 }
 .info-popover {
   display: none;
-  position: absolute;
-  z-index: 50;
-  left: 0;
-  top: calc(100% + 8px);
+  position: fixed;
+  z-index: 100;
   width: min(280px, calc(100vw - 40px));
+  max-height: min(260px, calc(100dvh - 24px));
+  overflow: auto;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -422,8 +425,6 @@ a {
   line-height: 1.4;
   box-shadow: 0 8px 24px rgba(0, 0, 0, .28);
 }
-.info-wrap:hover .info-popover,
-.info-wrap:focus-within .info-popover,
 .info-wrap[data-open="true"] .info-popover { display: block; }
 @media (max-width: 420px) {
   .app-setting-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }

@@ -7,6 +7,7 @@ import { daysText, hhmm, minutesText } from "../lib/util";
 import { RULE_LABEL, type ModeSlot, type Profile, type SecRule, type Section } from "../lib/types";
 import { DayPicker, WindowsEditor } from "../components/Windows";
 import { Icon } from "../components/Icon";
+import { Info } from "../components/Info";
 import { SectionTable } from "../components/SectionTable";
 import { mins, sectionWarnings } from "../lib/sections";
 
@@ -54,7 +55,8 @@ function SectionsEditor({ profile, sections }: { profile: Profile; sections: Sec
 
   async function remove(s: Section) {
     if (!confirm(`"${s.name}" bölümü silinsin mi? Bu bölümdeki kurallar da silinir.`)) return;
-    await supabase.from("profile_sections").delete().eq("id", s.id);
+    const { error } = await supabase.from("profile_sections").delete().eq("id", s.id);
+    if (error) return setErr(errorText(error));
     fam.reload();
   }
 
@@ -122,11 +124,11 @@ function SectionsEditor({ profile, sections }: { profile: Profile; sections: Sec
             </label>
 
             <label className="row gap-xs">
-              <span className="muted small">Diğer uygulamalar:</span>
+              <span className="muted small">Bu saatlerde:</span>
               <select value={s.default_rule} onChange={(e) => patch(s, { default_rule: e.target.value as SecRule })}>
                 {(["open", "timed", "blocked"] as SecRule[]).map((r) => (
                   <option key={r} value={r}>
-                    {RULE_LABEL[r]}
+                  {RULE_LABEL[r]}
                   </option>
                 ))}
               </select>
@@ -299,25 +301,18 @@ export default function ProfileEdit() {
       {hasSections ? (
         <>
           <div className="card">
-            <h2>Bölümler</h2>
-            <p className="muted small">
-              Günü istediğin kadar bölüme ayır. Her bölümün kendi süresi olabilir; süreli uygulamalar o bölümün süresinden düşer.
-            </p>
+            <h2>Bölümler <Info>Günü bölümlere ayır; her bölümün kendi süresi ve uygulama kuralları olur.</Info></h2>
             <SectionsEditor profile={p} sections={sections} />
           </div>
           <div className="card">
-            <h2>Kurallar</h2>
-            <p className="muted small">Her grubun ve uygulamanın her bölümde açık, süreli ya da kapalı olacağını seç. Hücreye dokun.</p>
+            <h2>Kurallar <Info>Her grubun ve uygulamanın bölümde açık, süreli veya kapalı olacağını seç.</Info></h2>
             <SectionTable profile={p} sections={sections} />
           </div>
         </>
       ) : (
         <>
           <div className="card attention">
-            <h2>Bölümlere geç</h2>
-            <p className="muted small">
-              Bu gün tipi eski düzende (tek günlük süre + izinli saatler). Bölümlere geçince günü istediğin kadar parçaya ayırıp her grup için ayrı kural koyabilirsin.
-            </p>
+            <h2>Bölümlere geç <Info>Eski tek süre düzeninden bölümlü programa geçer.</Info></h2>
             <button
               className="btn primary"
               onClick={async () => {
@@ -344,10 +339,7 @@ export default function ProfileEdit() {
       )}
 
       <div className="card">
-        <h2>Bu gün tipindeki durumlar</h2>
-        <p className="muted small">
-          Durumlar bölüm kurallarının üstüne geçer (ör. Oyun zamanı 16:00–18:00). {hasSections ? "Uyku gibi saatleri artık bölüm olarak yapabilirsin; buradaki eski programı silebilirsin." : ""}
-        </p>
+        <h2>Bu gün tipindeki durumlar <Info>Durumlar bölüm kurallarının üstüne geçer; örneğin oyun zamanı belirli saatlerde farklı kurallar uygulayabilir.</Info></h2>
         {slots.map((s) => {
           const m = fam.modes.find((x) => x.id === s.mode_id);
           return (

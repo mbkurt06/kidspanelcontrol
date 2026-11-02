@@ -4,6 +4,7 @@ import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { GROUP_LABEL, type AppGroup, type Mode } from "../lib/types";
 import { Icon } from "../components/Icon";
+import { Info } from "../components/Info";
 
 type AppOpt = { package: string; label: string };
 type AppList = { id: string; name: string; packages: string[] };
@@ -151,8 +152,7 @@ export default function ModeEdit() {
       </div>
 
       <div className="card">
-        <h2>Açık olanlar</h2>
-        <p className="muted small">Gruplar çocuğun kendi uygulama gruplarıdır. Ayrıca tek tek uygulama seçebilirsin.</p>
+        <h2>Açık olanlar <Info>Grupları veya tek tek uygulamaları bu duruma dahil edebilirsin.</Info></h2>
         <div className="row gap-xs wrap">
           {(["always_open", "unlimited", "timed"] as AppGroup[]).map((g) => (
             <button key={g} className={`chip ${m.allowed_groups.includes(g) ? "on" : ""}`} onClick={() => toggleGroup(g)}>

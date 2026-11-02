@@ -24,6 +24,9 @@ type FamilyData = {
   unreadEvents: number;
   unreadMessages: number;
   pendingApprovals: number;
+  selectedChildId: string;
+  setSelectedChildId: (id: string) => void;
+  visibleChildren: Child[];
   loading: boolean;
   reload: () => Promise<void>;
 };
@@ -31,7 +34,7 @@ type FamilyData = {
 const Ctx = createContext<FamilyData | null>(null);
 
 export function FamilyProvider({ children: kids }: { children: React.ReactNode }) {
-  const [state, setState] = useState<Omit<FamilyData, "reload">>({
+  const [state, setState] = useState<Omit<FamilyData, "reload" | "selectedChildId" | "setSelectedChildId" | "visibleChildren">>({
     familyId: null,
     family: null,
     children: [],
@@ -54,11 +57,17 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
     pendingApprovals: 0,
     loading: true,
   });
+  const [selectedChildId, setSelectedChildId] = useState(() => localStorage.getItem("orbit.selectedChild") ?? "all");
+
+  useEffect(() => {
+    if (state.children.length && selectedChildId !== "all" && !state.children.some((c) => c.id === selectedChildId)) setSelectedChildId("all");
+    localStorage.setItem("orbit.selectedChild", selectedChildId);
+  }, [selectedChildId, state.children]);
 
   const reload = useCallback(async () => {
     supabase.rpc("touch_parent_device").then(() => {});
     const [fam, ch, pr, mo, sl, st, ev, ap, gr, gm, se, sr, gl, um, fp, ac, ts, tr, ar] = await Promise.all([
-      supabase.from("families").select("id,lock_button,lock_button_minutes,pin_unlock_minutes,parent_pin_hash,proof_retention_days,task_before_photo_min,task_before_photo_max,task_after_photo_min,task_after_photo_max").limit(1).maybeSingle(),
+      supabase.from("families").select("id,lock_button,lock_button_minutes,pin_unlock_minutes,parent_pin_hash,task_before_photo_min,task_before_photo_max,task_after_photo_min,task_after_photo_max,proof_retention_days").limit(1).maybeSingle(),
       supabase.from("children").select("*").order("sort_order").order("created_at"),
       supabase.from("rule_profiles").select("*").order("created_at"),
       supabase.from("modes").select("*").order("priority", { ascending: false }),
@@ -121,7 +130,8 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
     };
   }, [reload]);
 
-  return <Ctx.Provider value={{ ...state, reload }}>{kids}</Ctx.Provider>;
+  const visibleChildren = selectedChildId === "all" ? state.children : state.children.filter((c) => c.id === selectedChildId);
+  return <Ctx.Provider value={{ ...state, reload, selectedChildId, setSelectedChildId, visibleChildren }}>{kids}</Ctx.Provider>;
 }
 
 export function useFamily() {

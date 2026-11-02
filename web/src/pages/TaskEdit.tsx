@@ -4,9 +4,10 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { todayISO } from "../lib/util";
-import { PENALTY_VALIDITY_LABEL, PROOF_LABEL, VALIDITY_LABEL, type ProofType, type RewardValidity, type Task } from "../lib/types";
+import { PROOF_LABEL, VALIDITY_LABEL, type ProofType, type RewardValidity, type Task, type TaskPhoneRestriction } from "../lib/types";
 import { DayPicker } from "../components/Windows";
 import { Icon } from "../components/Icon";
+import { Info } from "../components/Info";
 
 type Form = {
   title: string;
@@ -21,26 +22,27 @@ type Form = {
   due_time: string;
   proof: ProofType;
   before_after: boolean;
-  before_photo_min: string;
-  before_photo_max: string;
-  after_photo_min: string;
-  after_photo_max: string;
+  proof_before_min: string;
+  proof_before_max: string;
+  proof_after_min: string;
+  proof_after_max: string;
   reward_minutes: string;
   reward_text: string;
   reward_validity: RewardValidity;
   reward_date: string;
   reward_expires_days: string;
   reward_section_id: string;
-  mandatory: boolean;
   active: boolean;
   record_on: boolean;
   record_minutes: string;
   record_camera: "back" | "front" | "choose";
   record_pause: "none" | "limit" | "child";
   record_pause_max: string;
+  phone_restriction: TaskPhoneRestriction;
+  orbit_focus_profile_id: string;
 };
 
-const empty = (childIds: string[]): Form => ({
+const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; task_before_photo_max?: number; task_after_photo_min?: number; task_after_photo_max?: number }): Form => ({
   title: "",
   description: "",
   child_ids: childIds,
@@ -53,23 +55,24 @@ const empty = (childIds: string[]): Form => ({
   due_time: "",
   proof: "photo",
   before_after: true,
-  before_photo_min: "1",
-  before_photo_max: "4",
-  after_photo_min: "1",
-  after_photo_max: "4",
+  proof_before_min: String(defaults?.task_before_photo_min ?? 1),
+  proof_before_max: String(defaults?.task_before_photo_max ?? 4),
+  proof_after_min: String(defaults?.task_after_photo_min ?? 1),
+  proof_after_max: String(defaults?.task_after_photo_max ?? 4),
   reward_minutes: "15",
   reward_text: "",
   reward_validity: "today",
   reward_date: todayISO("Europe/Berlin", 1),
   reward_expires_days: "",
   reward_section_id: "",
-  mandatory: false,
   active: true,
   record_on: false,
   record_minutes: "60",
   record_camera: "back",
   record_pause: "child",
   record_pause_max: "10",
+  phone_restriction: "none",
+  orbit_focus_profile_id: "",
 });
 
 type RecFields = { record_minutes?: number | null; record_camera?: Form["record_camera"]; record_pause?: Form["record_pause"]; record_pause_max?: number | null };
@@ -80,6 +83,11 @@ const recForm = (t: RecFields) => ({
   record_pause: t.record_pause ?? "child",
   record_pause_max: t.record_pause_max?.toString() ?? "10",
 });
+const REWARD_CORE: Array<[RewardValidity, string]> = [
+  ["today", "Hemen kullan"],
+  ["wallet", "Cüzdana ekle"],
+  ["vault", "Kasaya ekle"],
+];
 
 export default function TaskEdit() {
   const { id } = useParams();
@@ -87,21 +95,23 @@ export default function TaskEdit() {
   const fam = useFamily();
   const nav = useNavigate();
   const isNew = !id || id === "new";
-  const [f, setF] = useState<Form>(empty(fam.children.map((c) => c.id)));
+  const [f, setF] = useState<Form>(() => empty(fam.children.map((c) => c.id), fam.family ?? undefined));
   const [saveTemplate, setSaveTemplate] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const appliedNewDefaults = useRef(false);
+  const [photoCountsOpen, setPhotoCountsOpen] = useState(false);
+  const [photoDefaultsMsg, setPhotoDefaultsMsg] = useState("");
+  const photoDefaultsInitialized = useRef(false);
 
   useEffect(() => {
-    if (!isNew || params.get("template") || !fam.family || appliedNewDefaults.current) return;
-    appliedNewDefaults.current = true;
+    if (!isNew || params.get("template") || !fam.family || photoDefaultsInitialized.current) return;
+    photoDefaultsInitialized.current = true;
     setF((x) => ({
       ...x,
-      before_photo_min: String(fam.family?.task_before_photo_min ?? 1),
-      before_photo_max: String(fam.family?.task_before_photo_max ?? 4),
-      after_photo_min: String(fam.family?.task_after_photo_min ?? 1),
-      after_photo_max: String(fam.family?.task_after_photo_max ?? 4),
+      proof_before_min: String(fam.family!.task_before_photo_min ?? 1),
+      proof_before_max: String(fam.family!.task_before_photo_max ?? 4),
+      proof_after_min: String(fam.family!.task_after_photo_min ?? 1),
+      proof_after_max: String(fam.family!.task_after_photo_max ?? 4),
     }));
   }, [fam.family, isNew, params]);
 
@@ -124,19 +134,20 @@ export default function TaskEdit() {
             due_time: t.due_time?.slice(0, 5) ?? "",
             proof: t.proof,
             before_after: t.before_after,
-            before_photo_min: String(t.before_photo_min ?? fam.family?.task_before_photo_min ?? 1),
-            before_photo_max: String(t.before_photo_max ?? fam.family?.task_before_photo_max ?? 4),
-            after_photo_min: String(t.after_photo_min ?? fam.family?.task_after_photo_min ?? 1),
-            after_photo_max: String(t.after_photo_max ?? fam.family?.task_after_photo_max ?? 4),
+            proof_before_min: String(t.proof_before_min ?? (t.before_after ? 1 : 0)),
+            proof_before_max: String(t.proof_before_max ?? 4),
+            proof_after_min: String(t.proof_after_min ?? 1),
+            proof_after_max: String(t.proof_after_max ?? 4),
             reward_minutes: t.reward_minutes?.toString() ?? "",
             reward_text: t.reward_text ?? "",
             reward_validity: t.reward_validity,
             reward_date: t.reward_date ?? todayISO("Europe/Berlin", 1),
             reward_expires_days: t.reward_expires_days?.toString() ?? "",
             reward_section_id: (t as Task & { reward_section_id?: string | null }).reward_section_id ?? "",
-            mandatory: t.mandatory,
             active: t.active,
             ...recForm(t as RecFields),
+            phone_restriction: t.phone_restriction ?? "none",
+            orbit_focus_profile_id: t.orbit_focus_profile_id ?? "",
           });
       } else {
         const tid = params.get("template");
@@ -149,16 +160,15 @@ export default function TaskEdit() {
               description: data.description ?? "",
               proof: data.proof,
               before_after: data.before_after,
-              before_photo_min: String(data.before_photo_min ?? fam.family?.task_before_photo_min ?? 1),
-              before_photo_max: String(data.before_photo_max ?? fam.family?.task_before_photo_max ?? 4),
-              after_photo_min: String(data.after_photo_min ?? fam.family?.task_after_photo_min ?? 1),
-              after_photo_max: String(data.after_photo_max ?? fam.family?.task_after_photo_max ?? 4),
+              proof_before_min: String(data.proof_before_min ?? (data.before_after ? 1 : 0)),
+              proof_before_max: String(data.proof_before_max ?? 4),
+              proof_after_min: String(data.proof_after_min ?? 1),
+              proof_after_max: String(data.proof_after_max ?? 4),
               reward_minutes: data.reward_minutes?.toString() ?? "",
               reward_text: data.reward_text ?? "",
               reward_validity: data.reward_validity,
               reward_expires_days: data.reward_expires_days?.toString() ?? "",
               reward_section_id: data.reward_section_id ?? "",
-              mandatory: data.mandatory,
               ...recForm(data as RecFields),
             }));
         }
@@ -168,11 +178,31 @@ export default function TaskEdit() {
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((x) => ({ ...x, [k]: v }));
 
+  async function savePhotoDefaults() {
+    setErr("");
+    setPhotoDefaultsMsg("");
+    const n = {
+      task_before_photo_min: Math.max(1, Math.min(4, Number(f.proof_before_min) || 1)),
+      task_before_photo_max: Math.max(1, Math.min(4, Number(f.proof_before_max) || 4)),
+      task_after_photo_min: Math.max(1, Math.min(4, Number(f.proof_after_min) || 1)),
+      task_after_photo_max: Math.max(1, Math.min(4, Number(f.proof_after_max) || 4)),
+    };
+    if (n.task_before_photo_min > n.task_before_photo_max || n.task_after_photo_min > n.task_after_photo_max) {
+      return setErr("En az değeri en fazla değerinden büyük olamaz.");
+    }
+    const { error } = await supabase.from("families").update(n).eq("id", fam.familyId);
+    if (error) return setErr(errorText(error));
+    setPhotoDefaultsMsg("Varsayılan fotoğraf sayıları kaydedildi.");
+    await fam.reload();
+  }
+
   async function save() {
     setErr("");
     if (!f.title.trim()) return setErr("Görev adı yaz.");
     if (!f.child_ids.length) return setErr("En az bir çocuk seç.");
     if (f.recurrence === "days" && !f.days.length) return setErr("Tekrar günlerini seç.");
+    const rewardMinutes = f.reward_minutes.trim() === "" ? null : Number(f.reward_minutes);
+    if (rewardMinutes != null && (!Number.isInteger(rewardMinutes) || rewardMinutes < -1440 || rewardMinutes > 1440)) return setErr("Süre -1440 ile 1440 dakika arasında tam sayı olmalı.");
     setBusy(true);
     const row = {
       family_id: fam.familyId,
@@ -188,22 +218,24 @@ export default function TaskEdit() {
       due_time: f.due_time || null,
       proof: f.proof,
       before_after: f.proof !== "none" && f.before_after,
-      before_photo_min: Math.min(4, Math.max(1, Number(f.before_photo_min) || 1)),
-      before_photo_max: Math.min(4, Math.max(Number(f.before_photo_min) || 1, Number(f.before_photo_max) || 4)),
-      after_photo_min: Math.min(4, Math.max(1, Number(f.after_photo_min) || 1)),
-      after_photo_max: Math.min(4, Math.max(Number(f.after_photo_min) || 1, Number(f.after_photo_max) || 4)),
-      reward_minutes: f.reward_minutes.trim() === "" ? null : Number(f.reward_minutes),
+      proof_before_min: f.proof !== "none" && f.before_after ? Math.min(4, Math.max(1, Number(f.proof_before_min) || 1)) : 0,
+      proof_before_max: f.proof !== "none" && f.before_after ? Math.max(Number(f.proof_before_max) || 4, Number(f.proof_before_min) || 1) : 4,
+      proof_after_min: f.proof === "none" ? 1 : Math.min(4, Math.max(1, Number(f.proof_after_min) || 1)),
+      proof_after_max: f.proof === "none" ? 4 : Math.max(Number(f.proof_after_max) || 4, Number(f.proof_after_min) || 1),
+      reward_minutes: rewardMinutes,
       reward_text: f.reward_text.trim() || null,
       reward_validity: f.reward_validity,
       reward_date: f.reward_validity === "date" ? f.reward_date : null,
       reward_expires_days: f.reward_validity === "wallet" && f.reward_expires_days ? Number(f.reward_expires_days) : null,
-      reward_section_id: Number(f.reward_minutes) >= 0 && f.reward_validity !== "wallet" && f.reward_validity !== "vault" && f.reward_section_id ? f.reward_section_id : null,
-      mandatory: f.mandatory,
+      reward_section_id: f.reward_validity !== "wallet" && f.reward_validity !== "vault" && f.reward_section_id ? f.reward_section_id : null,
+      mandatory: false,
       active: f.active,
       record_minutes: f.record_on ? Math.min(240, Math.max(1, Number(f.record_minutes) || 60)) : null,
       record_camera: f.record_camera,
       record_pause: f.record_pause,
       record_pause_max: f.record_pause === "limit" ? Math.max(1, Number(f.record_pause_max) || 10) : null,
+      phone_restriction: f.phone_restriction,
+      orbit_focus_profile_id: f.orbit_focus_profile_id || null,
     };
     const { error } = isNew ? await supabase.from("tasks").insert(row) : await supabase.from("tasks").update(row).eq("id", id);
     if (!error && saveTemplate) {
@@ -213,16 +245,16 @@ export default function TaskEdit() {
         description: row.description,
         proof: row.proof,
         before_after: row.before_after,
-        before_photo_min: row.before_photo_min,
-        before_photo_max: row.before_photo_max,
-        after_photo_min: row.after_photo_min,
-        after_photo_max: row.after_photo_max,
+        proof_before_min: row.proof_before_min,
+        proof_before_max: row.proof_before_max,
+        proof_after_min: row.proof_after_min,
+        proof_after_max: row.proof_after_max,
         reward_minutes: row.reward_minutes,
         reward_text: row.reward_text,
         reward_validity: row.reward_validity === "date" ? "today" : row.reward_validity,
         reward_expires_days: row.reward_expires_days,
         reward_section_id: row.reward_section_id,
-        mandatory: row.mandatory,
+        mandatory: false,
         record_minutes: row.record_minutes,
         record_camera: row.record_camera,
         record_pause: row.record_pause,
@@ -242,6 +274,7 @@ export default function TaskEdit() {
 
   const toggleChild = (cid: string) =>
     set("child_ids", f.child_ids.includes(cid) ? f.child_ids.filter((x) => x !== cid) : [...f.child_ids, cid]);
+  const legacyReward = f.reward_validity === "tomorrow" || f.reward_validity === "date";
 
   return (
     <div className="page">
@@ -260,7 +293,7 @@ export default function TaskEdit() {
           <input value={f.title} onChange={(e) => set("title", e.target.value)} placeholder="Odanı topla" />
         </label>
         <label className="field">
-          <span>Açıklama (isteğe bağlı)</span>
+          <span>Açıklama <Info>Çocuğun görevin ayrıntılarını görür.</Info></span>
           <input value={f.description} onChange={(e) => set("description", e.target.value)} placeholder="Yatağını yap, yerleri topla" />
         </label>
       </div>
@@ -299,7 +332,7 @@ export default function TaskEdit() {
         {f.recurrence === "days" ? (
           <>
             <DayPicker value={f.days} onChange={(d) => set("days", d)} />
-            <div className="grid2">
+            <div className="grid2 task-date-grid">
               <div className="field">
                 <span>Başlangıç</span>
                 <DateField value={f.start_date} onChange={(v) => set("start_date", v)} />
@@ -311,7 +344,7 @@ export default function TaskEdit() {
             </div>
           </>
         ) : (
-          <div className="grid2">
+          <div className="grid2 task-date-grid">
             <div className="field">
               <span>Başlangıç</span>
               <DateField value={f.start_date} onChange={(v) => set("start_date", v)} />
@@ -323,31 +356,68 @@ export default function TaskEdit() {
           </div>
         )}
         <div className="field">
-          <span>Saat (isteğe bağlı, ör. 18:00'e kadar)</span>
+          <span>Saat <Info>İstersen son teslim saatini de belirle.</Info></span>
           <TimeField clearable value={f.due_time} onChange={(v) => set("due_time", v)} label="Saat" />
         </div>
       </div>
 
       <div className="card">
-        <h2>Kanıt</h2>
+        <h2>Kanıt <Info>Çocuk yalnızca Orbit kamerasıyla kanıt gönderir; onay veya redden sonra dosya silinir.</Info></h2>
         <div className="row gap-xs wrap">
-          {(Object.keys(PROOF_LABEL) as ProofType[]).map((p) => (
-            <button key={p} className={`chip small ${f.proof === p ? "on" : ""}`} onClick={() => set("proof", p)}>
-              {PROOF_LABEL[p]}
-            </button>
-          ))}
+          <button className={`chip small ${f.proof === "none" ? "on" : ""}`} onClick={() => { set("proof", "none"); set("before_after", false); }}>
+            Kanıt yok
+          </button>
+          <button className={`chip small ${f.proof === "photo" && !f.before_after ? "on" : ""}`} onClick={() => { set("proof", "photo"); set("before_after", false); }}>
+            Tamamlanınca fotoğraf
+          </button>
+          <button className={`chip small ${f.proof === "photo" && f.before_after ? "on" : ""}`} onClick={() => { set("proof", "photo"); set("before_after", true); }}>
+            Başlangıç + tamamlanınca fotoğraf
+          </button>
+          {f.proof !== "none" && f.proof !== "photo" && <span className="pill quiet">{PROOF_LABEL[f.proof]}</span>}
         </div>
-        {f.proof !== "none" && (
+        {f.proof !== "none" && f.proof !== "photo" && <p className="muted tiny"><Info>Bu eski görev video kanıtı kullanıyor; değiştirmek için yukarıdaki fotoğraf seçeneğini seçebilirsin.</Info></p>}
+        {f.proof === "photo" && (
           <>
-            <label className="check"><input type="checkbox" checked={f.before_after} onChange={(e) => set("before_after", e.target.checked)} />Öncesi ve sonrası istensin</label>
-            {f.before_after && <div className="grid2"><label className="field"><span>Başlangıç fotoğrafı: en az / en fazla</span><div className="row gap-xs"><input type="number" min={1} max={4} value={f.before_photo_min} onChange={(e) => set("before_photo_min", e.target.value)} /><input type="number" min={1} max={4} value={f.before_photo_max} onChange={(e) => set("before_photo_max", e.target.value)} /></div></label><label className="field"><span>Tamamlanma fotoğrafı: en az / en fazla</span><div className="row gap-xs"><input type="number" min={1} max={4} value={f.after_photo_min} onChange={(e) => set("after_photo_min", e.target.value)} /><input type="number" min={1} max={4} value={f.after_photo_max} onChange={(e) => set("after_photo_max", e.target.value)} /></div></label></div>}
+            <button className="section-toggle" aria-expanded={photoCountsOpen} onClick={() => setPhotoCountsOpen((v) => !v)}>
+              Fotoğraf sayıları <span aria-hidden>{photoCountsOpen ? "⌃" : "⌄"}</span>
+            </button>
+            {photoCountsOpen && (
+              <>
+                <p className="muted tiny"><Info>Her aşamada kaç fotoğraf gerektiğini belirleyebilirsin. Bu değerleri yeni görevler için varsayılan olarak kaydedebilirsin.</Info></p>
+                <div className="grid2">
+                  {f.before_after && <PhotoCountFields title="Başlangıç fotoğrafları" min={f.proof_before_min} max={f.proof_before_max} onMin={(v) => set("proof_before_min", v)} onMax={(v) => set("proof_before_max", v)} />}
+                  <PhotoCountFields title="Tamamlanma fotoğrafları" min={f.proof_after_min} max={f.proof_after_max} onMin={(v) => set("proof_after_min", v)} onMax={(v) => set("proof_after_max", v)} />
+                </div>
+                {photoDefaultsMsg && <p className="ok">{photoDefaultsMsg}</p>}
+                <button className="btn small" onClick={savePhotoDefaults}>Varsayılanı kaydet</button>
+              </>
+            )}
           </>
         )}
-        <p className="muted tiny">Çocuk kanıtı Orbit'in kamerasıyla çeker; galeriden eski foto seçemez. Onay veya retten sonra dosya silinir.</p>
       </div>
 
       <div className="card">
-        <h2>📹 Kamera kaydı</h2>
+        <h2>Kısıtlamalar <Info>Bu görev onaylanana kadar geçerlidir. Telefon kısıtı ile Orbit içindeki menü kısıtı birbirinden bağımsızdır.</Info></h2>
+        <label className="field">
+          <span>Telefon</span>
+          <select value={f.phone_restriction} onChange={(e) => set("phone_restriction", e.target.value as TaskPhoneRestriction)}>
+            <option value="none">Kısıtlama yok</option>
+            <option value="limit">Sınırlı kullanım</option>
+            <option value="kiosk">Tam kilit</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>Orbit menüsü</span>
+          <select value={f.orbit_focus_profile_id} onChange={(e) => set("orbit_focus_profile_id", e.target.value)}>
+            <option value="">Kısıtlama yok</option>
+            {fam.focusProfiles.map((p) => <option key={p.id} value={p.id}>{p.icon ?? "🎯"} {p.name}</option>)}
+          </select>
+        </label>
+        {!fam.focusProfiles.length && <p className="muted tiny">Orbit menü kısıtı için önce Kurallar → Odak profilleri bölümünden profil oluştur.</p>}
+      </div>
+
+      <div className="card">
+        <h2>📹 Kamera kaydı <Info>Kayıt görev boyunca telefondaki Orbit kamerasından alınır; galeri kullanılmaz.</Info></h2>
         <label className="check">
           <input type="checkbox" checked={f.record_on} onChange={(e) => set("record_on", e.target.checked)} />
           Görev süresince kamerayla kayıt yapsın
@@ -385,29 +455,22 @@ export default function TaskEdit() {
                 <span className="small">dk (dolunca kayıt kendiliğinden devam eder)</span>
               </div>
             )}
-            <p className="muted tiny">
-              Telefon saniyede 2 kare çeker; 1 saatlik kayıt yaklaşık 3 dakikalık, ~45 MB'lık bir video olur ve panelde 5x–40x hızda izlenir. Molalar kayda sayılmaz.
-              Kayıt sürerken telefonda diğer uygulamalar kapalıdır. Kayıt kesilirse ya da erken bitirilirse sana bildirim gelir.
-            </p>
           </>
         )}
       </div>
 
       <div className="card">
-        <h2>Süre ödülü / ceza</h2>
+        <h2>Ödül / eksi süre <Info>Pozitif değer ödül olarak eklenir. Negatif değer görev zamanında yapılmazsa seçtiğin hedefe borç/eksi süre olarak yazılır.</Info></h2>
         <div className="grid2">
           <label className="field">
-            <span>Ekstra süre (dk)</span>
-            <input type="number" min={-1440} max={1440} value={f.reward_minutes} onChange={(e) => { const value = e.target.value; setF((x) => ({ ...x, reward_minutes: value, reward_validity: Number(value) < 0 && !["today", "wallet", "vault"].includes(x.reward_validity) ? "today" : x.reward_validity })); }} placeholder="0" />
+            <span>{Number(f.reward_minutes) < 0 ? "Eksi süre (dk)" : "Ekstra süre (dk)"}</span>
+            <input type="number" min={-1440} max={1440} step={1} value={f.reward_minutes} onChange={(e) => set("reward_minutes", e.target.value)} placeholder="yok" />
           </label>
           <label className="field">
-            <span>Geçerli</span>
+            <span>Ödül</span>
             <select value={f.reward_validity} onChange={(e) => set("reward_validity", e.target.value as RewardValidity)}>
-              {(Object.keys(VALIDITY_LABEL) as RewardValidity[]).filter((v) => Number(f.reward_minutes) < 0 ? ["today", "wallet", "vault"].includes(v) : true).map((v) => (
-                <option key={v} value={v}>
-                  {Number(f.reward_minutes) < 0 ? PENALTY_VALIDITY_LABEL[v] : VALIDITY_LABEL[v]}
-                </option>
-              ))}
+              {REWARD_CORE.map(([value, label]) => <option key={value} value={value}>{Number(f.reward_minutes) < 0 ? (({ today: "Bugünden düş", wallet: "Cüzdana borç yaz", vault: "Kasaya borç yaz" } as Record<string, string>)[value] ?? label) : label}</option>)}
+              {legacyReward && <option value={f.reward_validity}>{VALIDITY_LABEL[f.reward_validity]}</option>}
             </select>
           </label>
         </div>
@@ -417,10 +480,7 @@ export default function TaskEdit() {
             <DateField value={f.reward_date} onChange={(v) => set("reward_date", v)} />
           </div>
         )}
-        {f.reward_validity === "vault" && (
-          <p className="muted small">Pozitifse süre çocuğun kasasına eklenir; negatifse borç olarak tutulur. Çocuk kasayı kullanamaz, ebeveyn Süre sekmesinden yönetir.</p>
-        )}
-        {Number(f.reward_minutes) >= 0 && f.reward_validity !== "wallet" && f.reward_validity !== "vault" && (
+        {legacyReward && (
           <label className="field">
             <span>Kazandığı süre nereye eklensin</span>
             <select value={f.reward_section_id} onChange={(e) => set("reward_section_id", e.target.value)}>
@@ -465,6 +525,18 @@ export default function TaskEdit() {
             Görevi sil
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+function PhotoCountFields({ title, min, max, onMin, onMax }: { title: string; min: string; max: string; onMin: (v: string) => void; onMax: (v: string) => void }) {
+  return (
+    <div className="card soft">
+      <b>{title}</b>
+      <div className="grid2">
+        <label className="field"><span>En az</span><input type="number" min={1} max={4} value={min} onChange={(e) => onMin(e.target.value)} /></label>
+        <label className="field"><span>En fazla</span><input type="number" min={1} max={4} value={max} onChange={(e) => onMax(e.target.value)} /></label>
       </div>
     </div>
   );

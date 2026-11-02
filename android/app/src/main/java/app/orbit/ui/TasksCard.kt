@@ -34,6 +34,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 private fun statusText(t: TaskItem) = when (t.status) {
     "open" -> null
@@ -49,7 +52,7 @@ private fun statusText(t: TaskItem) = when (t.status) {
 private fun rewardText(t: TaskItem): String? {
     val parts = mutableListOf<String>()
     t.rewardMinutes?.let {
-        parts += (if (it > 0) "+" else "") + "$it dk" + when (t.rewardValidity) {
+        parts += "${if (it > 0) "+" else ""}$it dk" + when (t.rewardValidity) {
             "tomorrow" -> " (yarın)"
             "wallet" -> " (cüzdana)"
             "vault" -> " (süre kasasına)"
@@ -60,6 +63,10 @@ private fun rewardText(t: TaskItem): String? {
     t.rewardText?.let { parts += it }
     return parts.joinToString(" · ").ifBlank { null }
 }
+
+private val taskDay = DateTimeFormatter.ofPattern("dd.MM.yyyy EEEE", java.util.Locale("tr", "TR"))
+private fun taskDate(value: String?): String? = value?.let { runCatching { java.time.LocalDate.parse(it.take(10)).format(taskDay) }.getOrNull() }
+private fun taskEntered(value: String?): String? = value?.let { runCatching { Instant.parse(it).atZone(ZoneId.systemDefault()).toLocalDate().format(DateTimeFormatter.ofPattern("dd.MM.yyyy")) + " · " + Instant.parse(it).atZone(ZoneId.systemDefault()).toLocalTime().toString().take(5) }.getOrNull() }
 
 private fun mediaFor(proof: String) = when (proof) {
     "video" -> "video"
@@ -74,13 +81,16 @@ fun TasksCard(tasks: List<TaskItem>) {
     val scope = rememberCoroutineScope()
     var pending by remember { mutableStateOf<Pair<TaskItem, String>?>(null) }
     var busyRun by remember { mutableStateOf<String?>(null) }
+    var optimisticSubmitted by remember { mutableStateOf<Set<String>>(emptySet()) }
     var msg by remember { mutableStateOf("") }
 
     fun submit(t: TaskItem) {
+        optimisticSubmitted = optimisticSubmitted + t.runId
         busyRun = t.runId
         scope.launch {
             val ok = withContext(Dispatchers.IO) { runCatching { Sync.submitTask(t.runId) } }
             busyRun = null
+            if (ok.isFailure) optimisticSubmitted = optimisticSubmitted - t.runId
             msg = if (ok.isSuccess) "\"${t.title}\" gönderildi, onay bekleniyor"
                 else if ("recording_missing" in (ok.exceptionOrNull()?.message ?: "")) "Önce kaydı tamamla"
                 else "Gönderilemedi: ${ok.exceptionOrNull()?.message ?: "internet?"}"
@@ -92,59 +102,65 @@ fun TasksCard(tasks: List<TaskItem>) {
         val p = pending ?: return@rememberLauncherForActivityResult
         pending = null
         if (res.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
-        val path = res.data?.getStringExtra("path") ?: return@rememberLauncherForActivityResult
+        val paths = res.data?.getStringArrayListExtra("paths") ?: res.data?.getStringExtra("path")?.let { arrayListOf(it) } ?: return@rememberLauncherForActivityResult
         val media = res.data?.getStringExtra("media") ?: "photo"
         val (task, stage) = p
         busyRun = task.runId
+        if (stage != "before") optimisticSubmitted = optimisticSubmitted + task.runId
         msg = "Yükleniyor…"
         scope.launch {
             val r = withContext(Dispatchers.IO) {
                 runCatching {
-                    val f = File(path)
-                    Sync.uploadProof(task.runId, stage, media, f.readBytes(), if (media == "video") "video/mp4" else "image/jpeg")
-                    f.delete()
-                    if (stage != "before" && task.afterCount + 1 >= task.afterPhotoMin) Sync.submitTask(task.runId)
+                    for (path in paths) {
+                        val f = File(path)
+                        Sync.uploadProof(task.runId, stage, media, f.readBytes(), if (media == "video") "video/mp4" else "image/jpeg")
+                        f.delete()
+                    }
+                    if (stage != "before") Sync.submitTask(task.runId)
                 }
             }
             busyRun = null
+            if (r.isFailure && stage != "before") optimisticSubmitted = optimisticSubmitted - task.runId
             msg = when {
                 r.isFailure -> "Yüklenemedi: ${r.exceptionOrNull()?.message ?: "internet?"}"
-                stage == "before" -> "Öncesi kaydedildi. Görevi yap, sonra \"Tamamladım\"a bas."
-                stage == "after" && task.afterCount + 1 < task.afterPhotoMin -> "Sonrası fotoğrafı kaydedildi; ${task.afterPhotoMin - task.afterCount - 1} fotoğraf daha gerekli"
+                stage == "before" -> "${paths.size} öncesi fotoğrafı kaydedildi. Görevi yap, sonra \"Tamamladım\"a bas."
                 else -> "\"${task.title}\" gönderildi, onay bekleniyor"
             }
             Live.syncRequested = true
         }
     }
 
-    fun capture(t: TaskItem, stage: String) {
-        val count = if (stage == "before") t.beforeCount else t.afterCount
-        val max = if (stage == "before") t.beforePhotoMax else t.afterPhotoMax
-        if (count >= max) { msg = "En fazla $max fotoğraf ekleyebilirsin"; return }
+    fun capture(t: TaskItem, stage: String, minPhotos: Int, maxPhotos: Int) {
         pending = t to stage
         val title = when (stage) {
             "before" -> "${t.title} — öncesi"
             "after" -> "${t.title} — sonrası"
             else -> t.title
         }
-        launcher.launch(Intent(ctx, CaptureActivity::class.java).putExtra("media", mediaFor(t.proof)).putExtra("title", title))
+        launcher.launch(
+            Intent(ctx, CaptureActivity::class.java)
+                .putExtra("media", mediaFor(t.proof))
+                .putExtra("title", title)
+                .putExtra("minPhotos", minPhotos)
+                .putExtra("maxPhotos", maxPhotos),
+        )
     }
 
     Card {
         Title("Görevlerim")
         if (tasks.isEmpty()) Muted("Bugün görev yok.")
-        for (t in tasks) {
+        for (raw in tasks) {
+            val t = if (raw.runId in optimisticSubmitted) raw.copy(status = "submitted") else raw
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface2).padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(t.title, color = C.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                    if (t.mandatory && t.open) Text("zorunlu", color = C.warn, fontSize = 12.sp)
                 }
                 t.description?.let { Muted(it, 13) }
                 rewardText(t)?.let { Text("Ödül: $it", color = C.good, fontSize = 13.sp) }
-                val due = listOfNotNull(t.dueDate?.let { "son gün $it" }, t.dueTime?.let { "$it'e kadar" }).joinToString(" · ")
+                val due = listOfNotNull(taskEntered(t.createdAt), taskDate(t.dueDate), t.dueTime?.let { it }).joinToString(" · ")
                 if (due.isNotBlank()) Muted(due, 12)
                 if (t.firstWins && t.open) Muted("İlk yapan alır", 12)
                 statusText(t)?.let {
@@ -153,7 +169,7 @@ fun TasksCard(tasks: List<TaskItem>) {
                 if (t.open && t.needsRecording) {
                     val rec = app.orbit.data.Recorder.current()?.takeIf { it.runId == t.runId }
                     when {
-                        rec?.active == true || (!t.recordingDone && !(t.needsProof && t.beforeAfter && t.beforeCount < t.beforePhotoMin)) -> Button(
+                        rec?.active == true || (!t.recordingDone && !(t.needsProof && t.beforeCount < t.beforePhotoMin)) -> Button(
                             onClick = { ctx.startActivity(Intent(ctx, RecordActivity::class.java).putExtra("runId", t.runId)) },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = C.bad),
@@ -170,16 +186,16 @@ fun TasksCard(tasks: List<TaskItem>) {
                         t.recordingDone -> Text("📹 Kayıt tamam (${t.recSeconds / 60} dk)", color = C.good, fontSize = 13.sp)
                     }
                 }
-                val recordFirst = t.needsRecording && !t.recordingDone && !(t.needsProof && t.beforeAfter && t.beforeCount < t.beforePhotoMin)
+                val needBefore = t.needsProof && t.beforeCount < t.beforePhotoMin
+                val needAfter = t.needsProof && t.afterCount < t.afterPhotoMin
+                val recordFirst = t.needsRecording && !t.recordingDone && !needBefore
                 if (t.open && !recordFirst && !(t.needsRecording && app.orbit.data.Recorder.current()?.let { it.runId == t.runId && it.active } == true)) {
                     val busy = busyRun == t.runId
-                    val needBefore = t.needsProof && t.beforeAfter && t.beforeCount < t.beforePhotoMin
-                    val needAfter = t.needsProof && t.afterCount < t.afterPhotoMin
                     Button(
                         onClick = {
                             when {
-                                needBefore -> capture(t, "before")
-                                needAfter -> capture(t, if (t.beforeAfter) "after" else "single")
+                                needBefore -> capture(t, "before", t.beforePhotoMin, t.beforePhotoMax)
+                                needAfter -> capture(t, if (t.beforeAfter) "after" else "single", t.afterPhotoMin, t.afterPhotoMax)
                                 else -> submit(t)
                             }
                         },
@@ -190,9 +206,8 @@ fun TasksCard(tasks: List<TaskItem>) {
                         Text(
                             when {
                                 busy -> "Gönderiliyor…"
-                                needBefore -> "Başla (öncesi ${if (t.proof == "video") "videosu" else "fotoğrafı"})"
-                                needAfter -> "Fotoğraf ekle (${t.afterCount}/${t.afterPhotoMin})"
-                                t.needsProof -> "Tamamladım (${if (t.beforeAfter) "sonrası " else ""}${if (t.proof == "video") "video" else "fotoğraf"})"
+                                needBefore -> "Başla (${t.beforeCount}/${t.beforePhotoMin} öncesi)"
+                                needAfter -> "Tamamladım (${t.afterCount}/${t.afterPhotoMin} sonrası)"
                                 else -> "Tamamladım"
                             }
                         )

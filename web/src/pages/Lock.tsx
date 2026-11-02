@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { TimeField } from "../components/DateTime";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { sendCommand } from "../lib/actions";
@@ -8,6 +8,7 @@ import { mins, nowBerlin } from "../lib/sections";
 import { relTime } from "../lib/util";
 import { type Child, type KioskSettings } from "../lib/types";
 import { Icon } from "../components/Icon";
+import { Info } from "../components/Info";
 import { RuleCard, ScreenPicker, WeekGrid, addRule } from "../components/RuleEditor";
 
 const DEFAULT_KIOSK: KioskSettings = { message: null, screens: ["tasks", "messages", "music", "timer", "alarms"], calls: "emergency" };
@@ -36,12 +37,15 @@ export async function unlockNow(childId: string) {
 }
 
 /** Kilit sayfası: şimdi kilitle, haftalık program, kilit ekranı, ana sayfa tuşu. */
-export default function Lock() {
+export default function Lock({ embeddedChildId }: { embeddedChildId?: string } = {}) {
   const fam = useFamily();
-  const [kid, setKid] = useState<string>("all");
+  const [params] = useSearchParams();
+  const childParam = embeddedChildId ?? params.get("child");
+  const [kid, setKid] = useState<string>(childParam ?? (fam.selectedChildId === "all" ? "all" : fam.selectedChildId));
   const [openRule, setOpenRule] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const kinds = ["kiosk", "limit", "free"] as const;
+  const shownChildren = fam.visibleChildren.filter((c) => !childParam || c.id === childParam);
   const rules = fam.timeRules.filter((r) => (kinds as readonly string[]).includes(r.kind) && (kid === "all" || !r.child_ids.length || r.child_ids.includes(kid)));
 
   async function add() {
@@ -55,73 +59,60 @@ export default function Lock() {
   }
 
   return (
-    <div className="page">
-      <header className="page-head">
+    <div className={embeddedChildId ? "stack" : "page"}>
+      {!embeddedChildId && <header className="page-head">
         <Link to="/rules" className="icon-btn" aria-label="Geri">
           <Icon name="back" />
         </Link>
         <h1>🔒 Kilit</h1>
         <span />
-      </header>
+      </header>}
       {err && <p className="error">{err}</p>}
-      <div className="card">
-        <p className="small">
-          <b>🔒 Kilitle:</b> ekranda sadece Orbit kalır; ayarlar, bildirim paneli ve diğer uygulamalar açılmaz.
-          <br />
-          <b>🌙 Sınırla:</b> telefon kullanılır ama sadece her zaman açık uygulamalar çalışır.
-          <br />
-          <b>🟢 Serbest:</b> o saatte süre ve kurallar işlemez.
-        </p>
-      </div>
+      <h2 className="section-title">Kilit <Info>Kilitle Orbit dışında her şeyi kapatır. Sınırla yalnızca her zaman açık uygulamalara izin verir. Serbest kural sınırları kaldırır.</Info></h2>
 
       <section className="stack">
         <h2 className="section-title">Şimdi</h2>
-        {fam.children.map((c) => (
+        {shownChildren.map((c) => (
           <NowCard key={c.id} child={c} onErr={setErr} />
         ))}
       </section>
 
-      <section className="stack">
-        <div className="row between">
-          <h2 className="section-title">Haftalık program</h2>
-          <button className="btn small" onClick={add}>
-            <Icon name="plus" size={16} /> Kural
-          </button>
-        </div>
-        <div className="row gap-xs wrap">
-          <button className={`chip small ${kid === "all" ? "on" : ""}`} onClick={() => setKid("all")}>
-            Hepsi
-          </button>
-          {fam.children.map((c) => (
-            <button key={c.id} className={`chip small ${kid === c.id ? "on" : ""}`} onClick={() => setKid(c.id)}>
-              {c.name}
+      <details className="card section-collapse-card">
+        <summary className="section-collapse-head"><span>Haftalık program <Info>Aynı saate iki kural denk gelirse güçlü olan geçerli: Kilitle → Sınırla → Serbest.</Info></span><span>⌄</span></summary>
+        <div className="stack">
+          <div className="row between">
+            <span className="muted small">Kurallar</span>
+            <button className="btn small" onClick={add}>
+              <Icon name="plus" size={16} /> Kural
             </button>
-          ))}
+          </div>
+          <div className="row gap-xs wrap">
+            <button className={`chip small ${kid === "all" ? "on" : ""}`} onClick={() => setKid("all")}>Hepsi</button>
+            {shownChildren.map((c) => <button key={c.id} className={`chip small ${kid === c.id ? "on" : ""}`} onClick={() => setKid(c.id)}>{c.name}</button>)}
+          </div>
+          <div className="card">
+            <WeekGrid
+              rules={rules}
+              onPick={(id) => {
+                setOpenRule(id);
+                setTimeout(() => document.getElementById(`rule-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+              }}
+            />
+          </div>
+          {!rules.length && <p className="muted small">Henüz kural yok. "Kural" ile ekle.</p>}
+          {rules.map((r) => <RuleCard key={r.id} r={r} kinds={["kiosk", "limit", "free"]} open={openRule === r.id} onToggle={() => setOpenRule(openRule === r.id ? null : r.id)} onErr={setErr} />)}
         </div>
-        <div className="card">
-          <WeekGrid
-            rules={rules}
-            onPick={(id) => {
-              setOpenRule(id);
-              setTimeout(() => document.getElementById(`rule-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
-            }}
-          />
-          <p className="muted tiny">Aynı saate iki kural denk gelirse güçlü olan geçerli: Kilitle → Sınırla → Serbest. Kural yoksa gün tipindeki bölümler geçerli.</p>
-        </div>
-        {!rules.length && <p className="muted small">Henüz kural yok. "Kural" ile ekle.</p>}
-        {rules.map((r) => (
-          <RuleCard key={r.id} r={r} kinds={["kiosk", "limit", "free"]} open={openRule === r.id} onToggle={() => setOpenRule(openRule === r.id ? null : r.id)} onErr={setErr} />
-        ))}
-      </section>
+      </details>
 
-      <section className="stack">
-        <h2 className="section-title">Kilit ekranı</h2>
-        {fam.children.map((c) => (
-          <KioskLook key={c.id} child={c} onErr={setErr} />
-        ))}
-      </section>
+      <details className="card section-collapse-card">
+        <summary className="section-collapse-head"><span>Kilit ekranı</span><span>⌄</span></summary>
+        <div className="stack">{shownChildren.map((c) => <KioskLook key={c.id} child={c} onErr={setErr} />)}</div>
+      </details>
 
-      <LockButtonCard onErr={setErr} />
+      <details className="card section-collapse-card">
+        <summary className="section-collapse-head"><span>Ana sayfadaki kilit tuşu</span><span>⌄</span></summary>
+        <LockButtonCard onErr={setErr} />
+      </details>
     </div>
   );
 }
@@ -214,11 +205,10 @@ function NowCard({ child, onErr }: { child: Child; onErr: (e: string) => void })
           🌙 Sınırla
         </button>
         <button className="btn ghost" onClick={release}>
-          Kaldır
+          Kaldır <Info>Elle verilen kilidi ve o an süren programlı kilidi/sınırlamayı bitirir.</Info>
         </button>
       </div>
       {msg && <p className="ok small">{msg}</p>}
-      <p className="muted tiny">"Kaldır" elle verilen kilidi ve o an süren programlı kilidi/sınırlamayı bitirir; program bir sonraki sefer yine başlar.</p>
     </div>
   );
 }
@@ -237,7 +227,7 @@ function KioskLook({ child, onErr }: { child: Child; onErr: (e: string) => void 
     <div className="card">
       <b>{child.name}</b>
       <input value={m} onChange={(e) => setM(e.target.value)} onBlur={() => m !== (ks.message ?? "") && save({ message: m.trim() || null })} placeholder="Kilit ekranında mesaj (ör. Ders saati)" />
-      <span className="small">Kilitliyken Orbit'te açık ekranlar</span>
+      <span className="small">Kilitliyken Orbit'te açık ekranlar <Info>Burada seçilen ekranlar telefon kilitliyken görülebilir.</Info></span>
       <ScreenPicker value={ks.screens} onChange={(v) => save({ screens: v })} />
       <label className="field">
         <span>Telefon aramaları</span>

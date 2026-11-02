@@ -150,10 +150,11 @@ class RuleEngine(private val rules: Rules) {
 
     fun extraMinutes(day: LocalDate, dayStartMs: Long, dayEndMs: Long): Int {
         val grants = rules.grants.filter { !it.vault && it.window == null && (it.validOn == day || it.activatedOn == day) }.sumOf { it.minutes }
+        val walletDebt = rules.grants.filter { !it.vault && it.minutes < 0 && it.validOn == null && it.activatedOn == null && (it.expiresOn == null || !it.expiresOn.isBefore(day)) }.sumOf { it.minutes }
         val adjust = rules.commands
             .filter { !it.cancelled && it.type == CommandType.ADJUST && it.createdAt in dayStartMs until dayEndMs }
             .sumOf { it.minutes ?: 0 }
-        return grants + adjust
+        return grants + walletDebt + adjust
     }
 
     /** Önceki günün kullanılmayan günlük hakkı; sınırsız günlerde artan süre yoktur. */
@@ -204,7 +205,7 @@ class RuleEngine(private val rules: Rules) {
         val modeRemaining = active?.budgetMinutes?.let { (it * 60L - (usage.perMode[active.id] ?: 0)).coerceAtLeast(0) }
 
         val wallet = rules.grants.filter {
-            !it.vault && it.validOn == null && it.activatedOn == null && (it.expiresOn == null || !it.expiresOn.isBefore(day))
+            !it.vault && it.minutes > 0 && it.validOn == null && it.activatedOn == null && (it.expiresOn == null || !it.expiresOn.isBefore(day))
         }
 
         val todaySections = rules.sections.filter { it.profileId == profile.id }
@@ -294,8 +295,9 @@ class RuleEngine(private val rules: Rules) {
         val adjust = rules.commands
             .filter { !it.cancelled && it.type == CommandType.ADJUST && it.createdAt in dayStart until dayEnd }
             .sumOf { it.minutes ?: 0 }
+        val walletDebt = rules.grants.filter { !it.vault && it.minutes < 0 && it.validOn == null && it.activatedOn == null && (it.expiresOn == null || !it.expiresOn.isBefore(day)) }.sumOf { it.minutes }
         // Havuz: bölümü olmayan (ya da bugün olmayan bir bölüme verilmiş) süreler + cüzdandan bugün kullanılanlar + düzeltmeler
-        val poolMin = dayGrants.filter { it.activatedOn == day || it.sectionId == null || it.sectionId !in todayIds }.sumOf { it.minutes } + adjust
+        val poolMin = dayGrants.filter { it.activatedOn == day || it.sectionId == null || it.sectionId !in todayIds }.sumOf { it.minutes } + walletDebt + adjust
         // Saat aralıklı süreler: açık bölümdeyken o anki kalana eklenir; aralık bitince kullanılmayan kısım düşer
         val virtualWin = cur?.section?.id?.startsWith("grant:") == true
         val overlay = if (virtualWin || cur == null || !timedPossible(cur.section)) emptyList() else activeWindows(day, t)
@@ -306,7 +308,7 @@ class RuleEngine(private val rules: Rules) {
             val avail = (g.minutes * 60L - sv).coerceAtLeast(0)
             winCredit += if (g in overlay) avail else minOf(w, avail)
         }
-        val allExtra = dayGrants.sumOf { it.minutes } + adjust + dayWindows(day).sumOf { it.minutes }
+        val allExtra = dayGrants.sumOf { it.minutes } + walletDebt + adjust + dayWindows(day).sumOf { it.minutes }
 
         // Bölüm zinciri: sırayla etkin süre, devreden, havuzdan taşan
         var carry = 0L
@@ -376,7 +378,7 @@ class RuleEngine(private val rules: Rules) {
             SecRule.OPEN -> AppVerdict(true)
             SecRule.BLOCKED -> AppVerdict(false, "${sec.name}: bu uygulama şu an kapalı")
             SecRule.TIMED -> {
-                if (rules.mandatoryOpen.isNotEmpty()) return AppVerdict(false, mandatoryReason())
+                if (hasMandatoryBlock()) return AppVerdict(false, mandatoryReason())
                 if (s.remainingSeconds <= 0) {
                     return AppVerdict(false, if (s.capLeftSeconds == 0L) "Bugünkü süren bitti" else "${sec.name} süren bitti")
                 }
@@ -396,7 +398,9 @@ class RuleEngine(private val rules: Rules) {
         }
     }
 
-    private fun mandatoryReason() = "Önce görevini yap: ${rules.mandatoryOpen.first()}"
+    private fun taskLimitTitles() = rules.taskRestrictions.filter { it.active && it.phoneMode == "limit" }.map { it.title }
+    private fun hasMandatoryBlock() = rules.mandatoryOpen.isNotEmpty() || taskLimitTitles().isNotEmpty()
+    private fun mandatoryReason() = "Önce görevini yap: ${(rules.mandatoryOpen + taskLimitTitles()).first()}"
 
     private fun inWindows(ws: List<TimeWindow>, t: LocalTime) = ws.isEmpty() || ws.any { it.contains(t) }
 
@@ -428,7 +432,7 @@ class RuleEngine(private val rules: Rules) {
                 val budgetLeft = s.modeRemainingSeconds?.let { it > 0 } ?: true
                 if (budgetLeft) {
                     val countsDaily = mode.countsTowardDaily && group != Group.UNLIMITED
-                    if (countsDaily && rules.mandatoryOpen.isNotEmpty()) return AppVerdict(false, mandatoryReason())
+                    if (countsDaily && hasMandatoryBlock()) return AppVerdict(false, mandatoryReason())
                     if (countsDaily && s.remainingSeconds <= 0) return AppVerdict(false, "Günlük süren bitti")
                     return AppVerdict(true, countsDaily = countsDaily, countsMode = if (mode.budgetMinutes != null) mode.id else null)
                 }
@@ -450,7 +454,7 @@ class RuleEngine(private val rules: Rules) {
                 else AppVerdict(false, "Bu saatlerde kapalı")
             Group.TIMED -> {
                 if (!inWindows(s.profile.timedWindows, s.now)) return AppVerdict(false, "Bu saatlerde kapalı")
-                if (rules.mandatoryOpen.isNotEmpty()) return AppVerdict(false, mandatoryReason())
+                if (hasMandatoryBlock()) return AppVerdict(false, mandatoryReason())
                 if (s.remainingSeconds <= 0) return AppVerdict(false, "Günlük süren bitti")
                 val limit = app?.dailyLimitMinutes
                 if (limit != null && (usage.perAppCounted[pkg] ?: 0) >= limit * 60L) return AppVerdict(false, "Bu uygulamanın günlük sınırı doldu")

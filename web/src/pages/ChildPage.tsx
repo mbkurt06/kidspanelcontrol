@@ -4,19 +4,23 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { fromPatch, grantMinutes, insertGrant, nowPatch, sendCommand, type GrantPatch } from "../lib/actions";
-import { dateText, hhmm, minutesText, relTime, todayISO } from "../lib/util";
+import { dateText, dateTimeText, hhmm, minutesText, relTime, todayISO } from "../lib/util";
 import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type DayOverride, type Device, type ExtraTarget, type Section, type TimeGrant } from "../lib/types";
 import { Icon } from "../components/Icon";
+import { Info } from "../components/Info";
 import TimerTab from "./TimerTab";
+import Music from "./Music";
+import Lock from "./Lock";
 import { currentSectionFor, suggestGroup, timedPossible } from "../lib/sections";
 
-type Tab = "apps" | "program" | "time" | "timer" | "report" | "device";
+type Tab = "apps" | "program" | "time" | "timer" | "alarms" | "music" | "lock" | "report" | "device";
 
 export default function ChildPage() {
   const { id } = useParams();
   const fam = useFamily();
   const child = fam.children.find((c) => c.id === id);
-  const [tab, setTab] = useState<Tab>("apps");
+  const [tab, setTab] = useState<Tab>(() => (localStorage.getItem(`orbit.childTab.${id}`) as Tab | null) ?? "apps");
+  useEffect(() => { if (id) localStorage.setItem(`orbit.childTab.${id}`, tab); }, [id, tab]);
 
   if (!child) return <div className="page"><p className="muted">Çocuk bulunamadı.</p></div>;
 
@@ -27,24 +31,22 @@ export default function ChildPage() {
           <Icon name="back" />
         </Link>
         <h1>{child.name}</h1>
-        <Link to="/rules/lock" className="btn small">
-          🔒 Kilit
-        </Link>
-        <Link to="/rules/music" className="btn small">
-          🎵 Müzik
-        </Link>
         <Link to={`/child/${child.id}/vault`} className="btn small">
           <Icon name="key" size={16} /> Şifreler
         </Link>
       </header>
       <ParentModeCard childId={child.id} />
-      <div className="segmented">
+      <div className="child-tabs-wrap">
+        <div className="segmented child-tabs">
         {(
           [
             ["apps", "Uygulamalar"],
             ["program", "Program"],
             ["time", "Süre"],
             ["timer", "Sayaç"],
+            ["alarms", "Hatırlatıcılar"],
+            ["music", "Müzik"],
+            ["lock", "Kilit"],
             ["report", "Rapor"],
             ["device", "Telefon"],
           ] as [Tab, string][]
@@ -53,12 +55,16 @@ export default function ChildPage() {
             {l}
           </button>
         ))}
+        </div>
       </div>
       {tab === "apps" && <AppsTab childId={child.id} />}
       {tab === "program" && <ProgramTab childId={child.id} />}
       {tab === "time" && <TimeTab childId={child.id} />}
       {tab === "report" && <ReportTab childId={child.id} />}
       {tab === "timer" && <TimerTab childId={child.id} />}
+      {tab === "alarms" && <TimerTab childId={child.id} only="alarms" />}
+      {tab === "music" && <Music embeddedChildId={child.id} />}
+      {tab === "lock" && <Lock embeddedChildId={child.id} />}
       {tab === "device" && <DeviceTab childId={child.id} />}
     </div>
   );
@@ -67,7 +73,7 @@ export default function ChildPage() {
 // ---------------------------------------------------------------------------
 
 /** Telefondaki Orbit'i hemen güncelle: telefon komutu alınca (≤30 sn) kurulum/version.json'a bakar ve yeni sürümü sessizce kurar. */
-function UpdateCard({ childId, current }: { childId: string; current: string | null }) {
+function UpdateCard({ childId, device }: { childId: string; device?: Device }) {
   const [latest, setLatest] = useState<number | null>(null);
   const [msg, setMsg] = useState("");
   useEffect(() => {
@@ -76,29 +82,29 @@ function UpdateCard({ childId, current }: { childId: string; current: string | n
       .then((j) => setLatest(j?.version ?? null))
       .catch(() => {});
   }, []);
+  const current = device?.app_version ?? null;
   const cur = current ? Number(current.split(".").pop()) : null;
   const behind = latest != null && cur != null && latest > cur;
+  async function command(update: boolean) {
+    try {
+      await sendCommand(childId, "resync", update ? { update: true } : { check_update: true });
+      setMsg(update ? "Güncelleme kontrolü ve gönderimi başlatıldı." : "Telefon güncellemeyi kontrol edecek; sonuç birazdan görünecek.");
+    } catch (e) {
+      setMsg(errorText(e));
+    }
+  }
   return (
     <div className="card">
-      <h2>Orbit güncellemesi</h2>
-      <p className="muted small">
-        Telefondaki sürüm: {current ?? "?"}
-        {latest != null && ` · en yeni: ${latest}`}
-        {behind ? " — güncelleme var." : latest != null && cur != null ? " — güncel." : ""} Telefon saatte bir kendisi de bakar.
-      </p>
-      <button
-        className="btn"
-        onClick={async () => {
-          try {
-            await sendCommand(childId, "resync", { update: true });
-            setMsg("Gönderildi. Telefon 30 sn içinde kontrol eder; varsa 1–2 dk içinde kurulur ve sürüm burada değişir.");
-          } catch (e) {
-            setMsg(errorText(e));
-          }
-        }}
-      >
-        Güncellemeyi şimdi kontrol et
-      </button>
+      <h2>Orbit güncellemesi <Info>Kontrol et yalnızca sonucu sorgular. Güncelle seçilirse telefon yeni APK'yı indirip kurmayı dener.</Info></h2>
+      <div className="muted small">Telefon: {current ?? "?"} · En yeni: {latest ?? "?"}{behind ? " · Yeni sürüm var" : ""}</div>
+      {device?.update_status && <div className="muted small">Son durum: {device.update_status}</div>}
+      <div className="muted small">Son güncelleme: {device?.last_update_at ? dateTimeText(device.last_update_at) : "henüz yok"}</div>
+      {device?.update_error && <div className="error small">Güncelleme hatası: {device.update_error}</div>}
+      <div className="row gap-s wrap">
+        <button className="btn" onClick={() => command(false)}>Kontrol et</button>
+        {behind && <button className="btn primary" onClick={() => command(true)}>Güncelle</button>}
+        <button className="btn ghost" onClick={() => command(true)}>Kontrol et ve güncelle</button>
+      </div>
       {msg && <p className="muted small">{msg}</p>}
     </div>
   );
@@ -174,12 +180,8 @@ function ParentModeCard({ childId }: { childId: string }) {
     <div className={`card ${active ? "parent-mode-on" : ""}`}>
       <div className="row gap-s wrap" style={{ alignItems: "center" }}>
         <div className="grow">
-          <h2 style={{ margin: 0 }}>Ebeveyn modu{active ? " açık" : ""}</h2>
-          <p className="muted small" style={{ margin: "4px 0 0" }}>
-            {active
-              ? `${until!.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}'e kadar bütün sınırlamalar kalktı. Süre bitince kurallar kendiliğinden geri gelir.`
-              : "Telefonda sen işlem yaparken bütün sınırlamaları kaldırır: tüm uygulamalar açık, süre sayılmaz, uygulama yükleme, ayarlar ve izinler serbest."}
-          </p>
+          <h2 style={{ margin: 0 }}>Ebeveyn modu{active ? " açık" : ""} <Info>Telefonda işlem yaparken sınırlamaları geçici olarak kaldırır. Süre bitince kurallar geri gelir.</Info></h2>
+          {active && <p className="muted tiny" style={{ margin: "4px 0 0" }}>{until!.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}'e kadar açık.</p>}
         </div>
         {active ? (
           <button className="btn" disabled={busy} onClick={stop}>
@@ -214,6 +216,7 @@ function AppsTab({ childId }: { childId: string }) {
   const [apps, setApps] = useState<ChildApp[] | null>(null);
   const [q, setQ] = useState("");
   const [showSystem, setShowSystem] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [err, setErr] = useState("");
   const [pendingGroup, setPendingGroup] = useState<Record<string, string>>({});
 
@@ -296,27 +299,24 @@ function AppsTab({ childId }: { childId: string }) {
       <input className="search" placeholder="Uygulama ara" value={q} onChange={(e) => setQ(e.target.value)} />
       {pending.length > 0 && (
         <div className="card attention">
-          <h2>Onay bekleyen ({pending.length})</h2>
-          <p className="muted small">
-            Grubunu seç ve onayla. "Kurallara göre" uygulamalar grubunun bölüm kurallarına uyar. Onaylanmayan uygulama kapalı kalır.
-          </p>
+          <h2>Onay bekleyen ({pending.length}) <Info>Grubunu seçip onayla. “Kurallara göre” uygulamalar grubunun bölüm kurallarına uyar.</Info></h2>
           {pending.map((a) => (
-            <div className="app-row wrap" key={a.package}>
-              <div className="grow">
+            <div className="app-setting-row" key={a.package}>
+              <div className="app-setting-controls">
+                {groupSelect(pendingGroup[a.package] ?? fam.members[a.package] ?? suggestedId(a), (v) =>
+                  setPendingGroup((m) => ({ ...m, [a.package]: v }))
+                )}
+                <select value="" onChange={(e) => e.target.value && approve(a, e.target.value as Mode3)} aria-label="Onayla">
+                  <option value="">Onayla…</option>
+                  {(["rules", "always_open", "blocked"] as Mode3[]).map((m) => (
+                    <option key={m} value={m}>{MODE3_LABEL[m]}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="app-setting-name">
                 <b>{a.label}</b>
                 <div className="muted tiny">{a.package}</div>
               </div>
-              {groupSelect(pendingGroup[a.package] ?? fam.members[a.package] ?? suggestedId(a), (v) =>
-                setPendingGroup((m) => ({ ...m, [a.package]: v }))
-              )}
-              <select value="" onChange={(e) => e.target.value && approve(a, e.target.value as Mode3)} aria-label="Onayla">
-                <option value="">Onayla…</option>
-                {(["rules", "always_open", "blocked"] as Mode3[]).map((m) => (
-                  <option key={m} value={m}>
-                    {MODE3_LABEL[m]}
-                  </option>
-                ))}
-              </select>
             </div>
           ))}
         </div>
@@ -326,25 +326,48 @@ function AppsTab({ childId }: { childId: string }) {
         if (!list.length) return null;
         return (
           <div className="card" key={g.id || "none"}>
-            <h2>
+            <div
+              className="row between link-card group-toggle"
+              onClick={() => setOpenGroups((m) => ({ ...m, [g.id]: !(m[g.id] ?? false) }))}
+              aria-expanded={openGroups[g.id] ?? false}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setOpenGroups((m) => ({ ...m, [g.id]: !(m[g.id] ?? false) }))}
+            >
+              <span>
               <span className="dot" style={{ background: g.color }} /> {g.name} <span className="muted small">· {list.length}</span>
-            </h2>
-            {list.map((a) => (
-              <div className="app-row wrap" key={a.package} style={{ alignItems: "stretch" }}>
-                <div className="grow" style={{ flexBasis: "100%" }}>
-                  <b>{a.label}</b>
-                  <div className="muted tiny">{a.package}</div>
-                </div>
-                <div className="row gap-xs wrap" style={{ width: "100%" }}>
+              <Info>Günlük sınır girilirse bu uygulama, kuralların izin verdiği toplam süreden ayrıca bu dakika kadar kullanılır.</Info>
+              </span>
+              <span aria-hidden="true">{openGroups[g.id] ?? false ? "⌃" : "⌄"}</span>
+            </div>
+            {(openGroups[g.id] ?? false) && list.map((a) => (
+              <div className="app-setting-row" key={a.package}>
+                <div className="app-setting-controls">
                   {groupSelect(fam.members[a.package] ?? "", (v) => setGroup(a.package, v))}
                   <select value={mode3(a.app_group)} onChange={(e) => update(a, { app_group: fromMode3(e.target.value as Mode3) })} aria-label="Durum">
-                    {(["rules", "always_open", "blocked"] as Mode3[]).map((m) => <option key={m} value={m}>{MODE3_LABEL[m]}</option>)}
+                    {(["rules", "always_open", "blocked"] as Mode3[]).map((m) => (
+                      <option key={m} value={m}>{MODE3_LABEL[m]}</option>
+                    ))}
                   </select>
-                  <select value={a.usage_rule_id ?? ""} onChange={(e) => update(a, { usage_rule_id: e.target.value || null })} aria-label="Özel uygulama kuralı">
+                  <select value={a.usage_rule_id ?? ""} onChange={(e) => update(a, { usage_rule_id: e.target.value || null })} aria-label="Uygulama kullanım kuralı">
                     <option value="">Özel kural yok</option>
                     {fam.appUsageRules.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                   </select>
-                  {!a.usage_rule_id && mode3(a.app_group) === "rules" && <input className="mini" type="number" min={0} placeholder="gün dk" value={a.daily_limit_minutes ?? ""} onChange={(e) => update(a, { daily_limit_minutes: e.target.value === "" ? null : Number(e.target.value) })} aria-label="Bu uygulama için günlük üst sınır (dakika)" />}
+                  {mode3(a.app_group) === "rules" && !a.usage_rule_id ? (
+                    <input
+                      className="mini"
+                      type="number"
+                      min={0}
+                      placeholder="dk"
+                      value={a.daily_limit_minutes ?? ""}
+                      onChange={(e) => update(a, { daily_limit_minutes: e.target.value === "" ? null : Number(e.target.value) })}
+                      aria-label="Bu uygulama için günlük üst sınır (dakika)"
+                    />
+                  ) : <span />}
+                </div>
+                <div className="app-setting-name">
+                  <b>{a.label}</b>
+                  <div className="muted tiny">{a.package}</div>
                 </div>
               </div>
             ))}
@@ -429,9 +452,8 @@ function ProgramTab({ childId }: { childId: string }) {
   return (
     <div className="stack">
       {err && <p className="error">{err}</p>}
-      <div className="card">
-        <h2>Haftalık program</h2>
-        <p className="muted small">Her gün için bir gün tipi seç. Gün tiplerini (bölümler ve kurallar) Kurallar sekmesinden düzenleyebilirsin.</p>
+      <details className="card section-collapse-card">
+        <summary className="section-collapse-head"><span>Haftalık program <Info>Her gün için bir gün tipi seç. Gün tiplerini Kurallar sekmesinden düzenleyebilirsin.</Info></span><span>⌄</span></summary>
         {WEEKDAYS_LONG.map((d, i) => (
           <div className="app-row" key={d}>
             <span className="grow">{d}</span>
@@ -445,11 +467,10 @@ function ProgramTab({ childId }: { childId: string }) {
             </select>
           </div>
         ))}
-      </div>
+      </details>
 
-      <div className="card">
-        <h2>Durumu şimdi başlat</h2>
-        <p className="muted small">Örneğin "Oyun zamanı"nı programı beklemeden şimdi açabilirsin.</p>
+      <details className="card section-collapse-card">
+        <summary className="section-collapse-head"><span>Durumu şimdi başlat <Info>Bir durumu programa bağlı kalmadan geçici olarak başlatır.</Info></span><span>⌄</span></summary>
         <div className="row gap-s wrap">
           <select value={modeId} onChange={(e) => setModeId(e.target.value)} className="grow">
             <option value="">Durum seç</option>
@@ -486,11 +507,10 @@ function ProgramTab({ childId }: { childId: string }) {
           </button>
         </div>
         {msg && <p className="ok small">{msg}</p>}
-      </div>
+      </details>
 
-      <div className="card">
-        <h2>Gün istisnaları</h2>
-        <p className="muted small">Tek bir gün için başka profil veya farklı günlük süre (örneğin bayram günü 3 saat).</p>
+      <details className="card section-collapse-card">
+        <summary className="section-collapse-head"><span>Gün istisnaları <Info>Tek bir gün için farklı profil veya günlük süre belirler.</Info></span><span>⌄</span></summary>
         {overrides.map((o) => (
           <div className="app-row" key={o.id}>
             <div className="grow">
@@ -516,7 +536,7 @@ function ProgramTab({ childId }: { childId: string }) {
         <div className="grid2">
           <div className="field">
             <span>Gün</span>
-            <DateField value={od.day} onChange={(v) => setOd({ ...od, day: v })} />
+            <DateField value={od.day} onChange={(v) => setOd({ ...od, day: v })} defaultMode="wheel" />
           </div>
           <label className="field">
             <span>Profil</span>
@@ -541,21 +561,47 @@ function ProgramTab({ childId }: { childId: string }) {
         <button className="btn" onClick={addOverride}>
           İstisna ekle
         </button>
-      </div>
+      </details>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
 
-type When = "now" | "from" | "today" | "tomorrow" | "date" | "child" | "vault";
+function DurationField({ value, onChange, unlimited = true }: { value: string; onChange: (v: string) => void; unlimited?: boolean }) {
+  const total = value === "" ? 0 : Math.max(0, Number(value) || 0);
+  const hours = Math.floor(total / 60);
+  const minutes = total % 60;
+  const [open, setOpen] = useState(false);
+  const set = (h: number, m: number) => onChange(String(Math.min(24 * 60, h * 60 + m)));
+  return <div className="duration-field">
+    <input className="mini" type="number" min={0} max={24} value={value === "" ? "" : hours} onChange={(e) => set(Number(e.target.value) || 0, minutes)} aria-label="Saat" />
+    <span>sa</span>
+    <input className="mini" type="number" min={0} max={59} value={value === "" ? "" : minutes} onChange={(e) => set(hours, Number(e.target.value) || 0)} aria-label="Dakika" />
+    <span>dk</span>
+    <button type="button" className="icon-btn" aria-label="Süreyi kaydırarak seç" onClick={() => setOpen(true)}>⌄</button>
+    {unlimited && <button type="button" className="icon-btn" aria-label="Sınırsız" onClick={() => onChange("")}>∞</button>}
+    {open && <div className="sheet-backdrop" onClick={() => setOpen(false)}><div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <h2>Günlük sınır</h2>
+      <div className="date-wheel">
+        <select size={5} value={hours} onChange={(e) => set(Number(e.target.value), minutes)}>{Array.from({ length: 25 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")} sa</option>)}</select>
+        <select size={5} value={minutes} onChange={(e) => set(hours, Number(e.target.value))}>{Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")} dk</option>)}</select>
+      </div>
+      <button type="button" className="btn primary wide" onClick={() => setOpen(false)}>Tamam</button>
+    </div></div>}
+  </div>;
+}
+
+type When = "now" | "custom" | "child" | "vault";
+type CustomWhen = "from" | "today" | "tomorrow" | "date";
 
 function TimeTab({ childId }: { childId: string }) {
   const fam = useFamily();
   const child = fam.children.find((c) => c.id === childId)!;
   const [grants, setGrants] = useState<TimeGrant[]>([]);
   const [minutes, setMinutes] = useState("20");
-  const [when, setWhen] = useState<When>(child.extra_default === "wallet" ? "child" : child.extra_default === "now" ? "now" : "today");
+  const [when, setWhen] = useState<When>(child.extra_default === "wallet" ? "child" : child.extra_default === "now" ? "now" : "custom");
+  const [customWhen, setCustomWhen] = useState<CustomWhen>("today");
   const [plan, setPlan] = useState<{ g: TimeGrant; where: string } | null>(null);
   // Nereye: "current" (şu anki bölüm), "pool" (gün boyu) ya da bölüm id
   const [target, setTarget] = useState<string>(child.extra_default === "pool" ? "pool" : "current");
@@ -603,11 +649,12 @@ function TimeTab({ childId }: { childId: string }) {
     const m = Number(minutes);
     if (!m) return;
     try {
+      const detail = when === "custom" ? customWhen : null;
       if (when === "now") {
         const { patch, text } = await nowPatch(childId, m, fam);
         await insertGrant(childId, m, patch, note);
         setMsg(`${minutesText(m)} verildi · ${text}`);
-      } else if (when === "from") {
+      } else if (detail === "from") {
         const day = fromDay === "today" ? today : todayISO("Europe/Berlin", 1);
         const { patch, text } = await fromPatch(childId, fam, day, start, endMode, until);
         await insertGrant(childId, m, patch, note);
@@ -616,8 +663,8 @@ function TimeTab({ childId }: { childId: string }) {
         await grantMinutes(childId, m, { validOn: null, vault: true, note: note || undefined });
         setMsg(`${minutesText(m)} süre kasasına kaydedildi`);
       } else {
-        const validOn = when === "today" ? today : when === "tomorrow" ? todayISO("Europe/Berlin", 1) : when === "date" ? date : null;
-        const sectionId = when === "child" ? null : target === "current" ? (when === "today" ? cur?.id ?? null : null) : target === "pool" ? null : target;
+        const validOn = detail === "today" ? today : detail === "tomorrow" ? todayISO("Europe/Berlin", 1) : detail === "date" ? date : null;
+        const sectionId = when === "child" ? null : target === "current" ? (detail === "today" ? cur?.id ?? null : null) : target === "pool" ? null : target;
         await grantMinutes(childId, m, { validOn, sectionId, expiresOn: when === "child" ? expires || null : null, note: note || undefined });
         setMsg(`${minutesText(m)} verildi${sectionId ? ` · ${secName(sectionId)}` : when === "child" ? " · cüzdana" : " · gün boyu"}`);
       }
@@ -665,16 +712,20 @@ function TimeTab({ childId }: { childId: string }) {
       <div className="grow">
         <b>{minutesText(g.minutes)}</b>
         <div className="muted tiny">
-          {g.note ?? (g.source === "task" ? "görev ödülü" : "ekstra süre")} · {dateText(g.created_at.slice(0, 10))}
+          {g.note ?? (g.source === "task_penalty" ? "görev cezası" : g.source === "task" ? "görev ödülü" : "ekstra süre")} · {dateText(g.created_at.slice(0, 10))}
           {kind === "wallet" && g.expires_on ? ` · son ${dateText(g.expires_on)}` : ""}
         </div>
       </div>
-      <button className="btn small primary" onClick={() => setPlan({ g, where: "now" })}>
-        Şimdi ver
-      </button>
-      <button className="btn small" onClick={() => setPlan({ g, where: "pool" })}>
-        Planla
-      </button>
+      {g.minutes > 0 && (
+        <>
+          <button className="btn small primary" onClick={() => setPlan({ g, where: "now" })}>
+            Şimdi ver
+          </button>
+          <button className="btn small" onClick={() => setPlan({ g, where: "pool" })}>
+            Planla
+          </button>
+        </>
+      )}
       <button
         className="icon-btn"
         aria-label="Sil"
@@ -700,22 +751,28 @@ function TimeTab({ childId }: { childId: string }) {
               {m} dk
             </button>
           ))}
-          <input className="mini" type="number" min={1} value={minutes} onChange={(e) => setMinutes(e.target.value)} aria-label="Dakika" />
+          <DurationField value={minutes} onChange={setMinutes} unlimited={false} />
         </div>
         <label className="field">
           <span>Ne zaman</span>
           <select value={when} onChange={(e) => setWhen(e.target.value as When)}>
             <option value="now">Hemen kullansın</option>
-            <option value="from">Belirli saatten itibaren</option>
-            <option value="today">Bugün (bölüme / gün boyu)</option>
-            <option value="tomorrow">Yarın</option>
-            <option value="date">Belirli bir gün</option>
-            <option value="child">Cüzdan: çocuk istediği gün kullansın</option>
-            <option value="vault">Süre kasası: sonra ben veririm</option>
+            <option value="vault">Süre kasası</option>
+            <option value="child">Süre cüzdanı</option>
+            <option value="custom">Özel</option>
           </select>
         </label>
+        {when === "custom" && <label className="field">
+          <span>Özel kullanım</span>
+          <select value={customWhen} onChange={(e) => setCustomWhen(e.target.value as CustomWhen)}>
+            <option value="today">Bugün (bölüme / gün boyu)</option>
+            <option value="from">Belirli saatten itibaren</option>
+            <option value="tomorrow">Yarın</option>
+            <option value="date">Belirli bir gün</option>
+          </select>
+        </label>}
         {when === "now" && <p className="muted small">{nowHint}</p>}
-        {when === "from" && (
+        {when === "custom" && customWhen === "from" && (
           <>
             <div className="row gap-s wrap" style={{ alignItems: "center" }}>
               <select value={fromDay} onChange={(e) => setFromDay(e.target.value as typeof fromDay)} aria-label="Gün">
@@ -727,7 +784,7 @@ function TimeTab({ childId }: { childId: string }) {
               <span className="small">'den itibaren</span>
             </div>
             <label className="field">
-              <span>Ne zamana kadar kullanabilir</span>
+              <span>Ne zamana kadar kullanabilir <Info>O saat gelince süre çocuğun kalan süresine eklenir. Bitiş saatine kadar kullanmazsa düşer; kapalı saatlere denk gelirse o aralıkta telefon bu süre kadar açılır.</Info></span>
               <select value={endMode} onChange={(e) => setEndMode(e.target.value as typeof endMode)}>
                 <option value="open">Açık saatler bitene kadar</option>
                 <option value="until">Belirli saate kadar</option>
@@ -735,20 +792,19 @@ function TimeTab({ childId }: { childId: string }) {
               </select>
             </label>
             {endMode === "until" && <TimeField value={until} onChange={(v) => setUntil(v)} label="Bitiş" />}
-            <p className="muted tiny">O saat gelince süre çocuğun kalan süresine eklenir. Bitiş saatine kadar kullanmazsa düşer. Kapalı saatlere denk gelirse o aralıkta telefon bu süre kadar açılır.</p>
           </>
         )}
-        {when === "date" && (
+        {when === "custom" && customWhen === "date" && (
           <div className="field">
             <span>Gün</span>
             <DateField value={date} onChange={(v) => setDate(v)} />
           </div>
         )}
-        {(when === "today" || when === "tomorrow" || when === "date") && (
+        {when === "custom" && (customWhen === "today" || customWhen === "tomorrow" || customWhen === "date") && (
           <label className="field">
             <span>Nereye eklensin</span>
             <select value={target} onChange={(e) => setTarget(e.target.value)}>
-              {when === "today" && <option value="current">Şu anki bölüm{cur ? ` (${cur.name})` : " (şu an bölüm yok → gün boyu)"}</option>}
+              {customWhen === "today" && <option value="current">Şu anki bölüm{cur ? ` (${cur.name})` : " (şu an bölüm yok → gün boyu)"}</option>}
               <option value="pool">Gün boyu: süreli her bölümde kullanılır</option>
               {sectionOptions.map((o) => (
                 <option key={o.id} value={o.id}>
@@ -800,8 +856,7 @@ function TimeTab({ childId }: { childId: string }) {
       </div>
 
       <div className="card">
-        <h2>Çocuğun cüzdanı</h2>
-        <p className="muted small">Cüzdandaki süreyi çocuk kendisi "bugün kullan" diyerek açabilir; sadece izin verilen (açık) saatlerde kullanılır.</p>
+          <h2>Süre cüzdanı <Info>Çocuk bu süreyi kendisi açabilir; yalnızca izin verilen saatlerde kullanılır.</Info></h2>
         {!wallet.length && <p className="muted small">Cüzdanda süre yok.</p>}
         {wallet.length > 0 && (
           <p>
@@ -810,9 +865,8 @@ function TimeTab({ childId }: { childId: string }) {
         )}
         {wallet.map((g) => grantRow(g, "wallet"))}
         <div className="row gap-s wrap" style={{ alignItems: "center" }}>
-          <span className="small">Günde en fazla</span>
-          <input className="mini" type="number" min={0} placeholder="sınırsız" value={walletMax} onChange={(e) => setWalletMax(e.target.value)} aria-label="Cüzdan günlük sınır" />
-          <span className="small">dk kullanabilsin</span>
+          <span className="small">Günlük sınır <Info>Çocuğun cüzdandan bir günde kullanabileceği en fazla süre.</Info></span>
+          <DurationField value={walletMax} onChange={setWalletMax} />
           <button className="btn small" onClick={saveWalletMax}>
             Kaydet
           </button>
@@ -820,8 +874,7 @@ function TimeTab({ childId }: { childId: string }) {
       </div>
 
       <div className="card">
-        <h2>Süre kasası</h2>
-        <p className="muted small">Kasadaki süreyi çocuk kendisi kullanamaz. "Şimdi ver" ile hemen açarsın ya da bir güne / bölüme / saate planlarsın; istersen bir kısmını.</p>
+        <h2>Süre kasası <Info>Bu süreyi çocuk kendisi kullanamaz. Hemen verebilir veya ileriye planlayabilirsin.</Info></h2>
         {!vault.length && <p className="muted small">Kasada süre yok.</p>}
         {vault.length > 0 && (
           <p>
@@ -845,8 +898,8 @@ function TimeTab({ childId }: { childId: string }) {
         />
       )}
       <div className="card">
-        <h2>Verilen süreler</h2>
-        {!live.length && <p className="muted small">Bekleyen ekstra süre yok.</p>}
+        <h2>Planlanan süreler <Info>Bu liste kullanılmış süreler değil; cüzdandan veya görev ödülünden aktif plana ayrılmış, çocuğun kullanabileceği süreleri gösterir.</Info></h2>
+        {!live.length && <p className="muted small">Planlanmış ekstra süre yok.</p>}
         {live.map((g) => (
           <div className="app-row wrap" key={g.id}>
             <div className="grow">
@@ -866,7 +919,7 @@ function TimeTab({ childId }: { childId: string }) {
                 >
                   <option value="pool">Gün boyu</option>
                   <option value="window">Saat aralığı…</option>
-                  <option value="wallet">Cüzdana</option>
+                  <option value="wallet">Süre cüzdanına</option>
                   <option value="vault">Süre kasasına geri al</option>
                   {sectionOptions.map((o) => (
                     <option key={o.id} value={o.id}>
@@ -989,7 +1042,7 @@ function PlanSheet({
             {!(!grant.vault && !grant.valid_on) && <option value="wallet">Çocuğun cüzdanına (kendisi kullansın)</option>}
           </select>
         </label>
-        {where === "now" && <p className="muted tiny">Açık saatlerdeyse kalan süresine hemen eklenir; kapalı saatlerdeyse şu andan itibaren bu süre kadar telefon açılır.</p>}
+        {where === "now" && <Info>Açık saatlerdeyse kalan süresine hemen eklenir; kapalı saatlerdeyse şu andan itibaren bu süre kadar telefon açılır.</Info>}
         {dated && (
           <label className="field">
             <span>Hangi gün</span>
@@ -1040,6 +1093,8 @@ function DeviceTab({ childId }: { childId: string }) {
   const [err, setErr] = useState("");
   const [name, setName] = useState(child.name);
   const [color, setColor] = useState(child.color);
+  const [confirmDisconnect, setConfirmDisconnect] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("devices").select("*").eq("child_id", childId).order("created_at", { ascending: false });
@@ -1047,6 +1102,8 @@ function DeviceTab({ childId }: { childId: string }) {
   }, [childId]);
   useEffect(() => {
     load();
+    const timer = setInterval(load, 10000);
+    return () => clearInterval(timer);
   }, [load]);
 
   async function newCode() {
@@ -1060,10 +1117,7 @@ function DeviceTab({ childId }: { childId: string }) {
     <div className="stack">
       {err && <p className="error">{err}</p>}
       <div className="card">
-        <h2>Telefonu eşleştir</h2>
-        <p className="muted small">
-          Orbit çocuğun telefonuna kurulunca eşleştirme kodunu ister. Kod 15 dakika geçerli ve tek kullanımlık.
-        </p>
+        <h2>Telefonu eşleştir <Info>Kod 15 dakika geçerli ve tek kullanımlıktır.</Info></h2>
         {code ? (
           <div className="code">{code.slice(0, 4)} {code.slice(4)}</div>
         ) : (
@@ -1072,11 +1126,10 @@ function DeviceTab({ childId }: { childId: string }) {
           </button>
         )}
       </div>
-      <UpdateCard childId={childId} current={devices[0]?.app_version ?? null} />
+      <UpdateCard childId={childId} device={devices[0]} />
 
       <div className="card">
-        <h2>Kuralları gönder</h2>
-        <p className="muted small">Telefon kuralları zaten 30 saniyede bir alır; beklemek istemezsen hemen gönderir.</p>
+        <h2>Kuralları gönder <Info>Telefon kuralları normalde 30 saniyede bir alır; burada hemen gönderebilirsin.</Info></h2>
         <button
           className="btn ghost"
           onClick={async () => {
@@ -1098,19 +1151,20 @@ function DeviceTab({ childId }: { childId: string }) {
                 {d.os_version ? `Android ${d.os_version} · ` : ""}
                 {d.app_version ? `Orbit ${d.app_version} · ` : ""}
                 {d.is_device_owner === false ? "device owner DEĞİL · " : ""}
-                son görülme {relTime(d.last_seen_at)}
+                Eşleşme: {d.created_at ? dateTimeText(d.created_at) : "—"} · son görülme {relTime(d.last_seen_at)}
               </div>
             </div>
             {d.status === "active" ? (
               <button
                 className="btn small danger-text"
                 onClick={async () => {
-                  if (!confirm("Bu telefonun bağlantısı kesilsin mi? Telefon kuralları almayı durdurur.")) return;
+                  if (confirmDisconnect !== d.id) return setConfirmDisconnect(d.id);
                   await supabase.from("devices").update({ status: "revoked" }).eq("id", d.id);
+                  setConfirmDisconnect(null);
                   load();
                 }}
               >
-                Bağlantıyı kes
+                {confirmDisconnect === d.id ? "Kesilsin" : "Bağlantıyı kes"}
               </button>
             ) : (
               <span className="pill quiet">kesildi</span>
@@ -1141,13 +1195,13 @@ function DeviceTab({ childId }: { childId: string }) {
         <button
           className="btn ghost danger-text"
           onClick={async () => {
-            if (!confirm(`${child.name} ve tüm kayıtları silinsin mi? Bu geri alınamaz.`)) return;
+            if (!confirmDelete) return setConfirmDelete(true);
             await supabase.from("children").delete().eq("id", childId);
             await fam.reload();
             nav("/");
           }}
         >
-          Çocuğu sil
+          {confirmDelete ? "Tekrar bas: kalıcı sil" : "Çocuğu sil"}
         </button>
       </div>
     </div>
@@ -1161,11 +1215,14 @@ type UsageRow = { day: string; package: string; minutes: number; counted_minutes
 function ReportTab({ childId }: { childId: string }) {
   const [rows, setRows] = useState<UsageRow[]>([]);
   const [labels, setLabels] = useState<Record<string, string>>({});
+  const [range, setRange] = useState<"day" | "week" | "month" | "custom">("week");
+  const [from, setFrom] = useState(todayISO("Europe/Berlin", -6));
+  const [to, setTo] = useState(todayISO());
   const [day, setDay] = useState(todayISO());
 
   useEffect(() => {
     (async () => {
-      const since = todayISO("Europe/Berlin", -6);
+      const since = todayISO("Europe/Berlin", -365);
       const [u, a] = await Promise.all([
         supabase.from("usage_daily").select("day, package, minutes, counted_minutes").eq("child_id", childId).gte("day", since),
         supabase.from("child_apps").select("package, label").eq("child_id", childId),
@@ -1175,24 +1232,40 @@ function ReportTab({ childId }: { childId: string }) {
     })();
   }, [childId]);
 
-  const days = Array.from({ length: 7 }, (_, i) => todayISO("Europe/Berlin", i - 6));
+  const addDays = (value: string, amount: number) => {
+    const d = new Date(`${value}T12:00:00`);
+    d.setDate(d.getDate() + amount);
+    return d.toISOString().slice(0, 10);
+  };
+  const monthStart = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; })();
+  const start = range === "day" ? to : range === "week" ? addDays(to, -6) : range === "month" ? monthStart : from;
+  const end = range === "custom" ? to : to;
+  const days: string[] = [];
+  for (let d = start; d <= end && days.length < 366; d = addDays(d, 1)) days.push(d);
   const totals = days.map((d) => ({
     d,
     total: rows.filter((r) => r.day === d).reduce((a, r) => a + r.minutes, 0),
     counted: rows.filter((r) => r.day === d).reduce((a, r) => a + r.counted_minutes, 0),
   }));
   const max = Math.max(60, ...totals.map((t) => t.total));
-  const dayRows = rows.filter((r) => r.day === day && r.minutes > 0).sort((a, b) => b.minutes - a.minutes);
+  const totalMinutes = totals.reduce((a, t) => a + t.total, 0);
+  const countedMinutes = totals.reduce((a, t) => a + t.counted, 0);
+  const selectedDay = days.includes(day) ? day : days[days.length - 1] ?? todayISO();
+  const dayRows = rows.filter((r) => r.day === selectedDay && r.minutes > 0).sort((a, b) => b.minutes - a.minutes);
   const short = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("tr-TR", { weekday: "short" });
 
   return (
     <div className="stack">
       <div className="card">
-        <h2>Son 7 gün</h2>
-        <p className="muted tiny">Koyu kısım günlük süreden düşen kullanım, açık kısım süre dışı (sınırsız, her zaman açık, durumlar).</p>
+        <h2>Rapor <Info>Koyu kısım günlük süreden düşen, açık kısım süre dışı kullanımdır.</Info></h2>
+        <div className="row gap-xs wrap">
+          {([["day", "Günlük"], ["week", "Haftalık"], ["month", "Aylık"], ["custom", "Özel"]] as const).map(([key, label]) => <button key={key} className={`chip small ${range === key ? "on" : ""}`} onClick={() => setRange(key)}>{label}</button>)}
+        </div>
+        {range === "custom" && <div className="grid2"><label className="field"><span>Başlangıç</span><DateField value={from} onChange={setFrom} /></label><label className="field"><span>Bitiş</span><DateField value={to} onChange={setTo} /></label></div>}
+        <div className="report-total"><b>{minutesText(totalMinutes)}</b><span className="muted tiny">toplam · {minutesText(countedMinutes)} sınırdan düştü</span></div>
         <div className="bars">
           {totals.map((t) => (
-            <button key={t.d} className={`bar ${t.d === day ? "on" : ""}`} onClick={() => setDay(t.d)}>
+            <button key={t.d} className={`bar ${t.d === selectedDay ? "on" : ""}`} onClick={() => setDay(t.d)}>
               <span className="bar-val">{t.total ? minutesText(t.total) : ""}</span>
               <span className="bar-track">
                 <span className="bar-all" style={{ height: `${(t.total / max) * 100}%` }}>
@@ -1205,7 +1278,7 @@ function ReportTab({ childId }: { childId: string }) {
         </div>
       </div>
       <div className="card">
-        <h2>{dateText(day)}</h2>
+        <h2>{dateText(selectedDay)}</h2>
         {!dayRows.length && <p className="muted small">Bu gün için kayıt yok.</p>}
         {dayRows.map((r) => (
           <div className="app-row" key={r.package}>

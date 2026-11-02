@@ -7,27 +7,15 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
-  const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setErr("");
-    setMsg("");
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
     if (error) setErr(errorText(error));
     setBusy(false);
-  }
-
-  async function reset() {
-    if (!email.trim()) {
-      setErr("Önce e-posta adresini yaz.");
-      return;
-    }
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin });
-    if (error) setErr(errorText(error));
-    else setMsg("Şifre sıfırlama bağlantısı e-postana gönderildi.");
   }
 
   return (
@@ -51,12 +39,8 @@ export default function Login() {
           />
         </label>
         {err && <p className="error">{err}</p>}
-        {msg && <p className="ok">{msg}</p>}
         <button className="btn primary wide" disabled={busy}>
           Giriş yap
-        </button>
-        <button type="button" className="link" onClick={reset}>
-          Şifremi unuttum
         </button>
       </form>
     </div>

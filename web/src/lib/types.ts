@@ -4,8 +4,27 @@ export type Window = { start: string; end: string };
 
 export type ExtraTarget = "now" | "current" | "pool" | "wallet";
 export type Child = { id: string; family_id: string; name: string; color: string; sort_order: number; extra_default: ExtraTarget; wallet_daily_max?: number | null;
+  profile_nickname?: string | null; profile_avatar?: string | null;
   kiosk_settings?: KioskSettings; parent_pin_enabled?: boolean; parent_pin_hash?: string | null;
   music_mode?: "always" | "rules" | "never"; music_folder?: string | null; music_folders?: string[]; timer_defaults?: { allow_stop: "no" | "yes" | "notify"; pause_mode: "none" | "limit" | "child"; pause_max_minutes: number | null; focus_change: "no" | "stricter" | "free" } };
+
+export type AgendaKind = "homework" | "exam" | "payment" | "event";
+export type AgendaItem = {
+  id: string;
+  family_id: string;
+  child_id: string;
+  kind: AgendaKind;
+  title: string;
+  note: string | null;
+  entered_at: string;
+  due_date: string;
+  due_time: string | null;
+  amount: number | null;
+  currency: string;
+  status: "open" | "done";
+  completed_at: string | null;
+  created_at: string;
+};
 
 export type ChildApp = {
   child_id: string;
@@ -56,14 +75,14 @@ export type Section = {
   music?: boolean;
 };
 
-export type KioskScreen = "tasks" | "messages" | "music" | "timer" | "alarms" | "day" | "wallet" | "ask" | "vault";
+export type KioskScreen = "tasks" | "agenda" | "messages" | "music" | "timer" | "alarms" | "day" | "wallet" | "ask" | "vault";
 export const KIOSK_SCREENS: [KioskScreen, string][] = [
   ["tasks", "✅ Görevler"],
+  ["agenda", "🗓 Ajanda"],
   ["messages", "💬 Mesajlar"],
   ["music", "🎵 Müzik"],
   ["timer", "⏱ Sayaç"],
   ["alarms", "⏰ Alarmlar"],
-  ["day", "🗓 Günüm"],
   ["wallet", "⏳ Süre cüzdanı"],
   ["ask", "🙋 Ebeveynden iste"],
   ["vault", "🔑 Şifreler"],
@@ -76,11 +95,11 @@ export type FamilySettings = {
   lock_button_minutes: number | null;
   pin_unlock_minutes: number;
   parent_pin_hash: string | null;
-  proof_retention_days?: number;
-  task_before_photo_min?: number;
-  task_before_photo_max?: number;
-  task_after_photo_min?: number;
-  task_after_photo_max?: number;
+  task_before_photo_min: number;
+  task_before_photo_max: number;
+  task_after_photo_min: number;
+  task_after_photo_max: number;
+  proof_retention_days: number;
 };
 
 export type RuleKind = "kiosk" | "limit" | "free" | "music_off" | "music_on";
@@ -119,7 +138,7 @@ export type SectionRule = {
 
 export type GroupLimit = { profile_id: string; group_id: string; daily_minutes: number };
 
-export const RULE_LABEL: Record<SecRule, string> = { open: "Açık", timed: "Süreli", blocked: "Kapalı" };
+export const RULE_LABEL: Record<SecRule, string> = { open: "Açık", timed: "Sınırlı", blocked: "Kilitli" };
 
 export type Profile = {
   id: string;
@@ -193,6 +212,11 @@ export type Device = {
   is_device_owner: boolean | null;
   status: "active" | "revoked";
   last_seen_at: string | null;
+  update_status?: string | null;
+  update_target?: number | null;
+  update_checked_at?: string | null;
+  last_update_at?: string | null;
+  update_error?: string | null;
   created_at: string;
 };
 
@@ -262,6 +286,7 @@ export const WEEKDAYS_LONG = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "
 
 export type ProofType = "none" | "photo" | "video" | "photo_or_video";
 export type RewardValidity = "today" | "tomorrow" | "date" | "wallet" | "vault";
+export type TaskPhoneRestriction = "none" | "limit" | "kiosk";
 
 export type TaskTemplate = {
   id: string;
@@ -270,10 +295,10 @@ export type TaskTemplate = {
   description: string | null;
   proof: ProofType;
   before_after: boolean;
-  before_photo_min?: number;
-  before_photo_max?: number;
-  after_photo_min?: number;
-  after_photo_max?: number;
+  proof_before_min: number;
+  proof_before_max: number;
+  proof_after_min: number;
+  proof_after_max: number;
   reward_minutes: number | null;
   reward_text: string | null;
   reward_validity: RewardValidity;
@@ -283,6 +308,8 @@ export type TaskTemplate = {
   record_camera?: "back" | "front" | "choose";
   record_pause?: "none" | "limit" | "child";
   record_pause_max?: number | null;
+  phone_restriction?: TaskPhoneRestriction;
+  orbit_focus_profile_id?: string | null;
 };
 
 export type Task = TaskTemplate & {
@@ -298,6 +325,8 @@ export type Task = TaskTemplate & {
   reward_date: string | null;
   active: boolean;
   created_at: string;
+  phone_restriction: TaskPhoneRestriction;
+  orbit_focus_profile_id: string | null;
 };
 
 export type RunStatus = "open" | "started" | "submitted" | "approved" | "rejected" | "claimed" | "expired";
@@ -365,14 +394,6 @@ export const VALIDITY_LABEL: Record<RewardValidity, string> = {
   vault: "Süre kasasına (sonra ben planlarım)",
 };
 
-export const PENALTY_VALIDITY_LABEL: Record<RewardValidity, string> = {
-  today: "Günlük süreden hemen düş",
-  tomorrow: "Yarın",
-  date: "Belirli gün",
-  wallet: "Cüzdana borç yaz",
-  vault: "Süre kasasına borç yaz",
-};
-
 export const STATUS_LABEL: Record<RunStatus, string> = {
   open: "Bekliyor",
   started: "Başladı",
@@ -394,6 +415,7 @@ export type FocusProfile = {
   allowed_packages: string[];
   messages_allowed: boolean;
   calls_allowed: boolean;
+  allowed_screens: string[];
   sort_order: number;
 };
 

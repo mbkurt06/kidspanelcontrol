@@ -17,6 +17,7 @@ import {
   type VaultState,
 } from "../lib/vault";
 import { Icon } from "../components/Icon";
+import { Info } from "../components/Info";
 
 type Row = { id: string; v: VaultEntry; updated_at: string; updated_by: string };
 
@@ -36,6 +37,7 @@ export default function Vault() {
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [q, setQ] = useState("");
   const [copied, setCopied] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!fam.familyId || !id) return;
@@ -233,7 +235,7 @@ export default function Vault() {
           {!state.hasRecovery && (
             <div className="card attention">
               <h2>Kurtarma kodu yok</h2>
-              <p className="muted small">Kasa {child.name}'in telefonunda oluşturulmuş. Tüm cihazlar kaybolursa diye bir kurtarma kodu oluştur.</p>
+              <p className="muted small"><Info>Kasa {child.name}'in telefonunda oluşturulmuş. Tüm cihazlar kaybolursa diye bir kurtarma kodu oluştur.</Info></p>
               <button className="btn primary" disabled={busy} onClick={() => run(async () => setShownCode(await setRecovery(child.id, state.raw)))}>
                 Kurtarma kodu oluştur
               </button>
@@ -331,12 +333,13 @@ export default function Vault() {
                     <button
                       className="btn small danger-text"
                       onClick={async () => {
-                        if (!confirm(`"${r.v.app}" kaydı silinsin mi?`)) return;
+                        if (deleteId !== r.id) return setDeleteId(r.id);
                         await supabase.from("vault_entries").update({ removed_at: new Date().toISOString() }).eq("id", r.id);
+                        setDeleteId(null);
                         load();
                       }}
                     >
-                      Sil
+                      {deleteId === r.id ? "Tekrar bas: sil" : "Sil"}
                     </button>
                   </div>
                 </div>

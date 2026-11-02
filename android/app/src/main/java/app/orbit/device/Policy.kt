@@ -117,6 +117,17 @@ object Policy {
         }
     }
 
+    /** Kilit ekranında medya bildirimindeki oynat/duraklat gibi uzaktan kontrolleri kapatır. */
+    fun setLockedMediaControls(ctx: Context, locked: Boolean) {
+        if (!isOwner(ctx)) return
+        val flags = if (locked) {
+            DevicePolicyManager.KEYGUARD_DISABLE_SECURE_NOTIFICATIONS or
+                DevicePolicyManager.KEYGUARD_DISABLE_REMOTE_INPUT
+        } else 0
+        runCatching { dpm(ctx).setKeyguardDisabledFeatures(admin(ctx), flags) }
+            .onFailure { Log.w(TAG, "kilit ekranı medya kontrolleri", it) }
+    }
+
     /** Orbit'e bir çalışma zamanı iznini ver (cihaz sahibiyse). */
     fun grantSelf(ctx: Context, perm: String) {
         if (!isOwner(ctx)) return

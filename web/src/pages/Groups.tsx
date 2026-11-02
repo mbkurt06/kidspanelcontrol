@@ -4,6 +4,7 @@ import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { suggestGroup } from "../lib/sections";
 import { Icon } from "../components/Icon";
+import { Info } from "../components/Info";
 
 type AppRow = { package: string; label: string; category: string | null; is_system: boolean };
 
@@ -93,15 +94,11 @@ export default function Groups() {
         </button>
       </header>
       {err && <p className="error">{err}</p>}
-      <p className="muted small">
-        Uygulamaları gruplara koy; her gün tipinde her grubun hangi bölümde açık, süreli ya da kapalı olacağını Kurallar → gün tipi ekranından seçersin.
-        Gruplar iki çocukta ortak.
-      </p>
+      <h2 className="section-title">Uygulama grupları <Info>Gruplar iki çocukta ortaktır. Her gün tipinde grubun açık, süreli veya kapalı olacağını seçersin.</Info></h2>
 
       {ungrouped.length > 0 && (
         <div className="card attention">
-          <h2>Gruba girmemiş ({ungrouped.length})</h2>
-          <p className="muted small">Bunlar bölümlerin “Diğer uygulamalar” kuralına uyar.</p>
+          <h2>Gruba girmemiş ({ungrouped.length}) <Info>Bu uygulamalar bölümlerin “Diğer uygulamalar” kuralına uyar.</Info></h2>
           <button className="btn" onClick={autoFill}>
             Önerilere göre yerleştir
           </button>
@@ -120,7 +117,7 @@ export default function Groups() {
             <div className="row gap-s" style={{ alignItems: "center" }}>
               <span className="dot" style={{ background: g.color }} />
               <button className="link grow" style={{ textAlign: "left" }} onClick={() => setOpen(isOpen ? null : g.id)}>
-                <b>{g.name}</b> <span className="muted small">· {list.length} uygulama</span>
+                <span aria-hidden="true">{isOpen ? "⌃" : "⌄"}</span> <b>{g.name}</b> <span className="muted small">· {list.length} uygulama</span>
               </button>
               <button className="icon-btn" aria-label="Yeniden adlandır" onClick={() => rename(g.id, g.name)}>
                 ✎

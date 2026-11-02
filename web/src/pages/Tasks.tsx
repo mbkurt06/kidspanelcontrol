@@ -3,7 +3,7 @@ import { DateField } from "../components/DateTime";
 import { Link, useNavigate } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
-import { dateText, minutesText, relTime, todayISO } from "../lib/util";
+import { agendaDateText, dateTimeText, minutesText, relTime, todayISO } from "../lib/util";
 import {
   PROOF_LABEL,
   STATUS_LABEL,
@@ -15,10 +15,9 @@ import {
   type TaskTemplate,
 } from "../lib/types";
 import { Icon } from "../components/Icon";
+import { Info } from "../components/Info";
 import { RecordingList } from "../components/RecordingPlayer";
 import { STARTER_TEMPLATES } from "../lib/templates";
-
-function signedMinutes(m: number | null | undefined) { if (m == null) return ""; return `${m > 0 ? "+" : ""}${minutesText(m)}`; }
 
 export default function Tasks() {
   const fam = useFamily();
@@ -26,19 +25,23 @@ export default function Tasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [runs, setRuns] = useState<TaskRun[]>([]);
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [err, setErr] = useState("");
   const today = todayISO();
+  const [historyView, setHistoryView] = useState<"day" | "week" | "month" | "range">("day");
+  const [rangeFrom, setRangeFrom] = useState(todayISO("Europe/Berlin", -7));
+  const [rangeTo, setRangeTo] = useState(today);
+  const monthStart = `${today.slice(0, 7)}-01`;
 
   const load = useCallback(async () => {
     await supabase.rpc("parent_ensure_runs", { p_day: today });
-    const since = todayISO("Europe/Berlin", -7);
     const [t, r, tp] = await Promise.all([
       supabase.from("tasks").select("*").order("created_at", { ascending: false }),
       supabase
         .from("task_runs")
         .select("*")
-        .or(`day.gte.${since},status.in.(open,started,submitted,rejected)`)
-        .order("day", { ascending: false }),
+        .order("day", { ascending: false })
+        .limit(300),
       supabase.from("task_templates").select("*").order("title"),
     ]);
     if (t.error) setErr(errorText(t.error));
@@ -56,12 +59,19 @@ export default function Tasks() {
   const taskById = useMemo(() => Object.fromEntries(tasks.map((t) => [t.id, t])), [tasks]);
   const childName = (id: string) => fam.children.find((c) => c.id === id)?.name ?? "";
   const childColor = (id: string) => fam.children.find((c) => c.id === id)?.color ?? "#888";
+  const visibleChildIds = new Set(fam.visibleChildren.map((c) => c.id));
 
-  const pending = runs.filter((r) => r.status === "submitted");
+  const pending = runs.filter((r) => r.status === "submitted" && visibleChildIds.has(r.child_id));
   const todays = runs.filter(
-    (r) => r.day === today || (taskById[r.task_id]?.recurrence === "once" && ["open", "started", "rejected"].includes(r.status))
+    (r) => visibleChildIds.has(r.child_id) && (r.day === today || (taskById[r.task_id]?.recurrence === "once" && ["open", "started", "rejected"].includes(r.status)))
   );
-  const rewards = runs.filter((r) => r.status === "approved" && r.reward_text && !r.reward_delivered_at);
+  const rewards = runs.filter((r) => r.status === "approved" && r.reward_text && !r.reward_delivered_at && visibleChildIds.has(r.child_id));
+  const history = runs.filter((r) => {
+    if (!visibleChildIds.has(r.child_id)) return false;
+    const from = historyView === "range" ? rangeFrom : historyView === "month" ? monthStart : historyView === "week" ? todayISO("Europe/Berlin", -6) : today;
+    const to = historyView === "range" ? rangeTo : today;
+    return r.day >= from && r.day <= to;
+  });
 
   async function seedTemplates() {
     const { error } = await supabase.from("task_templates").insert(STARTER_TEMPLATES.map((t) => ({ ...t, family_id: fam.familyId })));
@@ -73,9 +83,6 @@ export default function Tasks() {
     <div className="page">
       <header className="page-head">
         <h1>Görevler</h1>
-        <button className="btn small primary" onClick={() => nav("/tasks/new")}>
-          <Icon name="plus" size={16} /> Yeni görev
-        </button>
       </header>
       {err && <p className="error">{err}</p>}
 
@@ -117,7 +124,7 @@ export default function Tasks() {
       <div className="card">
         <h2>Bugün</h2>
         {!todays.length && <p className="muted small">Bugün için görev yok.</p>}
-        {fam.children.map((c) => {
+        {fam.visibleChildren.map((c) => {
           const list = todays.filter((r) => r.child_id === c.id);
           if (!list.length) return null;
           return (
@@ -136,12 +143,9 @@ export default function Tasks() {
                     <div className="grow">
                       <b>
                         {t?.title}
-                        {t?.mandatory ? " · zorunlu" : ""}
                       </b>
                       <div className="muted tiny">
-                        {t?.reward_minutes != null ? signedMinutes(t.reward_minutes) : ""}
-                        {t?.reward_text ? ` ${t.reward_text}` : ""}
-                        {r.reject_note ? ` · "${r.reject_note}"` : ""}
+                        {t ? dateTimeText(t.created_at) : ""}{t?.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}
                       </div>
                     </div>
                     <span className={`pill ${r.status === "approved" ? "" : r.status === "submitted" ? "accent" : r.status === "rejected" ? "warn" : "quiet"}`}>
@@ -156,41 +160,50 @@ export default function Tasks() {
       </div>
 
       <div className="card">
-        <h2>Verilen görevler</h2>
-        {!tasks.length && <p className="muted small">Henüz görev yok. "Yeni görev" ile ekle veya aşağıdaki şablonlardan birini kullan.</p>}
-        {tasks.map((t) => (
-          <Link to={`/tasks/${t.id}`} className="app-row" key={t.id}>
+        <div className="row between wrap">
+          <h2>Görev geçmişi <Info>Bugün, son 7 gün, bu ay veya seçtiğin tarih aralığındaki görev kayıtları.</Info></h2>
+          <div className="row gap-xs wrap">
+            {(["day", "week", "month", "range"] as const).map((v) => (
+              <button key={v} className={`chip small ${historyView === v ? "on" : ""}`} onClick={() => setHistoryView(v)}>
+                {v === "day" ? "Bugün" : v === "week" ? "7 gün" : v === "month" ? "1 ay" : "Özel"}
+              </button>
+            ))}
+          </div>
+        </div>
+        {historyView === "range" && <div className="grid2">
+          <label className="field"><span>Başlangıç</span><DateField value={rangeFrom} onChange={setRangeFrom} /></label>
+          <label className="field"><span>Bitiş</span><DateField value={rangeTo} onChange={setRangeTo} /></label>
+        </div>}
+        {!history.length && <p className="muted small">Bu görünümde görev yok.</p>}
+        {history.map((r) => {
+          const t = taskById[r.task_id];
+          return <Link to={t ? `/tasks/${t.id}` : "/tasks"} className="app-row" key={r.id}>
             <div className="grow">
-              <b style={{ opacity: t.active ? 1 : 0.5 }}>{t.title}</b>
-              <div className="muted tiny">
-                {t.child_ids.map(childName).join(", ")}
-                {t.assign_mode === "first" ? " · ilk yapan alır" : ""} ·{" "}
-                {t.recurrence === "once" ? `tek sefer${t.due_date ? `, ${dateText(t.due_date)}'e kadar` : ""}` : "tekrarlı"} ·{" "}
-                {PROOF_LABEL[t.proof]}
-                {t.before_after ? " (öncesi/sonrası)" : ""}
-                {!t.active ? " · durduruldu" : ""}
-              </div>
+              <b>{t?.title ?? "Görev"}</b>
+              <div className="muted tiny">{childName(r.child_id)} · {r.day} · {STATUS_LABEL[r.status]}{t?.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}</div>
             </div>
             <Icon name="chevron" size={18} />
-          </Link>
-        ))}
+          </Link>;
+        })}
       </div>
 
       <div className="card">
         <div className="row between">
-          <h2>Şablonlar</h2>
+          <button className="section-title row gap-xs templates-head" type="button" onClick={() => setTemplatesOpen((v) => !v)} aria-expanded={templatesOpen}>
+            <span aria-hidden="true">{templatesOpen ? "⌃" : "⌄"}</span>
+            <span>Şablonlar</span>
+            <Info>Sık verilen görevler. Bir şablonu açınca ayarları hazır yeni görev formu açılır.</Info>
+          </button>
         </div>
-        <p className="muted small">Sık verilen görevler. Dokununca tüm ayarlarıyla yeni görev formu açılır.</p>
-        {templates.map((t) => (
+        {templatesOpen && templates.map((t) => (
           <div className="app-row" key={t.id}>
             <div className="grow">
               <b>{t.title}</b>
               <div className="muted tiny">
                 {PROOF_LABEL[t.proof]}
                 {t.before_after ? " (öncesi/sonrası)" : ""}
-                {t.reward_minutes != null ? ` · ${signedMinutes(t.reward_minutes)}` : ""}
+                {t.reward_minutes != null ? ` · ${t.reward_minutes > 0 ? "+" : ""}${minutesText(t.reward_minutes)}` : ""}
                 {t.reward_text ? ` · ${t.reward_text}` : ""}
-                {t.mandatory ? " · zorunlu" : ""}
               </div>
             </div>
             <button className="btn small" onClick={() => nav(`/tasks/new?template=${t.id}`)}>
@@ -209,12 +222,13 @@ export default function Tasks() {
             </button>
           </div>
         ))}
-        {!templates.length && (
+        {templatesOpen && !templates.length && (
           <button className="btn" onClick={seedTemplates}>
             Hazır şablonları ekle (Odanı topla, Ödevini yap…)
           </button>
         )}
       </div>
+      <button className="agenda-fab" aria-label="Yeni görev ekle" onClick={() => nav("/tasks/new")}>+</button>
     </div>
   );
 }
@@ -333,7 +347,7 @@ function ReviewCard({ run, task, childName, color, onDone }: { run: TaskRun; tas
           <div className="grid2">
             <label className="field">
               <span>Ekstra süre (dk)</span>
-              <input type="number" min={0} value={minutes} onChange={(e) => setMinutes(e.target.value)} placeholder="0" />
+              <input type="number" min={0} value={minutes} onChange={(e) => setMinutes(e.target.value)} placeholder="yok" />
             </label>
             <label className="field">
               <span>Ne zaman</span>

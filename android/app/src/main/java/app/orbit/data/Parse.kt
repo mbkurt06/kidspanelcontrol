@@ -16,6 +16,7 @@ import app.orbit.engine.TimeWindow
 import app.orbit.engine.SecRule
 import app.orbit.engine.Section
 import app.orbit.engine.SectionRule
+import app.orbit.engine.TaskRestriction
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
@@ -38,6 +39,20 @@ object Parse {
 
     private fun strings(a: JSONArray?): List<String> = (0 until (a?.length() ?: 0)).map { a!!.optString(it) }
     private fun ints(a: JSONArray?): List<Int> = (0 until (a?.length() ?: 0)).map { a!!.optInt(it) }
+
+    private fun taskRestrictions(tasks: JSONArray?, focusProfiles: JSONArray?): List<TaskRestriction> {
+        val screens = (0 until (focusProfiles?.length() ?: 0)).associate { i ->
+            val p = focusProfiles!!.getJSONObject(i)
+            p.getString("id") to strings(p.optJSONArray("allowed_screens")).toSet()
+        }
+        return (0 until (tasks?.length() ?: 0)).mapNotNull { i ->
+            val t = tasks!!.getJSONObject(i)
+            val mode = t.optString("phone_restriction", "none")
+            val profile = t.str("orbit_focus_profile_id")
+            if (mode == "none" && profile == null) null
+            else TaskRestriction(t.optString("title", "Görev"), t.optString("status"), mode, profile?.let { screens[it].orEmpty() }.orEmpty())
+        }
+    }
 
     private fun windows(a: JSONArray?): List<TimeWindow> = (0 until (a?.length() ?: 0)).mapNotNull {
         val o = a!!.optJSONObject(it) ?: return@mapNotNull null
@@ -160,6 +175,7 @@ object Parse {
         overrides = overrides(b.optJSONArray("overrides") ?: JSONArray()),
         grants = grants(b.optJSONArray("grants") ?: JSONArray()),
         commands = commands(b.optJSONArray("commands") ?: JSONArray()),
+        agenda = Agenda.parse(b.optJSONArray("agenda")),
         mandatoryOpen = Tasks.parse(b.optJSONArray("tasks")).filter { it.blocking }.map { it.title },
         sections = sections(b.optJSONArray("sections") ?: JSONArray()),
         sectionRules = sectionRules(b.optJSONArray("section_rules") ?: JSONArray()),
@@ -181,7 +197,10 @@ object Parse {
             ?.let { b.optJSONObject("family")?.str("parent_pin_hash")?.takeIf { h -> h.isNotBlank() } },
         pinMinutes = b.optJSONObject("family")?.optInt("pin_unlock_minutes", 15)?.takeIf { it > 0 } ?: 15,
         familyId = b.optJSONObject("family")?.optString("id") ?: "",
+        profileNickname = b.optJSONObject("child")?.str("profile_nickname"),
+        profileAvatar = b.optJSONObject("child")?.str("profile_avatar"),
         focus = Timers.activeFocus(b)?.let { app.orbit.engine.Focus(it.name, it.groups, it.packages) },
+        taskRestrictions = taskRestrictions(b.optJSONArray("tasks"), b.optJSONArray("focus_profiles")),
     )
 
     // --- Gün sayaçları ---

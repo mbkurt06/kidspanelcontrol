@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -56,6 +57,8 @@ fun VaultScreen(onCancel: () -> Unit) {
     var msg by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var clearAt by remember { mutableStateOf(0L) }
+    var deleteEntry by remember { mutableStateOf<Vault.Entry?>(null) }
+    var deleteArmed by remember { mutableStateOf<String?>(null) }
     val revealed = remember { mutableStateMapOf<String, Boolean>() }
 
     fun load() {
@@ -119,12 +122,24 @@ fun VaultScreen(onCancel: () -> Unit) {
         Muted("Telefon kilidi bekleniyor…")
         return
     }
+    deleteEntry?.let { pending ->
+        AlertDialog(
+            onDismissRequest = { deleteEntry = null },
+            title = { Text("Şifreyi sil?") },
+            text = { Text("${pending.app} kaydı kalıcı olarak kaldırılacak.") },
+            dismissButton = { TextButton(onClick = { deleteEntry = null }) { Text("İptal") } },
+            confirmButton = { TextButton(onClick = {
+                deleteEntry = null
+                scope.launch { withContext(Dispatchers.IO) { runCatching { Vault.remove(pending.id!!) } }; load() }
+            }) { Text("Sil", color = C.bad) } },
+        )
+    }
     if (msg.isNotEmpty()) Text(msg, color = C.good, fontSize = 13.sp)
     when (val s = state) {
         null -> Muted(if (busy) "Açılıyor…" else "")
         Vault.State.None -> Card {
             Title("Kasa henüz yok")
-            Muted("Uygulama hesaplarının kullanıcı adı ve şifrelerini burada saklayabilirsin. Sadece sen ve ebeveynlerin görebilir.")
+            Row(verticalAlignment = Alignment.CenterVertically) { Info("Uygulama hesaplarının kullanıcı adı ve şifrelerini burada saklayabilirsin. Sadece sen ve ebeveynlerin görebilir.") }
             Button(onClick = {
                 busy = true
                 scope.launch {
@@ -135,7 +150,9 @@ fun VaultScreen(onCancel: () -> Unit) {
         }
         Vault.State.Locked -> Card {
             Title("Kasa anahtarı bekleniyor")
-            Muted("Ebeveynin panelde \"Şifreler\" sayfasını açınca kasa bu telefona da açılır.")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Info("Ebeveynin panelde \"Şifreler\" sayfasını açınca kasa bu telefona da açılır.")
+                    }
             OutlinedButton(onClick = { load() }) { Text("Tekrar dene") }
         }
         is Vault.State.Open -> {
@@ -183,12 +200,9 @@ fun VaultScreen(onCancel: () -> Unit) {
                         if (x.note.isNotEmpty()) Muted(x.note, 13)
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             TextButton(onClick = { editing = x }) { Text("Düzenle") }
-                            TextButton(onClick = {
-                                scope.launch {
-                                    withContext(Dispatchers.IO) { runCatching { Vault.remove(x.id!!) } }
-                                    load()
-                                }
-                            }) { Text("Sil", color = C.bad) }
+                        TextButton(onClick = {
+                            if (deleteArmed == x.id) deleteEntry = x else deleteArmed = x.id
+                        }) { Text(if (deleteArmed == x.id) "Tekrar bas: sil" else "Sil", color = C.bad) }
                         }
                     }
                 }

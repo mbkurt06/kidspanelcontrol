@@ -47,6 +47,9 @@ object Extras {
         if (last?.type == CommandType.KIOSK_START && (last.untilAt == null || last.untilAt > nowMs)) {
             return KioskNow("manual", "Tam kilit", last.message ?: def.message, last.screens ?: def.screens, last.untilAt)
         }
+        rules.taskRestrictions.firstOrNull { it.active && it.phoneMode == "kiosk" }?.let { task ->
+            return KioskNow("task", task.title, def.message, def.screens, null)
+        }
         // Ebeveyn "kilidi kaldır" dediyse o an süren programlı kilit biter (sonraki seferde yine başlar)
         val endedAt = if (last?.type == CommandType.KIOSK_END) last.createdAt else 0L
         for (r in rules.timeRules) {

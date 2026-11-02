@@ -11,6 +11,9 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
 import java.time.Instant
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 
 /** Sunucu ile alışveriş: kuralları çek, durumu ve kullanımı gönder, komutları onayla. */
 object Sync {
@@ -19,42 +22,77 @@ object Sync {
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
     /** Kuralları çeker ve telefona kaydeder. Başarılıysa true. */
-    fun pullRules(): Boolean {
+    suspend fun pullRules(): Boolean {
         val c = Store.creds ?: return false
         val child = enc(c.childId)
-        return runCatching {
-            val fam = runCatching { Api.get("families?select=id,timezone,parent_pin_hash,pin_unlock_minutes&limit=1") }
-                .getOrElse { Api.get("families?select=timezone&limit=1") }
+        return try {
+            // Aile/çocuk bilgisi bağımsız; ikisini aynı anda al.
+            val (fam, kid) = coroutineScope {
+                val famJob = async(Dispatchers.IO) {
+                    runCatching { Api.get("families?select=id,timezone,parent_pin_hash,pin_unlock_minutes&limit=1") }
+                        .getOrElse { Api.get("families?select=timezone&limit=1") }
+                }
+                val kidJob = async(Dispatchers.IO) {
+                    runCatching { Api.get("children?select=name,wallet_daily_max,kiosk_settings,parent_pin_hash,parent_pin_enabled,music_mode,music_folder,profile_nickname,profile_avatar&id=eq.$child") }
+                        .getOrElse { Api.get("children?select=name&id=eq.$child") }
+                }
+                famJob.await() to kidJob.await()
+            }
             val tz = fam.optJSONObject(0)?.optString("timezone") ?: "Europe/Berlin"
             val today = java.time.LocalDate.now(java.time.ZoneId.of(tz)).toString()
-            val kid = runCatching { Api.get("children?select=name,wallet_daily_max,kiosk_settings,parent_pin_hash,parent_pin_enabled,music_mode,music_folder&id=eq.$child") }
-                .getOrElse { Api.get("children?select=name&id=eq.$child") }
-            val bundle = JSONObject()
-                .put("timezone", fam.optJSONObject(0)?.optString("timezone") ?: "Europe/Berlin")
-                .put("wallet_daily_max", kid.optJSONObject(0)?.takeIf { it.has("wallet_daily_max") && !it.isNull("wallet_daily_max") }?.optInt("wallet_daily_max") ?: JSONObject.NULL)
-                .put("child", kid.optJSONObject(0) ?: JSONObject())
-                .put("family", fam.optJSONObject(0) ?: JSONObject())
-                .put("child_id", c.childId)
-                .put("time_rules", runCatching { Api.get("time_rules?select=*") }.getOrElse { JSONArray() })
-                .put("apps", Api.get("child_apps?child_id=eq.$child&select=package,label,app_group,approved,daily_limit_minutes,usage_rule_id"))
-                .put("usage_rules", runCatching { Api.get("app_usage_rules?select=id,mode,max_minutes,counts_toward_daily,start_time,end_time") }.getOrElse { JSONArray() })
-                .put("profiles", Api.get("rule_profiles?select=*"))
-                .put("modes", Api.get("modes?select=*"))
-                .put("slots", Api.get("mode_slots?select=*"))
-                .put("assignments", Api.get("profile_assignments?child_id=eq.$child&select=weekday,profile_id"))
-                .put("overrides", Api.get("day_overrides?child_id=eq.$child&select=*"))
-                .put("grants", Api.get("time_grants?child_id=eq.$child&select=*&order=created_at.desc&limit=100"))
-                .put("commands", Api.get("commands?child_id=eq.$child&select=*&order=created_at.desc&limit=60"))
-                .put("sections", runCatching { Api.get("profile_sections?select=*") }.getOrElse { JSONArray() })
-                .put("section_rules", runCatching { Api.get("section_rules?select=*") }.getOrElse { JSONArray() })
-                .put("groups", runCatching { Api.get("app_groups?select=id,name") }.getOrElse { JSONArray() })
-                .put("group_members", runCatching { Api.get("app_group_members?select=package,group_id") }.getOrElse { JSONArray() })
-                .put("group_limits", runCatching { Api.get("profile_group_limits?select=*") }.getOrElse { JSONArray() })
-                .put("focus_profiles", runCatching { Api.get("focus_profiles?select=*&order=sort_order") }.getOrElse { JSONArray() })
-                .put("activities", runCatching { Api.get("activities?select=*&order=sort_order") }.getOrElse { JSONArray() })
-                .put("timer_sessions", runCatching { Api.get("timer_sessions?child_id=eq.$child&status=in.(running,paused)&select=*") }.getOrElse { JSONArray() })
-                .put("alarms", runCatching { Api.get("alarms?child_id=eq.$child&select=*&order=at_time") }.getOrElse { JSONArray() })
-                .put("tasks", runCatching { JSONArray(Api.rpc("device_tasks", JSONObject().put("p_day", today))) }.getOrElse { JSONArray() })
+
+            // Bu istekler birbirinden bağımsız. Seri çekim telefonda her değişikliği 5–7 sn geciktiriyordu.
+            val bundle = coroutineScope {
+                val timeRules = async(Dispatchers.IO) { runCatching { Api.get("time_rules?select=*") }.getOrElse { JSONArray() } }
+                val apps = async(Dispatchers.IO) { Api.get("child_apps?child_id=eq.$child&select=package,label,app_group,approved,daily_limit_minutes,usage_rule_id") }
+                val usageRules = async(Dispatchers.IO) { runCatching { Api.get("app_usage_rules?select=id,mode,max_minutes,counts_toward_daily,start_time,end_time") }.getOrElse { JSONArray() } }
+                val profiles = async(Dispatchers.IO) { Api.get("rule_profiles?select=*") }
+                val modes = async(Dispatchers.IO) { Api.get("modes?select=*") }
+                val slots = async(Dispatchers.IO) { Api.get("mode_slots?select=*") }
+                val assignments = async(Dispatchers.IO) { Api.get("profile_assignments?child_id=eq.$child&select=weekday,profile_id") }
+                val overrides = async(Dispatchers.IO) { Api.get("day_overrides?child_id=eq.$child&select=*") }
+                val grants = async(Dispatchers.IO) { Api.get("time_grants?child_id=eq.$child&select=*&order=created_at.desc&limit=100") }
+                val commands = async(Dispatchers.IO) { Api.get("commands?child_id=eq.$child&select=*&order=created_at.desc&limit=60") }
+                val sections = async(Dispatchers.IO) { runCatching { Api.get("profile_sections?select=*") }.getOrElse { JSONArray() } }
+                val sectionRules = async(Dispatchers.IO) { runCatching { Api.get("section_rules?select=*") }.getOrElse { JSONArray() } }
+                val groups = async(Dispatchers.IO) { runCatching { Api.get("app_groups?select=id,name") }.getOrElse { JSONArray() } }
+                val groupMembers = async(Dispatchers.IO) { runCatching { Api.get("app_group_members?select=package,group_id") }.getOrElse { JSONArray() } }
+                val groupLimits = async(Dispatchers.IO) { runCatching { Api.get("profile_group_limits?select=*") }.getOrElse { JSONArray() } }
+                val focusProfiles = async(Dispatchers.IO) { runCatching { Api.get("focus_profiles?select=*&order=sort_order") }.getOrElse { JSONArray() } }
+                val activities = async(Dispatchers.IO) { runCatching { Api.get("activities?select=*&order=sort_order") }.getOrElse { JSONArray() } }
+                val timerSessions = async(Dispatchers.IO) { runCatching { Api.get("timer_sessions?child_id=eq.$child&status=in.(running,paused)&select=*") }.getOrElse { JSONArray() } }
+                val alarms = async(Dispatchers.IO) { runCatching { Api.get("alarms?child_id=eq.$child&select=*&order=at_time") }.getOrElse { JSONArray() } }
+                val tasks = async(Dispatchers.IO) { runCatching { JSONArray(Api.rpc("device_tasks", JSONObject().put("p_day", today))) }.getOrElse { JSONArray() } }
+                val agenda = async(Dispatchers.IO) { runCatching { Api.get("agenda_items?child_id=eq.$child&select=*&order=due_date.asc,due_time.asc,entered_at.desc") }.getOrElse { JSONArray() } }
+
+                JSONObject()
+                    .put("timezone", tz)
+                    .put("wallet_daily_max", kid.optJSONObject(0)?.takeIf { it.has("wallet_daily_max") && !it.isNull("wallet_daily_max") }?.optInt("wallet_daily_max") ?: JSONObject.NULL)
+                    .put("child", kid.optJSONObject(0) ?: JSONObject())
+                    .put("family", fam.optJSONObject(0) ?: JSONObject())
+                    .put("child_id", c.childId)
+                    .put("time_rules", timeRules.await())
+                    .put("apps", apps.await())
+                    .put("usage_rules", usageRules.await())
+                    .put("profiles", profiles.await())
+                    .put("modes", modes.await())
+                    .put("slots", slots.await())
+                    .put("assignments", assignments.await())
+                    .put("overrides", overrides.await())
+                    .put("grants", grants.await())
+                    .put("commands", commands.await())
+                    .put("sections", sections.await())
+                    .put("section_rules", sectionRules.await())
+                    .put("groups", groups.await())
+                    .put("group_members", groupMembers.await())
+                    .put("group_limits", groupLimits.await())
+                    .put("focus_profiles", focusProfiles.await())
+                    .put("activities", activities.await())
+                    .put("timer_sessions", timerSessions.await())
+                    .put("alarms", alarms.await())
+                    .put("tasks", tasks.await())
+                    .put("agenda", agenda.await())
+            }
             Store.rulesJson = bundle.toString()
             kid.optJSONObject(0)?.optString("name")?.let { Store.childName = it }
             Store.lastSync = System.currentTimeMillis()
@@ -63,7 +101,10 @@ object Sync {
             runCatching { Messages.refresh() }
             ackCommands(bundle.getJSONArray("commands"))
             true
-        }.onFailure { Log.w(TAG, "kurallar alınamadı", it) }.getOrDefault(false)
+        } catch (e: Throwable) {
+            Log.w(TAG, "kurallar alınamadı", e)
+            false
+        }
     }
 
     private fun ackCommands(a: JSONArray) {
@@ -71,7 +112,8 @@ object Sync {
         val ids = fresh.map { it.getString("id") }
         if (ids.isEmpty()) return
         // Ebeveyn panelden "güncellemeyi şimdi kontrol et" dediyse bir sonraki turda hemen kontrol edilir
-        if (fresh.any { it.optJSONObject("payload")?.optBoolean("update") == true }) Store.lastUpdateCheck = 0
+        if (fresh.any { it.optJSONObject("payload")?.optBoolean("update") == true }) { Store.updateCheckOnly = false; Store.lastUpdateCheck = 0 }
+        if (fresh.any { it.optJSONObject("payload")?.optBoolean("check_update") == true }) { Store.updateCheckOnly = true; Store.lastUpdateCheck = 0 }
         // Panel kasa anahtarı istiyor (yeni ebeveyn cihazı)
         if (fresh.any { it.optJSONObject("payload")?.optBoolean("vault") == true }) Vault.shareSoon()
         runCatching {
@@ -122,6 +164,21 @@ object Sync {
         }.onFailure { Log.w(TAG, "durum gönderilemedi", it) }
     }
 
+    fun pushUpdateStatus(status: String, target: Int? = null, error: String? = null) {
+        val c = Store.creds ?: return
+        runCatching {
+            Api.patch(
+                "devices?id=eq.${c.deviceId}",
+                JSONObject()
+                    .put("update_status", status)
+                    .put("update_target", target ?: JSONObject.NULL)
+                    .put("update_checked_at", Instant.now().toString())
+                    .put("last_update_at", Store.lastUpdateAt.takeIf { it > 0 }?.let { Instant.ofEpochMilli(it).toString() } ?: JSONObject.NULL)
+                    .put("update_error", error ?: JSONObject.NULL),
+            )
+        }.onFailure { Log.w(TAG, "güncelleme durumu bildirilemedi", it) }
+    }
+
     fun pushUsage(u: DayUsage) {
         val c = Store.creds ?: return
         if (u.perAppTotal.isEmpty()) return
@@ -135,12 +192,6 @@ object Sync {
         }
         Api.post("usage_daily?on_conflict=child_id,day,package", arr, upsert = true)
     }
-
-    /** Gün sonunda kullanılmayan hakkı kasaya tek seferlik yaz. */
-    fun storeDailySurplus(day: java.time.LocalDate, minutes: Int): Boolean = runCatching {
-        if (minutes > 0) Api.rpc("device_store_daily_surplus", JSONObject().put("p_day", day.toString()).put("p_minutes", minutes))
-        true
-    }.onFailure { Log.w(TAG, "artan süre kasaya yazılamadı", it) }.getOrDefault(false)
 
     /** Kanıt dosyasını yükler ve görev kaydına ekler. */
     fun uploadProof(runId: String, stage: String, media: String, bytes: ByteArray, contentType: String) {

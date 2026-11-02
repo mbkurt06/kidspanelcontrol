@@ -4,10 +4,13 @@ import { useFamily } from "../lib/family";
 import { errorText, localDevice, supabase } from "../lib/supabase";
 import { relTime } from "../lib/util";
 import type { Device, ParentDevice } from "../lib/types";
-import { currentSubscription, disablePush, enablePush, isStandalone, pushSupported } from "../lib/push";
+import { Info } from "../components/Info";
+import { currentPushTypes, currentSubscription, disablePush, enablePush, isIOS, isStandalone, PUSH_EVENT_TYPES, pushSupported, updatePushTypes } from "../lib/push";
+import { biometricEnabled, biometricSupported, disableBiometric, registerBiometric } from "../lib/biometric";
 
 type Parent = { user_id: string; email: string; display_name: string };
 type Invite = { email: string; display_name: string | null };
+type ParentDraft = { email: string; name: string; password: string };
 
 export default function Settings() {
   const fam = useFamily();
@@ -15,6 +18,7 @@ export default function Settings() {
   const [devices, setDevices] = useState<ParentDevice[]>([]);
   const [parents, setParents] = useState<Parent[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
+  const [parentDrafts, setParentDrafts] = useState<Record<string, ParentDraft>>({});
   const [viewers, setViewers] = useState<Device[]>([]);
   const [inv, setInv] = useState({ email: "", name: "" });
   const [code, setCode] = useState("");
@@ -23,8 +27,18 @@ export default function Settings() {
 
   const [pushOn, setPushOn] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
+  const [pushTypes, setPushTypes] = useState<string[]>(PUSH_EVENT_TYPES.map(([id]) => id));
+  const [pushPrefsOpen, setPushPrefsOpen] = useState(false);
   useEffect(() => {
-    currentSubscription().then((s) => setPushOn(!!s));
+    (async () => {
+      try {
+        const s = await currentSubscription();
+        setPushOn(!!s);
+        if (s) setPushTypes((await currentPushTypes()) ?? PUSH_EVENT_TYPES.map(([id]) => id));
+      } catch (e) {
+        setErr(errorText(e));
+      }
+    })();
   }, []);
 
   const load = useCallback(async () => {
@@ -36,6 +50,11 @@ export default function Settings() {
     ]);
     setDevices((d.data ?? []) as ParentDevice[]);
     setParents((p.data ?? []) as Parent[]);
+    setParentDrafts(
+      Object.fromEntries(
+        ((p.data ?? []) as Parent[]).map((x) => [x.user_id, { email: x.email, name: x.display_name, password: "" }]),
+      ),
+    );
     setInvites((i.data ?? []) as Invite[]);
     setViewers((v.data ?? []) as Device[]);
   }, []);
@@ -67,6 +86,21 @@ export default function Settings() {
     load();
   }
 
+  async function saveParent(userId: string) {
+    const draft = parentDrafts[userId];
+    if (!draft?.email || !draft.name.trim()) return setErr("E-posta ve ad zorunlu.");
+    if (draft.password && draft.password.length < 6) return setErr("Parola en az 6 karakter olmalı.");
+    setErr("");
+    setMsg("");
+    const { data, error } = await supabase.functions.invoke("orbit-admin-account", {
+      body: { user_id: userId, email: draft.email, name: draft.name, password: draft.password || undefined },
+    });
+    if (error) return setErr(error.message);
+    if (!data?.ok) return setErr(data?.error ?? "Ebeveyn hesabı güncellenemedi.");
+    setMsg("Ebeveyn hesabı güncellendi.");
+    load();
+  }
+
   const parentName = (uid: string) => parents.find((p) => p.user_id === uid)?.display_name ?? "";
   const joined = new Set(parents.map((p) => p.email));
 
@@ -79,18 +113,14 @@ export default function Settings() {
       {msg && <p className="ok">{msg}</p>}
 
       <ThemeCard />
+      <BiometricCard />
+
       <div className="card">
-        <h2>Bildirimler</h2>
-        {!pushSupported() || (/iPhone|iPad/.test(navigator.userAgent) && !isStandalone()) ? (
-          <p className="muted small">
-            iPhone'da bildirim için paneli önce ana ekrana ekle (Safari → Paylaş → Ana Ekrana Ekle), sonra ana ekrandaki Orbit'ten aç ve
-            buradan bildirimleri aç.
-          </p>
+        <h2>Bildirimler <Info>Görev, süre, uygulama ve telefon durumlarıyla ilgili bildirimleri bu cihazda yönetirsin.</Info></h2>
+        {!pushSupported() || (isIOS() && !isStandalone()) ? (
+          <p className="muted tiny">Bildirimleri açmak için paneli iPhone ana ekranından açman gerekir.</p>
         ) : (
           <>
-            <p className="muted small">
-              Görev tamamlanınca, süre istenince, yeni uygulama yüklenince ve telefon uzun süre çevrimdışı kalınca bu cihaza bildirim gelir.
-            </p>
             <div className="row gap-s wrap">
               {pushOn ? (
                 <>
@@ -99,9 +129,13 @@ export default function Settings() {
                     className="btn small"
                     disabled={pushBusy}
                     onClick={async () => {
+                      setPushBusy(true);
+                      setErr("");
                       const { data: u } = await supabase.auth.getUser();
-                      await supabase.from("events").insert({ family_id: fam.familyId, type: "push_test", payload: { by: u.user?.email } });
-                      setMsg("Deneme bildirimi gönderildi");
+                      const { error } = await supabase.from("events").insert({ family_id: fam.familyId, type: "push_test", payload: { by: u.user?.email } });
+                      if (error) setErr(errorText(error));
+                      else setMsg("Deneme bildirimi gönderildi. iPhone'da birkaç saniye içinde görünmeli.");
+                      setPushBusy(false);
                     }}
                   >
                     Deneme gönder
@@ -129,6 +163,7 @@ export default function Settings() {
                     try {
                       await enablePush(fam.familyId!);
                       setPushOn(true);
+                      setPushTypes((await currentPushTypes()) ?? PUSH_EVENT_TYPES.map(([id]) => id));
                       setMsg("Bildirimler açıldı");
                     } catch (e) {
                       setErr(errorText(e));
@@ -140,13 +175,52 @@ export default function Settings() {
                 </button>
               )}
             </div>
+            {pushOn && (
+              <div className="stack gap-s">
+                <button className="section-toggle" aria-expanded={pushPrefsOpen} onClick={() => setPushPrefsOpen((v) => !v)}>
+                  Bildirim türleri <span aria-hidden>{pushPrefsOpen ? "⌃" : "⌄"}</span>
+                </button>
+                {pushPrefsOpen && (
+                  <div className="card soft">
+                    <div className="grid2">
+                      {PUSH_EVENT_TYPES.map(([id, label]) => (
+                        <label className="check" key={id}>
+                          <input
+                            type="checkbox"
+                            checked={pushTypes.includes(id)}
+                            onChange={(e) => setPushTypes((old) => e.target.checked ? [...new Set([...old, id])] : old.filter((x) => x !== id))}
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                    <button
+                      className="btn small"
+                      disabled={pushBusy}
+                      onClick={async () => {
+                        setPushBusy(true);
+                        setErr("");
+                        try {
+                          await updatePushTypes(pushTypes);
+                          setMsg("Bildirim tercihleri kaydedildi.");
+                        } catch (e) {
+                          setErr(errorText(e));
+                        }
+                        setPushBusy(false);
+                      }}
+                    >
+                      Kaydet
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>
 
       <div className="card">
-        <h2>Ebeveyn cihazları</h2>
-        <p className="muted small">Paneli sadece burada onaylı cihazlar açabilir. Kaybolan telefonun erişimini buradan kaldır.</p>
+        <h2>Ebeveyn cihazları <Info>Paneli yalnızca onaylı cihazlar açabilir. Kaybolan bir cihazın erişimini buradan kaldırabilirsin.</Info></h2>
         {devices.map((d) => (
           <div className="app-row" key={d.id}>
             <div className="grow">
@@ -183,7 +257,48 @@ export default function Settings() {
       </div>
 
       <div className="card">
-        <h2>Ebeveynler</h2>
+        <h2>Ebeveyn hesapları <Info>İki ebeveyn hesabının görünen adını, e-posta adresini ve parolasını buradan güncelleyebilirsin.</Info></h2>
+        {parents.map((p) => {
+          const draft = parentDrafts[p.user_id] ?? { email: p.email, name: p.display_name, password: "" };
+          return (
+            <div className="parent-account" key={p.user_id}>
+              <div className="muted small">{p.display_name} · {p.email}</div>
+              <div className="grid2">
+                <label className="field">
+                  <span>E-posta</span>
+                  <input
+                    type="email"
+                    value={draft.email}
+                    onChange={(e) => setParentDrafts({ ...parentDrafts, [p.user_id]: { ...draft, email: e.target.value } })}
+                  />
+                </label>
+                <label className="field">
+                  <span>Ad</span>
+                  <input
+                    value={draft.name}
+                    onChange={(e) => setParentDrafts({ ...parentDrafts, [p.user_id]: { ...draft, name: e.target.value } })}
+                  />
+                </label>
+              </div>
+              <div className="row gap-s">
+                <label className="field grow">
+                  <span>Yeni parola</span>
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="Değiştirmek için yaz"
+                    value={draft.password}
+                    onChange={(e) => setParentDrafts({ ...parentDrafts, [p.user_id]: { ...draft, password: e.target.value } })}
+                  />
+                </label>
+                <button className="btn small" onClick={() => saveParent(p.user_id)}>
+                  Kaydet
+                </button>
+              </div>
+            </div>
+          );
+        })}
+        <h3>Ebeveyn daveti</h3>
         {invites.map((i) => (
           <div className="app-row" key={i.email}>
             <div className="grow">
@@ -210,8 +325,7 @@ export default function Settings() {
       </div>
 
       <div className="card">
-        <h2>Noor tableti</h2>
-        <p className="muted small">Noor'daki Orbit sayfası iki çocuğun durumunu gösterir. Eşleştirmek için bir kod al ve tablete gir.</p>
+        <h2>Noor tableti <Info>Tabletteki Orbit sayfası çocukların durumunu gösterir. Eşleştirmek için kod alıp tablete girersin.</Info></h2>
         {viewers
           .filter((v) => v.status === "active")
           .map((v) => (
@@ -253,8 +367,7 @@ export default function Settings() {
       <SecurityCard />
 
       <div className="card">
-        <h2>Hesap</h2>
-        <p className="muted small">Panel ekranını iPhone'da ana ekrana ekle: Safari → Paylaş → Ana Ekrana Ekle.</p>
+        <h2>Hesap <Info>Paneli iPhone ana ekranına eklemek için Safari → Paylaş → Ana Ekrana Ekle yolunu kullan.</Info></h2>
         <button className="btn ghost" onClick={() => supabase.auth.signOut()}>
           Çıkış yap
         </button>
@@ -263,6 +376,7 @@ export default function Settings() {
     </div>
   );
 }
+
 async function sha256(text: string) {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -292,10 +406,7 @@ function SecurityCard() {
   }
   return (
     <div className="card">
-      <h2>🔐 Güvenlik · Ebeveyn PIN'i</h2>
-      <p className="muted small">
-        Çocuk telefonunda (kilit ekranında ya da menüde "Ebeveyn girişi") bu PIN girilince bütün kısıtlamalar bir süre kalkar; ayarlara girebilirsin. 3 yanlış denemede 5 dk bekler. Her giriş sana bildirilir.
-      </p>
+      <h2>🔐 Güvenlik · Ebeveyn PIN'i <Info>Bu PIN ile çocuk telefonunda geçici ebeveyn modu açılır. Üç yanlış denemede 5 dakika beklenir ve giriş sana bildirilir.</Info></h2>
       <div className="row gap-s">
         <input type="password" inputMode="numeric" className="grow" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))} placeholder={f.parent_pin_hash ? "Yeni PIN (değiştir)" : "PIN belirle (4–8 rakam)"} />
         <button className="btn small" onClick={savePin}>
@@ -330,6 +441,7 @@ function SecurityCard() {
     </div>
   );
 }
+
 function ThemeCard() {
   const [t, setT] = useState<ThemeChoice>(getTheme());
   const opts: [ThemeChoice, string][] = [
@@ -339,7 +451,7 @@ function ThemeCard() {
   ];
   return (
     <div className="card">
-      <h2>Görünüm</h2>
+        <h2>Görünüm <Info>Otomatik seçenek cihazın açık/koyu ayarını izler; seçim bu cihazda saklanır.</Info></h2>
       <div className="segmented">
         {opts.map(([k, l]) => (
           <button
@@ -354,8 +466,136 @@ function ThemeCard() {
           </button>
         ))}
       </div>
-      <p className="muted small">Otomatik: telefonun ya da bilgisayarın açık/koyu ayarına uyar. Seçim bu cihazda saklanır.</p>
     </div>
   );
 }
 
+function ProofCard() {
+  const fam = useFamily();
+  const [v, setV] = useState<number | null>(null);
+  useEffect(() => {
+    if (!fam.familyId) return;
+    supabase
+      .from("families")
+      .select("proof_retention_days")
+      .eq("id", fam.familyId)
+      .maybeSingle()
+      .then(({ data }) => setV((data as { proof_retention_days: number } | null)?.proof_retention_days ?? 0));
+  }, [fam.familyId]);
+  async function save(n: number) {
+    setV(n);
+    await supabase.from("families").update({ proof_retention_days: n }).eq("id", fam.familyId);
+  }
+  return (
+    <div className="card">
+      <h2>Görev kanıtları <Info>Reddedilen denemeler seçtiğin süre boyunca saklanır; onay ekranında önceki ve sonraki denemeleri görebilirsin.</Info></h2>
+      <select value={v ?? 0} onChange={(e) => save(Number(e.target.value))} disabled={v == null}>
+        <option value={0}>Fotoğraflar hemen silinsin</option>
+        <option value={7}>7 gün saklansın</option>
+        <option value={30}>30 gün saklansın</option>
+      </select>
+    </div>
+  );
+}
+
+function TaskPhotoDefaultsCard() {
+  const fam = useFamily();
+  const f = fam.family;
+  const [v, setV] = useState({ beforeMin: 1, beforeMax: 4, afterMin: 1, afterMax: 4 });
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (!f) return;
+    setV({
+      beforeMin: f.task_before_photo_min ?? 1,
+      beforeMax: f.task_before_photo_max ?? 4,
+      afterMin: f.task_after_photo_min ?? 1,
+      afterMax: f.task_after_photo_max ?? 4,
+    });
+  }, [f]);
+
+  async function save() {
+    setErr("");
+    setMsg("");
+    const n = {
+      task_before_photo_min: Math.max(1, Math.min(4, v.beforeMin)),
+      task_before_photo_max: Math.max(1, Math.min(4, v.beforeMax)),
+      task_after_photo_min: Math.max(1, Math.min(4, v.afterMin)),
+      task_after_photo_max: Math.max(1, Math.min(4, v.afterMax)),
+    };
+    if (n.task_before_photo_min > n.task_before_photo_max || n.task_after_photo_min > n.task_after_photo_max) return setErr("En az değeri en fazla değerinden büyük olamaz.");
+    const { error } = await supabase.from("families").update(n).eq("id", fam.familyId);
+    if (error) return setErr(errorText(error));
+    setMsg("Yeni görev varsayılanları kaydedildi.");
+    await fam.reload();
+  }
+
+  if (!f) return null;
+  return (
+    <div className="card">
+      <div className="section-toggle-row">
+        <button className="section-toggle" aria-expanded={open} onClick={() => setOpen((x) => !x)}>
+          Görev fotoğraf varsayılanları <span aria-hidden>{open ? "⌃" : "⌄"}</span>
+        </button>
+        <Info>Yeni fotoğraflı görevlerde başlangıç ve tamamlanma aşamaları için uygulanır.</Info>
+      </div>
+      {open && (
+        <>
+          <div className="grid2">
+            <label className="field"><span>Başlangıç · en az</span><input type="number" min={1} max={4} value={v.beforeMin} onChange={(e) => setV({ ...v, beforeMin: Number(e.target.value) })} /></label>
+            <label className="field"><span>Başlangıç · en fazla</span><input type="number" min={1} max={4} value={v.beforeMax} onChange={(e) => setV({ ...v, beforeMax: Number(e.target.value) })} /></label>
+            <label className="field"><span>Tamamlanma · en az</span><input type="number" min={1} max={4} value={v.afterMin} onChange={(e) => setV({ ...v, afterMin: Number(e.target.value) })} /></label>
+            <label className="field"><span>Tamamlanma · en fazla</span><input type="number" min={1} max={4} value={v.afterMax} onChange={(e) => setV({ ...v, afterMax: Number(e.target.value) })} /></label>
+          </div>
+          {err && <p className="error">{err}</p>}
+          {msg && <p className="ok">{msg}</p>}
+          <button className="btn small" onClick={save}>Varsayılanı kaydet</button>
+        </>
+      )}
+    </div>
+  );
+}
+
+function BiometricCard() {
+  const [supported, setSupported] = useState(false);
+  const [enabled, setEnabled] = useState(() => biometricEnabled());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => { biometricSupported().then(setSupported); }, []);
+
+  async function enable() {
+    setBusy(true);
+    setErr("");
+    try {
+      const { data } = await supabase.auth.getUser();
+      if (!data.user) throw new Error("Oturum bulunamadı.");
+      await registerBiometric({ id: data.user.id, email: data.user.email ?? "Orbit" });
+      setEnabled(true);
+      setMsgAndReload();
+    } catch (e) {
+      setErr(errorText(e));
+      setBusy(false);
+    }
+  }
+
+  function setMsgAndReload() {
+    window.location.reload();
+  }
+
+  function disable() {
+    disableBiometric();
+    setEnabled(false);
+  }
+
+  return (
+    <div className="card">
+      <h2>Face ID ile aç <Info>Orbit ana ekrandan açıldığında cihazın Face ID/Touch ID doğrulamasını ister.</Info></h2>
+      {!supported ? <p className="muted tiny">Bu cihaz veya tarayıcı platform doğrulamasını desteklemiyor.</p> : enabled ? (
+        <div className="row gap-s wrap"><span className="pill">Face ID kilidi açık</span><button className="btn small ghost" onClick={disable}>Kapat</button></div>
+      ) : <button className="btn" onClick={enable} disabled={busy}>{busy ? "Hazırlanıyor…" : "Face ID ile korumayı aç"}</button>}
+      {err && <p className="error">{err}</p>}
+    </div>
+  );
+}

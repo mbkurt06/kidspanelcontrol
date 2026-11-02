@@ -7,6 +7,9 @@ import android.app.PendingIntent
 import android.app.Service
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
+import android.media.AudioManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -17,6 +20,7 @@ import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
+import app.orbit.BuildConfig
 import app.orbit.R
 import app.orbit.data.Store
 import app.orbit.data.Sync
@@ -102,6 +106,8 @@ class OrbitService : Service() {
     private var lastRecFront = 0L
     private var lastKioskFront = 0L
     private var lastKioskKey: String? = null
+    private var mediaFocus: AudioFocusRequest? = null
+    private var lastMediaLocked: Boolean? = null
     private val pushBusy = java.util.concurrent.atomic.AtomicBoolean(false)
     private val surplusBusy = java.util.concurrent.atomic.AtomicBoolean(false)
     private var lastLockLaunch = 0L
@@ -153,6 +159,8 @@ class OrbitService : Service() {
     }
 
     override fun onDestroy() {
+        mediaFocus?.let { runCatching { getSystemService(AudioManager::class.java).abandonAudioFocusRequest(it) } }
+        if (lastMediaLocked == true) Policy.setLockedMediaControls(this, false)
         runCatching { unregisterReceiver(screenReceiver) }
         runCatching { unregisterReceiver(packageReceiver) }
         app.orbit.data.Realtime.stop()
@@ -192,6 +200,12 @@ class OrbitService : Service() {
         val nowMs = System.currentTimeMillis()
         val online = nowMs - Store.lastSync < 120_000
         if (Store.creds == null) { stopSelf(); return }
+
+        if (Store.installedVersion != BuildConfig.VERSION_CODE) {
+            Store.installedVersion = BuildConfig.VERSION_CODE
+            if (Store.lastUpdateAt == 0L) Store.lastUpdateAt = nowMs
+            scope.launch(Dispatchers.IO) { Sync.pushUpdateStatus("Güncel (${BuildConfig.VERSION_CODE})", BuildConfig.VERSION_CODE) }
+        }
 
         // 1) Ağ işleri arka planda (internet yoksa sessizce geçer; kurallar telefonda kayıtlı)
         if ((firstRun || Live.syncRequested || nowMs - lastPull > 30_000) && netBusy.compareAndSet(false, true)) {
@@ -292,6 +306,23 @@ class OrbitService : Service() {
         if (pinUntil != null && !snap.parentMode) snap = snap.copy(parentMode = true, parentModeUntil = pinUntil)
         // Tam kilit (kiosk)
         val kiosk = if (snap.parentMode) null else runCatching { app.orbit.engine.Extras.kiosk(rules, engine, now) }.getOrNull()
+        val mediaLocked = snap.locked || kiosk != null
+        if (mediaLocked) {
+            if (mediaFocus == null) {
+                mediaFocus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
+                    .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build())
+                    .setOnAudioFocusChangeListener { }
+                    .build()
+            }
+            runCatching { getSystemService(AudioManager::class.java).requestAudioFocus(mediaFocus!!) }
+        } else {
+            mediaFocus?.let { runCatching { getSystemService(AudioManager::class.java).abandonAudioFocusRequest(it) } }
+            mediaFocus = null
+        }
+        if (lastMediaLocked != mediaLocked) {
+            lastMediaLocked = mediaLocked
+            Policy.setLockedMediaControls(this, mediaLocked)
+        }
         val kioskKey = if (kiosk != null) "on:${rules.kiosk.calls}" else "off"
         if (kioskKey != lastKioskKey) {
             lastKioskKey = kioskKey
@@ -385,9 +416,12 @@ class OrbitService : Service() {
                 }
             }
         }
-        if (nowMs - Store.lastUpdateCheck > 3600_000L) {
+        // 1 dk yoklama; canlı bağlantı kopsa bile yeni APK kısa sürede otomatik alınır.
+        if (nowMs - Store.lastUpdateCheck > 60_000L) {
             Store.lastUpdateCheck = nowMs
-            scope.launch(Dispatchers.IO) { Updater.check(this@OrbitService) }
+            val checkOnly = Store.updateCheckOnly
+            Store.updateCheckOnly = false
+            scope.launch(Dispatchers.IO) { Updater.check(this@OrbitService, installIfNew = !checkOnly) }
         }
         firstRun = false
     }

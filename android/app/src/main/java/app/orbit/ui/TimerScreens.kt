@@ -11,15 +11,22 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,6 +34,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,6 +55,8 @@ import app.orbit.service.Live
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalTime
@@ -104,19 +115,38 @@ fun RunningTimerCard(s: TimerSession, compact: Boolean = false, onOpen: (() -> U
 fun TimerScreen() {
     val scope = rememberCoroutineScope()
     val live by Live.state.collectAsState()
-    val active = remember(live.lastSync) { Timers.active() }
+    val remoteActive = remember(live.lastSync) { Timers.active() }
+    var optimisticActive by remember { mutableStateOf<TimerSession?>(null) }
+    var cancelRequested by remember { mutableStateOf(false) }
+    var finishRequested by remember { mutableStateOf(false) }
+    LaunchedEffect(live.lastSync, remoteActive?.id) {
+        if (remoteActive != null && optimisticActive?.id == "local") optimisticActive = null
+        if (remoteActive != null && cancelRequested && optimisticActive == null) {
+            val ok = withContext(Dispatchers.IO) { Timers.cancel(remoteActive, Timers.currentCounts(remoteActive.id)) }
+            if (ok) Live.syncRequested = true else cancelRequested = false
+        }
+        if (remoteActive != null && finishRequested && optimisticActive == null) {
+            val ok = withContext(Dispatchers.IO) { Timers.finish(remoteActive, "child", Timers.currentCounts(remoteActive.id)) }
+            if (ok) Live.syncRequested = true else finishRequested = false
+        }
+        if (remoteActive == null && cancelRequested) cancelRequested = false
+        if (remoteActive == null && finishRequested) finishRequested = false
+    }
+    val active = if (cancelRequested || finishRequested) null else optimisticActive?.takeIf { it.active } ?: remoteActive
     val activities = remember(live.lastSync) { Timers.activities() }
     val profiles = remember(live.lastSync) { Timers.profiles() }
     var msg by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var creating by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf<List<TimerSession>>(emptyList()) }
     LaunchedEffect(live.lastSync) { history = withContext(Dispatchers.IO) { Timers.today() } }
 
-    fun act(label: String, f: () -> Boolean) {
+    fun act(label: String, f: () -> Boolean, onFailure: () -> Unit = {}) {
         busy = true; msg = ""
         scope.launch {
             val ok = withContext(Dispatchers.IO) { f() }
             busy = false
+            if (!ok) onFailure()
             msg = if (ok) label else "Olmadı (internet ya da izin yok)"
             Live.syncRequested = true
         }
@@ -126,6 +156,11 @@ fun TimerScreen() {
     val s0 = live.snapshot
     val canPickFocus = s0 != null && !s0.locked && !(s0.sectionMode && s0.sectionClosed)
 
+    Box(Modifier.fillMaxSize()) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 84.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
     if (active != null) {
         RunningTimerCard(active)
         val counts = Timers.currentCounts(active.id)
@@ -134,28 +169,49 @@ fun TimerScreen() {
         if (f + a > 60) Muted("Odaklı: ${f / 60} dk · başka şeylerle: ${a / 60} dk", 13)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (active.running && active.canPause) {
-                OutlinedButton(onClick = { act("Mola verildi") { Timers.pause(active) } }, enabled = !busy) {
+                OutlinedButton(onClick = {
+                    optimisticActive = active.copy(status = "paused", pausedAt = System.currentTimeMillis())
+                    act("Mola verildi", { Timers.pause(active) }) { optimisticActive = null }
+                }, enabled = !busy) {
                     Text(if (active.byParent && active.pauseMode == "limit") "Mola (en fazla ${active.pauseMaxMinutes ?: 5} dk)" else "Mola")
                 }
             }
-            if (!active.running) Button(onClick = { act("Devam") { Timers.resume(active) } }, enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = C.accent)) { Text("Devam et") }
+            if (!active.running) Button(onClick = {
+                optimisticActive = active.copy(status = "running", pausedAt = null)
+                act("Devam", { Timers.resume(active) }) { optimisticActive = null }
+            }, enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = C.accent)) { Text("Devam et") }
             if (active.canStop) {
-                Button(onClick = { act("Kaydedildi 👍") { Timers.finish(active, "child", Timers.currentCounts(active.id)) } }, enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = C.good)) { Text("Bitir ve kaydet") }
+                Button(onClick = {
+                    if (active.id == "local") {
+                        optimisticActive = null
+                        finishRequested = true
+                        msg = "Kaydediliyor…"
+                    } else {
+                        optimisticActive = null
+                        act("Kaydedildi 👍", { Timers.finish(active, "child", Timers.currentCounts(active.id)) })
+                    }
+                }, enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = C.good)) { Text("Bitir ve kaydet") }
             }
         }
-        if (active.canStop) TextButton(onClick = { act("İptal edildi") { Timers.cancel(active, Timers.currentCounts(active.id)) } }, enabled = !busy) { Text("İptal et", color = C.bad) }
+        if (active.canStop) TextButton(onClick = {
+            if (active.id == "local") {
+                optimisticActive = null
+                cancelRequested = true
+                msg = "İptal edildi"
+            } else act("İptal edildi", { Timers.cancel(active, Timers.currentCounts(active.id)) })
+        }, enabled = !busy) { Text("İptal et", color = C.bad) }
         else Muted("Bu sayacı ebeveynin başlattı; bitene kadar durdurulamaz.", 13)
         if (active.byParent && active.allowStop == "notify") Muted("Erken bitirirsen ebeveynine bildirilir.", 12)
         if (canPickFocus && active.canChangeFocus && profiles.isNotEmpty()) {
             Card {
                 Title("Odak")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    if (!(active.byParent && active.focusChange == "stricter")) Chip("Serbest", active.focusId == null) { act("Odak kaldırıldı") { Timers.changeFocus(active, null) } }
-                    for (p in profiles.values) Chip("${p.icon ?: "🎯"} ${p.name}", active.focusId == p.id) { act("Odak: ${p.name}") { Timers.changeFocus(active, p.id) } }
+                    if (!(active.byParent && active.focusChange == "stricter")) Chip("Serbest", active.focusId == null) { act("Odak kaldırıldı", { Timers.changeFocus(active, null) }) }
+                    for (p in profiles.values) Chip("${p.icon ?: "🎯"} ${p.name}", active.focusId == p.id) { act("Odak: ${p.name}", { Timers.changeFocus(active, p.id) }) }
                 }
             }
         }
-    } else {
+    } else if (creating) {
         var activity by remember { mutableStateOf<String?>(null) }
         var title by remember { mutableStateOf("") }
         var minutes by remember { mutableStateOf<Int?>(25) }
@@ -164,7 +220,7 @@ fun TimerScreen() {
             Title("Ne yapacaksın?")
             FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (a in activities) Chip("${a.icon ?: ""} ${a.name}".trim(), activity == a.id) {
-                    activity = a.id; title = a.name; if (canPickFocus) focus = a.defaultFocusId
+                activity = a.id; title = a.name; if (canPickFocus) focus = a.defaultFocusId
                 }
                 Chip("✍️ Diğer", activity == "other") { activity = "other"; title = "" }
             }
@@ -190,12 +246,22 @@ fun TimerScreen() {
         Button(
             onClick = {
                 val a = activities.firstOrNull { it.id == activity }
-                act("Başladı, kolay gelsin! 💪") { Timers.start(title.ifBlank { a?.name ?: "Çalışma" }, a?.icon, a?.id, minutes, if (canPickFocus) focus else null) }
+                val sessionTitle = title.ifBlank { a?.name ?: "Çalışma" }
+                val planned = minutes?.times(60)
+                optimisticActive = TimerSession(
+                    "local", sessionTitle, a?.icon, a?.id, if (planned != null) "countdown" else "stopwatch", planned,
+                    if (canPickFocus) focus else null, "child", "yes", "child", null, "free", "running",
+                    System.currentTimeMillis(), null, 0, 0, 0,
+                )
+                creating = false
+                act("Başladı, kolay gelsin! 💪", { Timers.start(sessionTitle, a?.icon, a?.id, minutes, if (canPickFocus) focus else null) }) { optimisticActive = null; cancelRequested = false; finishRequested = false }
             },
             enabled = !busy && activity != null && title.isNotBlank(),
             modifier = Modifier.fillMaxWidth().height(56.dp),
             colors = ButtonDefaults.buttonColors(containerColor = C.accent),
         ) { Text("Başlat", fontSize = 18.sp) }
+    } else {
+        Muted("Sayaç başlatmak için sağ alttaki + işaretine bas.", 14)
     }
     if (msg.isNotEmpty()) Text(msg, color = C.good)
 
@@ -218,6 +284,17 @@ fun TimerScreen() {
             Muted("Toplam: ${done.filter { it.status != "cancelled" }.sumOf { it.focusedSeconds + it.awaySeconds } / 60} dk", 13)
         }
     }
+    }
+    if (active == null) {
+        FloatingActionButton(
+            onClick = { creating = true },
+            shape = CircleShape,
+            containerColor = C.accent,
+            contentColor = C.text,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).size(56.dp),
+        ) { Text("+", fontSize = 24.sp) }
+    }
+    }
 }
 
 // --- Alarmlar ---------------------------------------------------------------
@@ -229,57 +306,133 @@ private val DAY_NAMES = listOf("Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz")
 fun AlarmsScreen() {
     val scope = rememberCoroutineScope()
     val live by Live.state.collectAsState()
-    val list = remember(live.lastSync) { Alarms.list() }
+    val writeLock = remember { Mutex() }
+    val pendingByAlarm = remember { mutableStateMapOf<String, Long>() }
+    var pendingWrites by remember { mutableIntStateOf(0) }
+    var list by remember(live.lastSync) { mutableStateOf(Alarms.list()) }
     var editing by remember { mutableStateOf<AlarmDef?>(null) }
     var creating by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf("") }
 
-    fun run(label: String, f: () -> Boolean) {
+    fun run(f: () -> Boolean, onFailure: () -> Unit = {}) {
+        pendingWrites++
         scope.launch {
-            val ok = withContext(Dispatchers.IO) { f() }
-            msg = if (ok) label else "Olmadı (internet ya da izin yok)"
-            if (ok) { editing = null; creating = false }
-            Live.syncRequested = true
+            val ok = writeLock.withLock { withContext(Dispatchers.IO) { f() } }
+            if (!ok) onFailure()
+            msg = if (ok) "" else "Olmadı (internet ya da izin yok)"
+            pendingWrites--
+            if (pendingWrites == 0) Live.syncRequested = true
+        }
+    }
+
+    fun saveAlarm(title: String, kind: String, time: LocalTime, days: Set<Int>, date: LocalDate?, active: Boolean) {
+        val old = list
+        val current = editing
+        val local = AlarmDef(
+            current?.id ?: "local-${System.nanoTime()}", title.trim().ifBlank { "Alarm" }, kind, time, days, date, active,
+            current?.byParent ?: false, current?.canEdit ?: true, current?.canDelete ?: true,
+            current?.snoozeMax ?: 3, current?.snoozeMinutes ?: 5,
+        )
+        list = if (current == null) old + local else old.map { if (it.id == current.id) local else it }
+        editing = null
+        creating = false
+        scope.launch {
+            pendingWrites++
+            val ok = writeLock.withLock { withContext(Dispatchers.IO) { Alarms.save(current?.id, title, kind, time, days, date, active) } }
+            if (!ok) {
+                list = old
+                msg = "Kaydedilemedi; bağlantıyı kontrol et"
+            }
+            pendingWrites--
+            if (pendingWrites == 0) Live.syncRequested = true
+        }
+    }
+
+    fun deleteAlarm(a: AlarmDef) {
+        val old = list
+        list = list.filterNot { it.id == a.id }
+        editing = null
+        creating = false
+        run({ Alarms.delete(a.id) }) {
+            list = old
+            msg = "Silinemedi"
         }
     }
 
     if (creating || editing != null) {
-        AlarmForm(editing, onCancel = { editing = null; creating = false }) { title, kind, time, days, date, active ->
-            run("Kaydedildi") { Alarms.save(editing?.id, title, kind, time, days, date, active) }
-        }
+        AlarmForm(
+            editing,
+            onCancel = { editing = null; creating = false },
+            onDelete = { deleteAlarm(it) },
+        ) { title, kind, time, days, date, active -> saveAlarm(title, kind, time, days, date, active) }
         return
     }
 
-    Button(onClick = { creating = true }, modifier = Modifier.fillMaxWidth(), colors = ButtonDefaults.buttonColors(containerColor = C.accent)) { Text("Yeni alarm / hatırlatıcı") }
-    if (msg.isNotEmpty()) Text(msg, color = C.good)
-    if (list.isEmpty()) Muted("Henüz alarm yok.")
-    for (a in list) {
-        Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.surface)
-                .then(if (a.editable) Modifier.clickable { editing = a } else Modifier).padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(a.time.toString().take(5), color = if (a.active) C.text else C.muted, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-                Text((if (a.kind == "alarm") "⏰ " else "🔔 ") + a.title, color = C.text)
-                Muted(
-                    listOfNotNull(
-                        if (a.days.isEmpty()) a.onDate?.let { if (it == LocalDate.now()) "bugün" else if (it == LocalDate.now().plusDays(1)) "yarın" else it.toString() } ?: "tek sefer"
-                        else if (a.days.size == 7) "her gün" else a.days.sorted().joinToString(" ") { DAY_NAMES[it - 1] },
-                        if (a.byParent) "ebeveynin kurdu" else null,
-                        if (!a.editable) "değiştirilemez" else null,
-                    ).joinToString(" · "), 12,
-                )
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (msg.isNotEmpty()) Text(msg, color = C.bad)
+            if (list.isEmpty()) Muted("Henüz alarm yok.")
+            for (a in list) {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.surface)
+                        .then(if (a.editable) Modifier.clickable { editing = a } else Modifier).padding(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(a.time.toString().take(5), color = if (a.active) C.text else C.muted, fontSize = 30.sp, fontWeight = FontWeight.Bold)
+                        Text((if (a.kind == "alarm") "⏰ " else "🔔 ") + a.title, color = C.text)
+                        Muted(
+                            listOfNotNull(
+                                if (a.days.isEmpty()) a.onDate?.let { if (it == LocalDate.now()) "bugün" else if (it == LocalDate.now().plusDays(1)) "yarın" else it.toString() } ?: "tek sefer"
+                                else if (a.days.size == 7) "her gün" else a.days.sorted().joinToString(" ") { DAY_NAMES[it - 1] },
+                                if (a.byParent) "ebeveynin kurdu" else null,
+                                if (!a.editable) "değiştirilemez" else null,
+                            ).joinToString(" · "), 12,
+                        )
+                    }
+                    if (a.editable) Switch(
+                        checked = a.active,
+            onCheckedChange = { on ->
+                val before = a.active
+                val token = System.nanoTime()
+                pendingByAlarm[a.id] = token
+                list = list.map { if (it.id == a.id) it.copy(active = on) else it }
+                run({ Alarms.save(a.id, a.title, a.kind, a.time, a.days, a.onDate, on) }) {
+                    if (pendingByAlarm[a.id] == token) {
+                        list = list.map { if (it.id == a.id) it.copy(active = before) else it }
+                        pendingByAlarm.remove(a.id)
+                    }
+                }
+            },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = C.text,
+                            checkedTrackColor = C.accent,
+                            uncheckedThumbColor = C.muted,
+                            uncheckedTrackColor = C.surface2,
+                            uncheckedBorderColor = C.line,
+                        ),
+                    )
+                }
             }
-            if (a.editable) Switch(checked = a.active, onCheckedChange = { on -> run(if (on) "Açıldı" else "Kapatıldı") { Alarms.save(a.id, a.title, a.kind, a.time, a.days, a.onDate, on) } })
         }
+        FloatingActionButton(
+            onClick = { creating = true },
+            shape = CircleShape,
+            containerColor = C.accent,
+            contentColor = C.text,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).size(56.dp),
+        ) { Text("+", fontSize = 24.sp) }
     }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AlarmForm(a: AlarmDef?, onCancel: () -> Unit, onSave: (String, String, LocalTime, Set<Int>, LocalDate?, Boolean) -> Unit) {
-    val scope = rememberCoroutineScope()
+private fun AlarmForm(
+    a: AlarmDef?,
+    onCancel: () -> Unit,
+    onDelete: (AlarmDef) -> Unit,
+    onSave: (String, String, LocalTime, Set<Int>, LocalDate?, Boolean) -> Unit,
+) {
     var title by remember { mutableStateOf(a?.title ?: "") }
     var kind by remember { mutableStateOf(a?.kind ?: "alarm") }
     var hh by remember { mutableStateOf(a?.time?.hour ?: 7) }
@@ -299,7 +452,7 @@ private fun AlarmForm(a: AlarmDef?, onCancel: () -> Unit, onSave: (String, Strin
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
             Stepper("%02d".format(hh), { hh = (hh + 23) % 24 }, { hh = (hh + 1) % 24 })
             Text(":", color = C.text, fontSize = 36.sp, modifier = Modifier.padding(horizontal = 8.dp))
-            Stepper("%02d".format(mm), { mm = (mm + 55) % 60 }, { mm = (mm + 5) % 60 })
+            Stepper("%02d".format(mm), { mm = (mm + 59) % 60 }, { mm = (mm + 1) % 60 })
         }
         Muted("Tekrar", 13)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -317,12 +470,7 @@ private fun AlarmForm(a: AlarmDef?, onCancel: () -> Unit, onSave: (String, Strin
                 if (title.isBlank()) err = "Başlık yaz" else onSave(title, kind, t, days, date, a?.active ?: true)
             }, colors = ButtonDefaults.buttonColors(containerColor = C.accent)) { Text("Kaydet") }
             OutlinedButton(onClick = onCancel) { Text("Vazgeç") }
-            if (a != null && a.deletable) TextButton(onClick = {
-                scope.launch {
-                    val ok = withContext(Dispatchers.IO) { Alarms.delete(a.id) }
-                    if (ok) { Live.syncRequested = true; onCancel() } else err = "Silinemedi"
-                }
-            }) { Text("Sil", color = C.bad) }
+            if (a != null && a.deletable) TextButton(onClick = { onDelete(a) }) { Text("Sil", color = C.bad) }
         }
     }
 }

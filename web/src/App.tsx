@@ -17,62 +17,79 @@ import Events from "./pages/Events";
 import { MessagesChat, MessagesList } from "./pages/Messages";
 import { useFamily } from "./lib/family";
 import Settings from "./pages/Settings";
+import ChildSettings from "./pages/ChildSettings";
 import Tasks from "./pages/Tasks";
+import Agenda from "./pages/Agenda";
 import TaskEdit from "./pages/TaskEdit";
 import AppRuleEdit from "./pages/AppRuleEdit";
 import Vault from "./pages/Vault";
 import { Icon } from "./components/Icon";
-import { consumeKeyFromUrl, hasAccess, rememberAccess, tryKey } from "./lib/accessKey";
+import { authenticateBiometric, biometricEnabled } from "./lib/biometric";
 
 type Gate = "loading" | "pending" | "revoked" | "approved" | "error";
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
-  const [access, setAccess] = useState(hasAccess());
+  const [recovery, setRecovery] = useState(() => window.location.hash.includes("type=recovery"));
 
   useEffect(() => {
-    consumeKeyFromUrl().then((ok) => ok && setAccess(true));
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        rememberAccess();
-        setAccess(true);
-      }
       setSession(data.session);
     });
-    const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    const { data } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === "PASSWORD_RECOVERY") setRecovery(true);
+      setSession(s);
+    });
     return () => data.subscription.unsubscribe();
   }, []);
 
-  if (session === undefined) return access ? <Splash /> : <Blank onUnlock={() => setAccess(true)} />;
-  if (!session) return access ? <Login /> : <Blank onUnlock={() => setAccess(true)} />;
+  if (session === undefined) return <Splash />;
+  if (!session) return <Login />;
+  if (recovery) return <PasswordReset onDone={() => setRecovery(false)} />;
   return <DeviceGate key={session.user.id} userId={session.user.id} email={session.user.email ?? ""} />;
 }
 
-// Anahtarı bilmeyen ziyaretçi sadece boş bir sayfa görür.
-// Gizli giriş: ekranın sol üst köşesine 3 saniye basılı tut → anahtar alanı açılır.
-function Blank({ onUnlock }: { onUnlock: () => void }) {
-  const [show, setShow] = useState(false);
-  const [k, setK] = useState("");
-  const timer = useRef<ReturnType<typeof setTimeout>>();
-  const start = () => {
-    timer.current = setTimeout(() => setShow(true), 3000);
-  };
-  const stop = () => timer.current && clearTimeout(timer.current);
+function PasswordReset({ onDone }: { onDone: () => void }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setErr("");
+    setMsg("");
+    if (password.length < 6) return setErr("Şifre en az 6 karakter olmalı.");
+    if (password !== confirm) return setErr("Şifreler aynı değil.");
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ password });
+    setBusy(false);
+    if (error) return setErr(errorText(error));
+    setMsg("Şifren güncellendi. Panel açılıyor...");
+    setTimeout(onDone, 600);
+  }
+
   return (
-    <div className="blank">
-      <div className="blank-corner" onPointerDown={start} onPointerUp={stop} onPointerLeave={stop} onContextMenu={(e) => e.preventDefault()} />
-      {show && (
-        <form
-          className="blank-form"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            if (await tryKey(k)) onUnlock();
-            else setK("");
-          }}
-        >
-          <input type="password" value={k} onChange={(e) => setK(e.target.value)} autoFocus autoComplete="off" aria-label="Anahtar" />
-        </form>
-      )}
+    <div className="center-screen">
+      <form className="card narrow" onSubmit={save}>
+        <img src="/icon-192.png" alt="" width={64} height={64} />
+        <h1>Yeni şifre</h1>
+        <p className="muted">Orbit hesabın için yeni bir şifre belirle.</p>
+        <label className="field">
+          <span>Yeni şifre</span>
+          <input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        </label>
+        <label className="field">
+          <span>Yeni şifre tekrar</span>
+          <input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
+        </label>
+        {err && <p className="error">{err}</p>}
+        {msg && <p className="ok">{msg}</p>}
+        <button className="btn primary wide" disabled={busy}>
+          Şifreyi kaydet
+        </button>
+      </form>
     </div>
   );
 }
@@ -171,9 +188,68 @@ function DeviceGate({ userId, email }: { userId: string; email: string }) {
 }
 
 function Shell() {
+  return <BiometricGate><ShellContent /></BiometricGate>;
+}
+
+function BiometricGate({ children }: { children: React.ReactNode }) {
+  const [locked, setLocked] = useState(() => biometricEnabled());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const authenticating = useRef(false);
+
+  async function unlock() {
+    if (authenticating.current) return;
+    authenticating.current = true;
+    setBusy(true);
+    setErr("");
+    try {
+      if (await authenticateBiometric()) setLocked(false);
+      else setErr("Face ID doğrulaması yapılamadı.");
+    } catch {
+      setErr("Face ID doğrulaması iptal edildi veya başarısız oldu.");
+    }
+    setBusy(false);
+    authenticating.current = false;
+  }
+
+  useEffect(() => {
+    if (!biometricEnabled()) return;
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") setLocked(true);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    if (document.visibilityState === "visible") unlock();
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
+  if (!locked) return <>{children}</>;
+  return (
+    <div className="center-screen">
+      <div className="card narrow center">
+        <img src="/icon-192.png" alt="" width={64} height={64} />
+        <h1>Orbit kilitli</h1>
+        <p className="muted">Devam etmek için Face ID veya Touch ID kullan.</p>
+        {err && <p className="error">{err}</p>}
+        <button className="btn primary wide" onClick={unlock} disabled={busy}>{busy ? "Doğrulanıyor…" : "Face ID ile aç"}</button>
+      </div>
+    </div>
+  );
+}
+
+function ShellContent() {
   const fam = useFamily();
+  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <div className="shell">
+      <button className="menu-toggle" aria-label="Menüyü aç" onClick={() => setMenuOpen(true)}>☰</button>
+      {menuOpen && <div className="menu-backdrop" onClick={() => setMenuOpen(false)}><aside className="side-menu" onClick={(e) => e.stopPropagation()}>
+        <div className="side-menu-head"><b>Orbit</b><button className="icon-btn" onClick={() => setMenuOpen(false)} aria-label="Menüyü kapat">×</button></div>
+        <div className="side-menu-list">
+          <button className={fam.selectedChildId === "all" ? "selected" : ""} onClick={() => { fam.setSelectedChildId("all"); setMenuOpen(false); }}>Tümü</button>
+          {fam.children.map((c) => <button key={c.id} className={fam.selectedChildId === c.id ? "selected" : ""} onClick={() => { fam.setSelectedChildId(c.id); setMenuOpen(false); }}><span className="dot" style={{ background: c.color }} />{c.name}</button>)}
+        </div>
+        <div className="side-menu-bottom"><NavLink to="/settings" onClick={() => setMenuOpen(false)} aria-label="Web sayfası ayarları"><Icon name="gear" /></NavLink></div>
+      </aside></div>}
       <main className="content">
         <Routes>
           <Route path="/" element={<Home />} />
@@ -192,10 +268,12 @@ function Shell() {
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/tasks/new" element={<TaskEdit />} />
           <Route path="/tasks/:id" element={<TaskEdit />} />
+          <Route path="/agenda" element={<Agenda />} />
           <Route path="/events" element={<Events />} />
           <Route path="/messages" element={<MessagesList />} />
           <Route path="/messages/:id" element={<MessagesChat />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/child-settings" element={<ChildSettings />} />
         </Routes>
       </main>
       <nav className="tabbar">
@@ -206,6 +284,10 @@ function Shell() {
         <NavLink to="/tasks">
           <Icon name="tasks" />
           <span>Görevler</span>
+        </NavLink>
+        <NavLink to="/agenda">
+          <Icon name="calendar" />
+          <span>Ajanda</span>
         </NavLink>
         <NavLink to="/messages">
           <Icon name="chat" />
@@ -220,7 +302,7 @@ function Shell() {
           <Icon name="bell" />
           <span>Olaylar</span>
         </NavLink>
-        <NavLink to="/settings">
+        <NavLink to="/child-settings">
           <Icon name="gear" />
           <span>Ayarlar</span>
         </NavLink>

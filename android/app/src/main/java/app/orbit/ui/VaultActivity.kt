@@ -57,6 +57,7 @@ class VaultActivity : ComponentActivity() {
     private var editing by mutableStateOf<Vault.Entry?>(null)
     private var msg by mutableStateOf("")
     private var busy by mutableStateOf(false)
+    private var deleteArmed: String? by mutableStateOf(null)
     private val revealed = mutableStateMapOf<String, Boolean>()
     private val handler = Handler(Looper.getMainLooper())
 
@@ -134,7 +135,9 @@ class VaultActivity : ComponentActivity() {
                 null -> Muted(if (busy) "Açılıyor…" else "")
                 Vault.State.None -> Card {
                     Title("Kasa henüz yok")
-                    Muted("Uygulama hesaplarının kullanıcı adı ve şifrelerini burada saklayabilirsin. Sadece sen ve ebeveynlerin görebilir.")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Info("Uygulama hesaplarının kullanıcı adı ve şifrelerini burada saklayabilirsin. Sadece sen ve ebeveynlerin görebilir.")
+                    }
                     Button(onClick = {
                         busy = true
                         lifecycleScope.launch {
@@ -145,7 +148,9 @@ class VaultActivity : ComponentActivity() {
                 }
                 Vault.State.Locked -> Card {
                     Title("Kasa anahtarı bekleniyor")
-                    Muted("Ebeveynin panelde \"Şifreler\" sayfasını açınca kasa bu telefona da açılır.")
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Info("Ebeveynin panelde \"Şifreler\" sayfasını açınca kasa bu telefona da açılır.")
+                    }
                     OutlinedButton(onClick = { load() }) { Text("Tekrar dene") }
                 }
                 is Vault.State.Open -> {
@@ -182,11 +187,12 @@ class VaultActivity : ComponentActivity() {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = { editing = x }) { Text("Düzenle") }
                 TextButton(onClick = {
-                    lifecycleScope.launch {
+                    if (deleteArmed == x.id) lifecycleScope.launch {
                         withContext(Dispatchers.IO) { runCatching { Vault.remove(x.id!!) } }
+                        deleteArmed = null
                         load()
-                    }
-                }) { Text("Sil", color = C.bad) }
+                    } else deleteArmed = x.id
+                }) { Text(if (deleteArmed == x.id) "Tekrar bas: sil" else "Sil", color = C.bad) }
             }
         }
     }

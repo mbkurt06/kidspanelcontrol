@@ -1,5 +1,6 @@
 package app.orbit.ui
 
+import androidx.activity.compose.BackHandler
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.background
@@ -68,13 +69,14 @@ import org.json.JSONObject
 enum class Screen(val icon: String, val title: String) {
     TODAY("🏠", "Bugün"),
     TASKS("✅", "Görevlerim"),
+    AGENDA("🗓", "Ajanda"),
     MESSAGES("💬", "Mesajlar"),
     TIMER("⏱", "Sayaç"),
     ALARMS("⏰", "Alarmlarım"),
     MUSIC("🎵", "Müzik"),
-    DAY("🗓", "Günüm"),
     WALLET("⏳", "Süre cüzdanı"),
     ASK("🙋", "Ebeveynden iste"),
+    PROFILE("👤", "Profil"),
     VAULT("🔑", "Şifrelerim"),
     ABOUT("ℹ️", "Hakkında"),
 }
@@ -91,24 +93,43 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
     val messages by app.orbit.data.Messages.list.collectAsState()
     val unreadMsgs = messages.count { it.fromParent && !it.read }
     val live by Live.state.collectAsState()
+    val profileRules = remember(live.lastSync) { Store.rules() }
     val openTasks = remember(live.lastSync, live.snapshot?.now?.minute) { Tasks.current().count { it.open } }
+    val focusNow = remember(live.lastSync, live.snapshot?.now?.minute) { app.orbit.data.Timers.activeFocus() }
+    val taskScreenSets = profileRules.taskRestrictions.filter { it.active && it.screens.isNotEmpty() }.map { it.screens }
+    val taskScreens = taskScreenSets.reduceOrNull { a, b -> a intersect b }
     // Tam kilit: sadece izin verilen ekranlar
     val kiosk = live.kiosk
-    fun visible(s: Screen) = kiosk == null || s == Screen.TODAY || (s != Screen.ABOUT && s.kioskKey() in kiosk.screens)
-    LaunchedEffect(kiosk?.screens) { if (!visible(screen)) screen = Screen.TODAY }
+    fun visible(s: Screen) =
+        (kiosk == null || s == Screen.TODAY || (s != Screen.ABOUT && s.kioskKey() in kiosk.screens)) &&
+            (focusNow == null || focusNow.screens.isEmpty() || s == Screen.TODAY || s.kioskKey() in focusNow.screens) &&
+            (taskScreens == null || s == Screen.TODAY || s.kioskKey() in taskScreens)
+    LaunchedEffect(kiosk?.screens, taskScreens) { if (!visible(screen)) screen = Screen.TODAY }
     var pinOpen by remember { mutableStateOf(false) }
     if (pinOpen) PinDialog { pinOpen = false }
+    BackHandler(enabled = drawer.isOpen || screen != Screen.TODAY) {
+        if (drawer.isOpen) scope.launch { drawer.close() } else screen = Screen.TODAY
+    }
 
     ModalNavigationDrawer(
         drawerState = drawer,
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = C.surface) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(Store.childName.ifBlank { "Orbit" }, color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                    Muted(if (live.online) "bağlı" else "çevrimdışı", 12)
+                Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable {
+                            screen = Screen.PROFILE
+                            scope.launch { drawer.close() }
+                        }.padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        OrbitAvatar(profileRules.profileAvatar, Modifier.size(46.dp))
+                        Spacer(Modifier.width(10.dp))
+                        Text(Store.childName.ifBlank { "Orbit" }, color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    }
                     Spacer(Modifier.height(12.dp))
-                    val focusNow = remember(live.lastSync, live.snapshot?.now?.minute) { app.orbit.data.Timers.activeFocus() }
                     for (s in Screen.entries) {
+                        if (s == Screen.PROFILE) continue
                         if (!visible(s)) continue
                         if (s == Screen.MESSAGES && focusNow?.messagesAllowed == false) continue
                         val on = s == screen
@@ -162,10 +183,16 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                     Modifier.size(48.dp).clip(CircleShape).clickable { scope.launch { drawer.open() } },
                     contentAlignment = Alignment.Center,
                 ) { Text("☰", color = C.text, fontSize = 24.sp) }
-                Text(
-                    if (screen == Screen.TODAY) Store.childName.ifBlank { "Orbit" } else screen.title,
-                    color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
-                )
+                if (screen == Screen.TODAY) {
+                    OrbitAvatar(
+                        profileRules.profileAvatar,
+                        Modifier.size(36.dp).clickable { screen = Screen.PROFILE },
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(Store.childName.ifBlank { "Orbit" }, color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                } else {
+                    Text(screen.title, color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                }
                 if (screen != Screen.MESSAGES && unreadMsgs > 0 && visible(Screen.MESSAGES)) {
                     Box(Modifier.clip(RoundedCornerShape(12.dp)).clickable { screen = Screen.MESSAGES }.padding(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) { Text("💬", fontSize = 16.sp); Spacer(Modifier.width(4.dp)); Badge(unreadMsgs) }
@@ -187,22 +214,32 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                 } else MessagesScreen()
                 return@Column
             }
-            Column(
+            if (screen == Screen.AGENDA || screen == Screen.ALARMS || screen == Screen.TIMER) {
+                Box(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+                    when (screen) {
+                        Screen.AGENDA -> AgendaScreen()
+                        Screen.ALARMS -> AlarmsScreen()
+                        Screen.TIMER -> TimerScreen()
+                        else -> Unit
+                    }
+                }
+            } else Column(
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 when (screen) {
                     Screen.TODAY -> if (kiosk != null) KioskToday(kiosk) { screen = it } else TodayScreen { if (visible(it)) screen = it }
                     Screen.TASKS -> TasksCard(remember(live.lastSync, live.snapshot?.now?.minute) { Tasks.current() })
-                    Screen.DAY -> DayScreen()
                     Screen.WALLET -> WalletScreen()
                     Screen.ASK -> AskScreen()
+                    Screen.PROFILE -> ProfileScreen()
                     Screen.ABOUT -> AboutScreen()
                     Screen.VAULT -> VaultScreen(onCancel = { screen = Screen.TODAY })
                     Screen.MESSAGES -> Unit
                     Screen.TIMER -> TimerScreen()
-                    Screen.ALARMS -> AlarmsScreen()
                     Screen.MUSIC -> MusicScreen()
+                    Screen.AGENDA -> Unit
+                    Screen.ALARMS -> Unit
                 }
             }
         }
@@ -281,7 +318,7 @@ private fun TodayScreen(go: (Screen) -> Unit) {
     }
     if (next != null) {
         Row(
-            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).clickable { go(Screen.DAY) }.padding(14.dp),
+            Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).padding(14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(next.icon ?: "⏭", fontSize = 22.sp)
@@ -353,30 +390,31 @@ private fun NowCard(s: Snapshot) {
             }
         }
         message?.let { Text(it, color = C.text, fontSize = 16.sp) }
-        if (!s.locked && !(s.sectionMode && s.sectionClosed)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val frac = if (unlimited) 1f else if (s.allowanceMinutes > 0) s.remainingSeconds / (s.allowanceMinutes * 60f) else 0f
-                Ring(frac, if (unlimited || s.remainingSeconds > 600) C.blue else C.warn, 110.dp) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(if (unlimited) "∞" else minutesText(s.remainingSeconds / 60), color = C.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Muted(if (unlimited) "sınırsız" else "kaldı", 12)
-                    }
-                }
-                Spacer(Modifier.width(16.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (s.sectionMode) {
-                        s.sectionLeftSeconds?.let { Muted("Bu bölümde: ${minutesText(it / 60)}") }
-                        if (s.poolLeftSeconds > 0) Muted("Ekstra süre: ${minutesText(s.poolLeftSeconds / 60)}")
-                        s.capLeftSeconds?.let { Muted("Bugün en fazla: ${minutesText(it / 60)} daha") }
-                    } else {
-                        Muted("Bugünkü hak: ${minutesText(s.allowanceMinutes.toLong())}")
-                        if (s.extraMinutesToday != 0) Muted("Ekstra: ${minutesText(s.extraMinutesToday.toLong())}")
-                    }
-                    Muted("Bugün kullanılan: ${minutesText(s.usedMinutes.toLong())}")
-                    s.modeRemainingSeconds?.let { Muted("Durum süresi: ${minutesText(it / 60)}") }
+        // Kilitli ekranda da gün özeti görünür; çocuk kalan ve toplam kullanılan süreyi görebilir.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val frac = if (unlimited) 1f else if (s.allowanceMinutes > 0) s.remainingSeconds / (s.allowanceMinutes * 60f) else 0f
+            Ring(frac, if (unlimited || s.remainingSeconds > 600) C.blue else C.warn, 110.dp) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(if (unlimited) "∞" else minutesText(s.remainingSeconds / 60), color = C.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Muted(if (unlimited) "sınırsız" else "kaldı", 12)
                 }
             }
-        } else if (s.sectionMode && s.sectionClosed) {
+            Spacer(Modifier.width(16.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Muted(if (unlimited) "Bugün kalan: sınırsız" else "Bugün kalan: ${minutesText(s.remainingSeconds / 60)}")
+                Muted("Toplam kullanılan: ${minutesText(s.usedMinutes.toLong())}")
+                if (s.sectionMode) {
+                    s.sectionLeftSeconds?.let { Muted("Bu bölümde: ${minutesText(it / 60)}") }
+                    if (s.poolLeftSeconds > 0) Muted("Ekstra süre: ${minutesText(s.poolLeftSeconds / 60)}")
+                    s.capLeftSeconds?.let { Muted("Bugün en fazla: ${minutesText(it / 60)} daha") }
+                } else {
+                    Muted("Bugünkü hak: ${minutesText(s.allowanceMinutes.toLong())}")
+                    if (s.extraMinutesToday != 0) Muted("Ekstra: ${minutesText(s.extraMinutesToday.toLong())}")
+                }
+                s.modeRemainingSeconds?.let { Muted("Durum süresi: ${minutesText(it / 60)}") }
+            }
+        }
+        if (s.sectionMode && s.sectionClosed) {
             Muted("Şu an sadece her zaman açık uygulamalar kullanılabilir.")
         }
     }
@@ -455,7 +493,7 @@ private fun WalletScreen() {
     val maxUse = minOf(walletTotal, limitLeft ?: walletTotal)
     var busy by remember { mutableStateOf(false) }
     Card {
-        Title("Cüzdanım")
+        Row(verticalAlignment = Alignment.CenterVertically) { Title("Cüzdanım"); Spacer(Modifier.width(6.dp)); Info("Cüzdandaki süreyi çocuk kullanabilir; yalnızca izin verilen saatlerde ve günlük sınır içinde geçerlidir.") }
         if (s.walletGrants.isEmpty()) {
             Muted("Cüzdanında süre yok. Görevlerini yaparak süre kazanabilirsin.")
         } else {
@@ -494,14 +532,14 @@ private fun WalletScreen() {
     }
     if (vaultMin > 0) {
         Card {
-            Title("Süre kasası")
+            Row(verticalAlignment = Alignment.CenterVertically) { Title("Süre kasası"); Spacer(Modifier.width(6.dp)); Info("Bu süre ebeveyn tarafından daha sonra bir güne veya bölüme aktarılır.") }
             Text(minutesText(vaultMin.toLong()), color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Muted("Kazandığın bu süre ebeveyninde. Ne zaman kullanacağını o planlayacak.")
         }
     }
     if (today.isNotEmpty()) {
         Card {
-            Title("Bugünkü ekstra süreler")
+            Row(verticalAlignment = Alignment.CenterVertically) { Title("Bugünkü ekstra süreler"); Spacer(Modifier.width(6.dp)); Info("Bugün için açılmış ek sürelerin kısa dökümü.") }
             for (g in today) {
                 val where = when {
                     g.window != null -> "${hm(g.window.start)}–${hm(g.window.end)} arası"
@@ -574,5 +612,10 @@ private fun AboutScreen() {
         Muted("Cihaz yöneticisi: " + if (Policy.isOwner(ctx)) "evet" else "hayır")
         Muted("Kullanım erişimi: " + if (Policy.hasUsageAccess(ctx)) "açık" else "kapalı")
         Updater.status().takeIf { it.isNotBlank() }?.let { Muted("Güncelleme: $it") }
+        Muted(
+            "Son güncelleme: " + if (Store.lastUpdateAt > 0) {
+                java.text.SimpleDateFormat("dd.MM.yyyy · HH:mm", java.util.Locale("tr", "TR")).format(java.util.Date(Store.lastUpdateAt))
+            } else "henüz yok",
+        )
     }
 }

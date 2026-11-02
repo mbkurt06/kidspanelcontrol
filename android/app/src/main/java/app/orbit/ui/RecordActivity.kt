@@ -105,7 +105,9 @@ class RecordActivity : ComponentActivity() {
         Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("📹 ${t.title}", color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Text("${t.recordMinutes} dakika kayıt", color = C.accent, fontSize = 18.sp)
-            Muted("Telefonu sabit bir yere koy; kamera seni ve çalıştığın yeri görsün. Kayıt sırasında diğer uygulamalar kapalı olur.")
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Info("Telefonu sabit bir yere koy; kamera seni ve çalıştığın yeri görsün. Kayıt sırasında diğer uygulamalar kapalı olur.")
+            }
             Muted(
                 when (t.recordPause) {
                     "none" -> "Bu görevde mola yok."

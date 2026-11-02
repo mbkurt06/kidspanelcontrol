@@ -23,7 +23,7 @@ object TaskAlerts {
             val reward = t.rewardMinutes?.let { " (+$it dk)" } ?: ""
             when {
                 before == null && t.open ->
-                    Notifier.show(Notifier.CH_TASKS, id, "📋 Yeni görev", t.title + reward + (if (t.mandatory) " · zorunlu" else ""), "TASKS")
+                    Notifier.show(Notifier.CH_TASKS, id, "📋 Yeni görev", t.title + reward, "TASKS")
                 t.status == "approved" ->
                     Notifier.show(Notifier.CH_TASKS, id, "✅ Onaylandı", t.title + (t.rewardMinutes?.let { " · +$it dk kazandın" } ?: "") + (t.rewardText?.let { " · $it" } ?: ""), "TASKS")
                 t.status == "rejected" ->

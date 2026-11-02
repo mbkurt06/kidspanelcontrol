@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -159,7 +160,8 @@ fun MusicScreen() {
                 dragging?.let { f -> Music.controllerOrNull()?.seekTo((f * dur).toLong()) }
                 dragging = null
             },
-            colors = SliderDefaults.colors(thumbColor = C.accent, activeTrackColor = C.accent),
+            modifier = Modifier.fillMaxWidth().height(24.dp),
+            colors = SliderDefaults.colors(thumbColor = C.accent, activeTrackColor = C.accent, inactiveTrackColor = C.surface2),
         )
         Row(Modifier.fillMaxWidth()) {
             Muted(mmss(pos), 12)
@@ -216,7 +218,9 @@ fun MusicScreen() {
             }
         }
         if (selectedPlaylist != null) {
-            Muted("Seçili listeye şarkı eklemek için aşağıdaki şarkıların ＋ düğmesine dokun. Uzun basıp sürükleyerek sırala.", 12)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Info("Seçili listeye şarkı eklemek için aşağıdaki şarkıların ＋ düğmesine dokun. Uzun basıp sürükleyerek sırala.")
+            }
             playlistSongs.forEachIndexed { index, track ->
                 PlaylistTrackRow(track, index, onMove = { from, to ->
                     if (to in playlistSongs.indices) playlistSongs = playlistSongs.toMutableList().also { it.add(to, it.removeAt(from)) }
@@ -232,7 +236,9 @@ fun MusicScreen() {
 
     if (missingTracks.isNotEmpty()) Card {
         Title("Eksik dosyalar")
-        Muted("SD karttan silinen şarkılar burada tutulur; kaldırınca playlist kayıtlarından da çıkar.", 12)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Info("SD karttan silinen şarkılar burada tutulur; kaldırınca playlist kayıtlarından da çıkar.")
+        }
         missingTracks.forEach { missing ->
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("⚠️ ${missing.label}", color = C.text, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -340,11 +346,11 @@ private fun PlaylistTrackRow(track: Track, index: Int, onMove: (Int, Int) -> Uni
 @Composable
 private fun CtlButton(label: String, on: Boolean = false, big: Boolean = false, onClick: () -> Unit) {
     Column(
-        Modifier.size(if (big) 64.dp else 48.dp).clip(CircleShape).background(if (big) C.accent else if (on) C.surface2 else Color.Transparent)
+        Modifier.size(if (big) 58.dp else 42.dp).clip(CircleShape).background(if (big) C.accent else if (on) C.surface2 else Color.Transparent)
             .clickable(onClick = onClick),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
-    ) { Text(label, fontSize = if (big) 26.sp else 20.sp) }
+    ) { Text(label, fontSize = if (big) 24.sp else 18.sp) }
 }
 
 @Composable

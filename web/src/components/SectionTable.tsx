@@ -4,6 +4,7 @@ import { errorText, supabase } from "../lib/supabase";
 import { hhmm, minutesText } from "../lib/util";
 import { RULE_LABEL, type Profile, type SecRule, type Section, type SectionRule } from "../lib/types";
 import { Icon } from "./Icon";
+import { Info } from "./Info";
 
 type AppInfo = { package: string; label: string };
 
@@ -154,10 +155,7 @@ export function SectionTable({ profile, sections }: { profile: Profile; sections
           </tbody>
         </table>
       </div>
-      <p className="muted tiny">
-        "—" = kural yok: grup için o bölümün "Diğer uygulamalar" kuralı, istisna için grubunun kuralı geçerli. Süreli uygulamalar bölüm
-        süresinden düşer; hücreye sınır yazarsan o grup/uygulama o bölümde en fazla o kadar kullanılır.
-      </p>
+      <p className="muted tiny"><Info>— kural yok demektir. Süreli uygulamalar bölüm süresinden düşer; hücreye sınır yazarsan o grup veya uygulama o bölümde en fazla o kadar kullanılır.</Info></p>
       <div className="row gap-s wrap">
         <select value={addPkg} onChange={(e) => setAddPkg(e.target.value)} aria-label="İstisna için uygulama">
           <option value="">Uygulamaya özel kural (istisna) ekle…</option>

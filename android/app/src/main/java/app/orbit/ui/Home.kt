@@ -95,13 +95,15 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
     val live by Live.state.collectAsState()
     val profileRules = remember(live.lastSync) { Store.rules() }
     val openTasks = remember(live.lastSync, live.snapshot?.now?.minute) { Tasks.current().count { it.open } }
+    val focusNow = remember(live.lastSync, live.snapshot?.now?.minute) { app.orbit.data.Timers.activeFocus() }
     // Tam kilit: sadece izin verilen ekranlar
     val kiosk = live.kiosk
-    fun visible(s: Screen) = kiosk == null || s == Screen.TODAY || (s != Screen.ABOUT && s.kioskKey() in kiosk.screens)
+    fun visible(s: Screen) =
+        (kiosk == null || s == Screen.TODAY || (s != Screen.ABOUT && s.kioskKey() in kiosk.screens)) &&
+            (focusNow == null || focusNow.screens.isEmpty() || s == Screen.TODAY || s.kioskKey() in focusNow.screens)
     LaunchedEffect(kiosk?.screens) { if (!visible(screen)) screen = Screen.TODAY }
     var pinOpen by remember { mutableStateOf(false) }
     if (pinOpen) PinDialog { pinOpen = false }
-    val canEditProfile = live.snapshot?.let { it.parentMode || (!it.locked && it.remainingSeconds > 0) } == true
     BackHandler(enabled = drawer.isOpen || screen != Screen.TODAY) {
         if (drawer.isOpen) scope.launch { drawer.close() } else screen = Screen.TODAY
     }
@@ -111,17 +113,18 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = C.surface) {
                 Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable {
+                            screen = Screen.PROFILE
+                            scope.launch { drawer.close() }
+                        }.padding(vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         OrbitAvatar(profileRules.profileAvatar, Modifier.size(46.dp))
                         Spacer(Modifier.width(10.dp))
                         Text(Store.childName.ifBlank { "Orbit" }, color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     }
-                    Box(
-                        Modifier.size(10.dp).clip(CircleShape)
-                            .background(if (live.online) C.good else C.bad),
-                    )
                     Spacer(Modifier.height(12.dp))
-                    val focusNow = remember(live.lastSync, live.snapshot?.now?.minute) { app.orbit.data.Timers.activeFocus() }
                     for (s in Screen.entries) {
                         if (s == Screen.PROFILE) continue
                         if (!visible(s)) continue
@@ -180,7 +183,7 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                 if (screen == Screen.TODAY) {
                     OrbitAvatar(
                         profileRules.profileAvatar,
-                        Modifier.size(36.dp).then(if (canEditProfile) Modifier.clickable { screen = Screen.PROFILE } else Modifier),
+                        Modifier.size(36.dp).clickable { screen = Screen.PROFILE },
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(Store.childName.ifBlank { "Orbit" }, color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))

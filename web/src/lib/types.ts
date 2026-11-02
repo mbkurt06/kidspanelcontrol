@@ -121,7 +121,7 @@ export type SectionRule = {
 
 export type GroupLimit = { profile_id: string; group_id: string; daily_minutes: number };
 
-export const RULE_LABEL: Record<SecRule, string> = { open: "Açık", timed: "Süreli", blocked: "Kapalı" };
+export const RULE_LABEL: Record<SecRule, string> = { open: "Açık", timed: "Sınırlı", blocked: "Kilitli" };
 
 export type Profile = {
   id: string;
@@ -388,6 +388,7 @@ export type FocusProfile = {
   allowed_packages: string[];
   messages_allowed: boolean;
   calls_allowed: boolean;
+  allowed_screens: string[];
   sort_order: number;
 };
 

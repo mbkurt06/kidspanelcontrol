@@ -7,6 +7,17 @@ import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
 
 type AppRow = { package: string; label: string };
+const MENU_OPTIONS: [string, string][] = [
+  ["tasks", "✅ Görevler"],
+  ["agenda", "🗓 Ajanda"],
+  ["timer", "⏱ Sayaç"],
+  ["alarms", "⏰ Hatırlatıcılar"],
+  ["messages", "💬 Mesajlar"],
+  ["music", "🎵 Müzik"],
+  ["wallet", "⏳ Süre cüzdanı"],
+  ["ask", "🙋 Ebeveynden iste"],
+  ["vault", "🔑 Şifreler"],
+];
 
 /** Odak profili düzenleme: sayaç çalışırken telefonda ne açık kalsın (kuralların üstüne sadece kısıtlar). */
 export function FocusEdit() {
@@ -48,6 +59,7 @@ export function FocusEdit() {
         icon: p!.icon || null,
         allowed_groups: p!.allowed_groups,
         allowed_packages: p!.allowed_packages,
+        allowed_screens: p!.allowed_screens,
         messages_allowed: p!.messages_allowed,
         calls_allowed: p!.calls_allowed,
       })
@@ -84,6 +96,20 @@ export function FocusEdit() {
           <input className="grow" value={p.name} onChange={(e) => setP({ ...p, name: e.target.value })} aria-label="Ad" />
         </div>
         <h2 className="section-title">Odak profili <Info>Sayaç bu profille çalışırken yalnızca aşağıda seçtiklerin açık kalır. Mevcut kuralları gevşetmez.</Info></h2>
+      </div>
+      <div className="card">
+        <h2>Orbit menüleri</h2>
+        <p className="muted small">Sayaç bu profille çalışırken yalnızca seçtiğin menüler görünür. Hiçbiri seçilmezse tüm menüler açık kalır.</p>
+        {MENU_OPTIONS.map(([key, label]) => (
+          <label className="check" key={key}>
+            <input
+              type="checkbox"
+              checked={p.allowed_screens.includes(key)}
+              onChange={() => setP({ ...p, allowed_screens: p.allowed_screens.includes(key) ? p.allowed_screens.filter((x) => x !== key) : [...p.allowed_screens, key] })}
+            />
+            {label}
+          </label>
+        ))}
       </div>
       <div className="card">
         <h2>Açık kalacak gruplar</h2>

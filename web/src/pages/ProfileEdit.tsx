@@ -55,7 +55,8 @@ function SectionsEditor({ profile, sections }: { profile: Profile; sections: Sec
 
   async function remove(s: Section) {
     if (!confirm(`"${s.name}" bölümü silinsin mi? Bu bölümdeki kurallar da silinir.`)) return;
-    await supabase.from("profile_sections").delete().eq("id", s.id);
+    const { error } = await supabase.from("profile_sections").delete().eq("id", s.id);
+    if (error) return setErr(errorText(error));
     fam.reload();
   }
 
@@ -123,11 +124,11 @@ function SectionsEditor({ profile, sections }: { profile: Profile; sections: Sec
             </label>
 
             <label className="row gap-xs">
-              <span className="muted small">Diğer uygulamalar:</span>
+              <span className="muted small">Bu saatlerde:</span>
               <select value={s.default_rule} onChange={(e) => patch(s, { default_rule: e.target.value as SecRule })}>
                 {(["open", "timed", "blocked"] as SecRule[]).map((r) => (
                   <option key={r} value={r}>
-                    {RULE_LABEL[r]}
+                  {RULE_LABEL[r]}
                   </option>
                 ))}
               </select>

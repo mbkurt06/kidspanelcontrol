@@ -108,7 +108,8 @@ export function RuleCard({ r, kinds, open, onToggle, onErr }: { r: TimeRule; kin
   }
   async function remove() {
     if (!confirm(`"${r.name}" silinsin mi?`)) return;
-    await supabase.from("time_rules").delete().eq("id", r.id);
+    const { error } = await supabase.from("time_rules").delete().eq("id", r.id);
+    if (error) return onErr(errorText(error));
     fam.reload();
   }
   function setRepeat(v: Repeat) {

@@ -212,6 +212,7 @@ function AppsTab({ childId }: { childId: string }) {
   const [apps, setApps] = useState<ChildApp[] | null>(null);
   const [q, setQ] = useState("");
   const [showSystem, setShowSystem] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
   const [err, setErr] = useState("");
   const [pendingGroup, setPendingGroup] = useState<Record<string, string>>({});
 
@@ -321,11 +322,21 @@ function AppsTab({ childId }: { childId: string }) {
         if (!list.length) return null;
         return (
           <div className="card" key={g.id || "none"}>
-            <h2>
+            <div
+              className="row between link-card group-toggle"
+              onClick={() => setOpenGroups((m) => ({ ...m, [g.id]: !(m[g.id] ?? true) }))}
+              aria-expanded={openGroups[g.id] ?? true}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && setOpenGroups((m) => ({ ...m, [g.id]: !(m[g.id] ?? true) }))}
+            >
+              <span>
               <span className="dot" style={{ background: g.color }} /> {g.name} <span className="muted small">· {list.length}</span>
               <Info>Günlük sınır girilirse bu uygulama, kuralların izin verdiği toplam süreden ayrıca bu dakika kadar kullanılır.</Info>
-            </h2>
-            {list.map((a) => (
+              </span>
+              <Icon name="chevron" size={18} />
+            </div>
+            {(openGroups[g.id] ?? true) && list.map((a) => (
               <div className="app-setting-row" key={a.package}>
                 <div className="app-setting-controls">
                   {groupSelect(fam.members[a.package] ?? "", (v) => setGroup(a.package, v))}

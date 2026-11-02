@@ -16,6 +16,7 @@ import {
   type TimerSession,
 } from "../lib/types";
 import { Icon } from "../components/Icon";
+import { Info } from "../components/Info";
 
 const DAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 const STATUS: Record<TimerSession["status"], string> = { running: "çalışıyor", paused: "molada", done: "tamamlandı", stopped: "erken bitti", cancelled: "iptal" };
@@ -26,7 +27,7 @@ export default function TimerTab({ childId, only }: { childId: string; only?: "a
   return (
     <div className="stack">
       {!only && <><LiveTimer childId={childId} /><StartTimer childId={childId} /><Report childId={childId} /></>}
-      <AlarmsCard childId={childId} />
+      {only && <AlarmsCard childId={childId} />}
     </div>
   );
 }
@@ -135,8 +136,8 @@ function StartTimer({ childId }: { childId: string }) {
   if (fam.timers[childId]) return null;
   if (!open)
     return (
-      <button className="btn primary wide" onClick={() => setOpen(true)}>
-        ⏱ {child.name} için sayaç başlat
+      <button className="timer-fab" aria-label={`${child.name} için sayaç başlat`} onClick={() => setOpen(true)}>
+        +
       </button>
     );
 
@@ -406,7 +407,7 @@ function AlarmsCard({ childId }: { childId: string }) {
   return (
     <div className="card">
       <div className="row between">
-        <h2>Hatırlatıcılar</h2>
+        <h2>Hatırlatıcılar <Info>Alarm tam ekran ve sesli çalışır; hatırlatıcı yalnızca bildirim gönderir.</Info></h2>
         {!edit && (
           <button className="btn small" onClick={() => setEdit(emptyAlarm(childId, child.family_id))}>
             <Icon name="plus" size={16} /> Yeni

@@ -14,6 +14,7 @@ data class FocusProfile(
     val packages: Set<String>,
     val messagesAllowed: Boolean,
     val callsAllowed: Boolean,
+    val screens: Set<String>,
 )
 
 data class ActivityDef(val id: String, val name: String, val icon: String?, val defaultFocusId: String?)
@@ -72,6 +73,7 @@ object Timers {
                 o.getString("id"), o.optString("name"), o.s("icon"),
                 strings(o.optJSONArray("allowed_groups")).toSet(), strings(o.optJSONArray("allowed_packages")).toSet(),
                 o.optBoolean("messages_allowed", true), o.optBoolean("calls_allowed", true),
+                strings(o.optJSONArray("allowed_screens")).toSet(),
             )
         }
     }

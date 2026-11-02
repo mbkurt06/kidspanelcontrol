@@ -19,7 +19,7 @@ export function Info({ children }: { children: ReactNode }) {
   }, [open]);
   return (
     <span className="info-wrap" data-open={open} ref={ref}>
-      <button type="button" className="info-btn" aria-label="Bilgi" onClick={() => setOpen((v) => !v)}>
+      <button type="button" className="info-btn" aria-label="Bilgi" onClick={(e) => { e.stopPropagation(); setOpen((v) => !v); }}>
         i
       </button>
       <span className="info-popover" role="tooltip" onClick={(e) => e.stopPropagation()}>{children}</span>

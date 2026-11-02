@@ -115,6 +115,7 @@ fun TimerScreen() {
     val profiles = remember(live.lastSync) { Timers.profiles() }
     var msg by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var creating by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf<List<TimerSession>>(emptyList()) }
     LaunchedEffect(live.lastSync) { history = withContext(Dispatchers.IO) { Timers.today() } }
 
@@ -132,6 +133,11 @@ fun TimerScreen() {
     val s0 = live.snapshot
     val canPickFocus = s0 != null && !s0.locked && !(s0.sectionMode && s0.sectionClosed)
 
+    Box(Modifier.fillMaxSize()) {
+    Column(
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 84.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
     if (active != null) {
         RunningTimerCard(active)
         val counts = Timers.currentCounts(active.id)
@@ -161,7 +167,7 @@ fun TimerScreen() {
                 }
             }
         }
-    } else {
+    } else if (creating) {
         var activity by remember { mutableStateOf<String?>(null) }
         var title by remember { mutableStateOf("") }
         var minutes by remember { mutableStateOf<Int?>(25) }
@@ -202,6 +208,8 @@ fun TimerScreen() {
             modifier = Modifier.fillMaxWidth().height(56.dp),
             colors = ButtonDefaults.buttonColors(containerColor = C.accent),
         ) { Text("Başlat", fontSize = 18.sp) }
+    } else {
+        Muted("Sayaç başlatmak için sağ alttaki + işaretine bas.", 14)
     }
     if (msg.isNotEmpty()) Text(msg, color = C.good)
 
@@ -223,6 +231,17 @@ fun TimerScreen() {
             }
             Muted("Toplam: ${done.filter { it.status != "cancelled" }.sumOf { it.focusedSeconds + it.awaySeconds } / 60} dk", 13)
         }
+    }
+    }
+    if (active == null) {
+        FloatingActionButton(
+            onClick = { creating = true },
+            shape = CircleShape,
+            containerColor = C.accent,
+            contentColor = C.text,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).size(56.dp),
+        ) { Text("+", fontSize = 24.sp) }
+    }
     }
 }
 

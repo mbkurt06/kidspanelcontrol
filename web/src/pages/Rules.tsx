@@ -155,6 +155,7 @@ export default function Rules() {
                 {f.allowed_groups.length + f.allowed_packages.length
                   ? `${f.allowed_groups.length} grup, ${f.allowed_packages.length} uygulama açık`
                   : "hiçbir uygulama açık değil"}
+                {f.allowed_screens.length ? ` · ${f.allowed_screens.length} Orbit menüsü` : ""}
                 {" · "}
                 {f.messages_allowed ? "mesaj açık" : "mesaj kapalı"}
                 {f.calls_allowed ? "" : " · arama kapalı"}

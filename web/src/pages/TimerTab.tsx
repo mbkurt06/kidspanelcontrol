@@ -264,20 +264,24 @@ function StartTimer({ childId }: { childId: string }) {
 
 function Report({ childId }: { childId: string }) {
   const fam = useFamily();
-  const [range, setRange] = useState<"today" | "week">("today");
+  const [range, setRange] = useState<"today" | "week" | "month" | "custom">("today");
+  const [fromDate, setFromDate] = useState(todayISO("Europe/Berlin", -29));
+  const [toDate, setToDate] = useState(todayISO());
   const [rows, setRows] = useState<TimerSession[]>([]);
 
   useEffect(() => {
-    const from = range === "today" ? `${todayISO()}T00:00:00` : `${todayISO("Europe/Berlin", -6)}T00:00:00`;
+    const from = range === "today" ? todayISO() : range === "week" ? todayISO("Europe/Berlin", -6) : range === "month" ? todayISO("Europe/Berlin", -29) : fromDate;
+    const to = range === "custom" ? toDate : todayISO();
     supabase
       .from("timer_sessions")
       .select("*")
       .eq("child_id", childId)
       .gte("started_at", new Date(from).toISOString())
+      .lte("started_at", new Date(`${to}T23:59:59`).toISOString())
       .order("started_at", { ascending: false })
       .limit(200)
       .then(({ data }) => setRows((data ?? []) as TimerSession[]));
-  }, [childId, range, fam.timers]);
+  }, [childId, range, fromDate, toDate, fam.timers]);
 
   const byActivity = useMemo(() => {
     const m = new Map<string, { title: string; icon: string | null; secs: number; focus: number; n: number }>();
@@ -299,14 +303,15 @@ function Report({ childId }: { childId: string }) {
       <div className="row between">
         <h2>Rapor</h2>
         <div className="segmented small">
-          <button className={range === "today" ? "on" : ""} onClick={() => setRange("today")}>
-            Bugün
-          </button>
-          <button className={range === "week" ? "on" : ""} onClick={() => setRange("week")}>
-            7 gün
-          </button>
+          {([['today', 'Bugün'], ['week', '7 gün'], ['month', '1 ay'], ['custom', 'Özel']] as const).map(([value, label]) => (
+            <button key={value} className={range === value ? "on" : ""} onClick={() => setRange(value)}>{label}</button>
+          ))}
         </div>
       </div>
+      {range === "custom" && <div className="grid2">
+        <label className="field"><span>Başlangıç</span><DateField value={fromDate} onChange={setFromDate} /></label>
+        <label className="field"><span>Bitiş</span><DateField value={toDate} onChange={setToDate} /></label>
+      </div>}
       {!rows.length && <p className="muted small">Henüz sayaç yok.</p>}
       {total > 0 && <p><b>Toplam {minutesText(Math.round(total / 60))}</b></p>}
       {byActivity.map((a) => (

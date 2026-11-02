@@ -47,6 +47,7 @@ import kotlinx.coroutines.withContext
 import java.time.Instant
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.util.UUID
 
 private val DAY = DateTimeFormatter.ofPattern("dd.MM.yyyy")
 private val WEEKDAY = DateTimeFormatter.ofPattern("EEEE", java.util.Locale("tr", "TR"))
@@ -115,7 +116,16 @@ fun AgendaScreen() {
         }
         FloatingActionButton(onClick = { form = true }, shape = CircleShape, containerColor = C.accent, contentColor = C.text, modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).size(56.dp)) { Text("+", fontSize = 24.sp) }
     }
-    if (form) AgendaForm(onClose = { form = false })
+    if (form) AgendaForm(
+        onClose = { form = false },
+        onCreated = { item ->
+            items = listOf(item) + items
+            scope.launch {
+                withContext(Dispatchers.IO) { Agenda.create("event", item.title, item.note, item.dueDate, item.dueTime, null, "EUR") }
+                Live.syncRequested = true
+            }
+        },
+    )
     detail?.let { item -> AgendaDetail(item, onClose = { detail = null }, onDone = {
         toggle(item)
         detail = null
@@ -123,16 +133,14 @@ fun AgendaScreen() {
 }
 
 @Composable
-private fun AgendaForm(onClose: () -> Unit) {
+private fun AgendaForm(onClose: () -> Unit, onCreated: (AgendaItem) -> Unit) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var title by remember { mutableStateOf("") }
     var dueDate by remember { mutableStateOf(LocalDate.now().toString()) }
     var dueTime by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var extra by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
-    var busy by remember { mutableStateOf(false) }
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text("Ajandaya ekle") },
@@ -150,14 +158,18 @@ private fun AgendaForm(onClose: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = onClose) { Text("İptal") } },
         confirmButton = {
-            TextButton(enabled = !busy, onClick = {
+            TextButton(onClick = {
                 if (title.isBlank()) { error = "Başlık gerekli."; return@TextButton }
-                busy = true
-                scope.launch {
-                    val ok = withContext(Dispatchers.IO) { Agenda.create("event", title.trim(), note.trim().ifBlank { null }, dueDate, dueTime.trim().ifBlank { null }, null, "EUR") }
-                    if (ok) { Live.syncRequested = true; onClose() } else { busy = false; error = "Eklenemedi; internet bağlantısını kontrol et." }
-                }
-            }) { Text(if (busy) "Ekleniyor…" else "Ekle") }
+                val cleanTitle = title.trim()
+                val cleanNote = note.trim().ifBlank { null }
+                val enteredAt = Instant.now().toString()
+                onCreated(AgendaItem(
+                    id = "local-${UUID.randomUUID()}", kind = "event", title = cleanTitle,
+                    note = cleanNote, enteredAt = enteredAt, dueDate = dueDate,
+                    dueTime = dueTime.trim().ifBlank { null }, amount = null, currency = "EUR", status = "open",
+                ))
+                onClose()
+            }) { Text("Ekle") }
         },
     )
 }

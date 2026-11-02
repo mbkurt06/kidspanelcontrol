@@ -39,8 +39,8 @@ data class TaskItem(
     val recordingDone get() = recStatus == "done"
     val open get() = status in setOf("open", "started", "rejected")
     val needsProof get() = proof != "none"
-    /** Zorunlu ve henüz gönderilmemiş */
-    val blocking get() = mandatory && status in setOf("open", "started", "rejected")
+    /** Görevler artık tek başına süreli uygulamaları engellemez; kısıtlar odak profillerinden gelir. */
+    val blocking get() = false
 }
 
 object Tasks {

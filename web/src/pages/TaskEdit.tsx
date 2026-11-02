@@ -28,7 +28,6 @@ type Form = {
   reward_date: string;
   reward_expires_days: string;
   reward_section_id: string;
-  mandatory: boolean;
   active: boolean;
   record_on: boolean;
   record_minutes: string;
@@ -58,7 +57,6 @@ const empty = (childIds: string[]): Form => ({
   reward_date: todayISO("Europe/Berlin", 1),
   reward_expires_days: "",
   reward_section_id: "",
-  mandatory: false,
   active: true,
   record_on: false,
   record_minutes: "60",
@@ -119,7 +117,6 @@ export default function TaskEdit() {
             reward_date: t.reward_date ?? todayISO("Europe/Berlin", 1),
             reward_expires_days: t.reward_expires_days?.toString() ?? "",
             reward_section_id: (t as Task & { reward_section_id?: string | null }).reward_section_id ?? "",
-            mandatory: t.mandatory,
             active: t.active,
             ...recForm(t as RecFields),
             phone_restriction: t.phone_restriction ?? "none",
@@ -141,7 +138,6 @@ export default function TaskEdit() {
               reward_validity: data.reward_validity,
               reward_expires_days: data.reward_expires_days?.toString() ?? "",
               reward_section_id: data.reward_section_id ?? "",
-              mandatory: data.mandatory,
               ...recForm(data as RecFields),
             }));
         }
@@ -177,7 +173,7 @@ export default function TaskEdit() {
       reward_date: f.reward_validity === "date" ? f.reward_date : null,
       reward_expires_days: f.reward_validity === "wallet" && f.reward_expires_days ? Number(f.reward_expires_days) : null,
       reward_section_id: f.reward_validity !== "wallet" && f.reward_validity !== "vault" && f.reward_section_id ? f.reward_section_id : null,
-      mandatory: f.mandatory,
+      mandatory: false,
       active: f.active,
       record_minutes: f.record_on ? Math.min(240, Math.max(1, Number(f.record_minutes) || 60)) : null,
       record_camera: f.record_camera,
@@ -199,7 +195,7 @@ export default function TaskEdit() {
         reward_validity: row.reward_validity === "date" ? "today" : row.reward_validity,
         reward_expires_days: row.reward_expires_days,
         reward_section_id: row.reward_section_id,
-        mandatory: row.mandatory,
+        mandatory: false,
         record_minutes: row.record_minutes,
         record_camera: row.record_camera,
         record_pause: row.record_pause,
@@ -304,10 +300,6 @@ export default function TaskEdit() {
           <span>Saat <Info>İstersen son teslim saatini de belirle.</Info></span>
           <TimeField clearable value={f.due_time} onChange={(v) => set("due_time", v)} label="Saat" />
         </div>
-        <label className="check">
-          <input type="checkbox" checked={f.mandatory} onChange={(e) => set("mandatory", e.target.checked)} />
-          Zorunlu: bu görev yapılmadan süreli uygulamalar açılmasın
-        </label>
       </div>
 
       <div className="card">

@@ -204,7 +204,6 @@ export default function Tasks() {
                 {t.before_after ? " (öncesi/sonrası)" : ""}
                 {t.reward_minutes ? ` · +${minutesText(t.reward_minutes)}` : ""}
                 {t.reward_text ? ` · ${t.reward_text}` : ""}
-                {t.mandatory ? " · zorunlu" : ""}
               </div>
             </div>
             <button className="btn small" onClick={() => nav(`/tasks/new?template=${t.id}`)}>

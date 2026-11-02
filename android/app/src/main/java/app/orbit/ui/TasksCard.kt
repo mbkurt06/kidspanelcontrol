@@ -149,7 +149,6 @@ fun TasksCard(tasks: List<TaskItem>) {
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(t.title, color = C.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                    if (t.mandatory && t.open) Text("zorunlu", color = C.warn, fontSize = 12.sp)
                 }
                 t.description?.let { Muted(it, 13) }
                 rewardText(t)?.let { Text("Ödül: $it", color = C.good, fontSize = 13.sp) }

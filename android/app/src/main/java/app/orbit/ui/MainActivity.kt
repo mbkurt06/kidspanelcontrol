@@ -1,6 +1,7 @@
 package app.orbit.ui
 
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
@@ -62,6 +63,12 @@ class MainActivity : ComponentActivity() {
     /** Bildirimden ya da kilit ekranından gelen "şu ekranı aç" isteği */
     private var request by mutableStateOf<Pair<Screen, Long>?>(null)
 
+    private fun ensureNotifications() {
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 42)
+        }
+    }
+
     private fun readRequest(i: android.content.Intent?) {
         val s = i?.getStringExtra(app.orbit.data.Notifier.EXTRA_SCREEN) ?: return
         runCatching { Screen.valueOf(s) }.getOrNull()?.let { request = it to System.nanoTime() }
@@ -88,6 +95,7 @@ class MainActivity : ComponentActivity() {
                 Column(Modifier.fillMaxSize().background(C.bg).safeDrawingPadding()) {
                     if (paired) OrbitHome(request) else PairScreen(onPaired = {
                         paired = true
+                        ensureNotifications()
                         OrbitService.start(this@MainActivity)
                     })
                 }
@@ -105,6 +113,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (Store.creds != null) {
+            ensureNotifications()
             OrbitService.start(this)
             Live.syncRequested = true
         }

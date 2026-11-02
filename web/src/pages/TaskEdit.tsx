@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { todayISO } from "../lib/util";
-import { PROOF_LABEL, VALIDITY_LABEL, type ProofType, type RewardValidity, type Task } from "../lib/types";
+import { PROOF_LABEL, VALIDITY_LABEL, type ProofType, type RewardValidity, type Task, type TaskPhoneRestriction } from "../lib/types";
 import { DayPicker } from "../components/Windows";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
@@ -35,6 +35,8 @@ type Form = {
   record_camera: "back" | "front" | "choose";
   record_pause: "none" | "limit" | "child";
   record_pause_max: string;
+  phone_restriction: TaskPhoneRestriction;
+  orbit_focus_profile_id: string;
 };
 
 const empty = (childIds: string[]): Form => ({
@@ -63,6 +65,8 @@ const empty = (childIds: string[]): Form => ({
   record_camera: "back",
   record_pause: "child",
   record_pause_max: "10",
+  phone_restriction: "none",
+  orbit_focus_profile_id: "",
 });
 
 type RecFields = { record_minutes?: number | null; record_camera?: Form["record_camera"]; record_pause?: Form["record_pause"]; record_pause_max?: number | null };
@@ -118,6 +122,8 @@ export default function TaskEdit() {
             mandatory: t.mandatory,
             active: t.active,
             ...recForm(t as RecFields),
+            phone_restriction: t.phone_restriction ?? "none",
+            orbit_focus_profile_id: t.orbit_focus_profile_id ?? "",
           });
       } else {
         const tid = params.get("template");
@@ -177,6 +183,8 @@ export default function TaskEdit() {
       record_camera: f.record_camera,
       record_pause: f.record_pause,
       record_pause_max: f.record_pause === "limit" ? Math.max(1, Number(f.record_pause_max) || 10) : null,
+      phone_restriction: f.phone_restriction,
+      orbit_focus_profile_id: f.orbit_focus_profile_id || null,
     };
     const { error } = isNew ? await supabase.from("tasks").insert(row) : await supabase.from("tasks").update(row).eq("id", id);
     if (!error && saveTemplate) {
@@ -318,6 +326,26 @@ export default function TaskEdit() {
         </div>
         {f.proof !== "none" && f.proof !== "photo" && <p className="muted tiny">Bu eski görev video kanıtı kullanıyor; değiştirmek için yukarıdaki fotoğraf seçeneğini seçebilirsin.</p>}
         {f.proof === "photo" && <p className="muted tiny"><Info>Başlangıç seçilirse çocuk önce fotoğraf çeker; tamamlayınca ikinci fotoğrafı gönderir.</Info></p>}
+      </div>
+
+      <div className="card">
+        <h2>Kısıtlamalar <Info>Bu görev onaylanana kadar geçerlidir. Telefon kısıtı ile Orbit içindeki menü kısıtı birbirinden bağımsızdır.</Info></h2>
+        <label className="field">
+          <span>Telefon</span>
+          <select value={f.phone_restriction} onChange={(e) => set("phone_restriction", e.target.value as TaskPhoneRestriction)}>
+            <option value="none">Kısıtlama yok</option>
+            <option value="limit">Sınırlı kullanım</option>
+            <option value="kiosk">Tam kilit</option>
+          </select>
+        </label>
+        <label className="field">
+          <span>Orbit menüsü</span>
+          <select value={f.orbit_focus_profile_id} onChange={(e) => set("orbit_focus_profile_id", e.target.value)}>
+            <option value="">Kısıtlama yok</option>
+            {fam.focusProfiles.map((p) => <option key={p.id} value={p.id}>{p.icon ?? "🎯"} {p.name}</option>)}
+          </select>
+        </label>
+        {!fam.focusProfiles.length && <p className="muted tiny">Orbit menü kısıtı için önce Kurallar → Odak profilleri bölümünden profil oluştur.</p>}
       </div>
 
       <div className="card">

@@ -112,6 +112,16 @@ data class Section(
 /** Çalışan sayacın odak kısıtı: sadece bunlar açık kalır (kurallar zaten izin veriyorsa). */
 data class Focus(val name: String, val groups: Set<String>, val packages: Set<String>)
 
+/** Onaylanana kadar görevden gelen ek telefon/Orbit kısıtı. */
+data class TaskRestriction(
+    val title: String,
+    val status: String,
+    val phoneMode: String,
+    val screens: Set<String>,
+) {
+    val active get() = status in setOf("open", "started", "submitted", "rejected")
+}
+
 /** Bir bölümde bir grup (groupId) ya da tek uygulama (pkg) için kural. */
 data class SectionRule(
     val sectionId: String,
@@ -174,6 +184,8 @@ data class Rules(
     val groupLimits: Map<String, Map<String, Int>> = emptyMap(),
     /** Çalışan sayacın odak profili */
     val focus: Focus? = null,
+    /** Onay bekleyen görevlerin bağımsız kısıtları */
+    val taskRestrictions: List<TaskRestriction> = emptyList(),
     /** Çocuğun cüzdandan günde en fazla kullanabileceği dakika (null = sınır yok) */
     val walletDailyMax: Int? = null,
     /** Tam kilit varsayılanları */

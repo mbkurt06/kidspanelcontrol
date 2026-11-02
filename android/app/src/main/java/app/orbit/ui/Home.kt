@@ -96,11 +96,14 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
     val profileRules = remember(live.lastSync) { Store.rules() }
     val openTasks = remember(live.lastSync, live.snapshot?.now?.minute) { Tasks.current().count { it.open } }
     val focusNow = remember(live.lastSync, live.snapshot?.now?.minute) { app.orbit.data.Timers.activeFocus() }
+    val taskScreenSets = profileRules.taskRestrictions.filter { it.active && it.screens.isNotEmpty() }.map { it.screens }
+    val taskScreens = taskScreenSets.reduceOrNull { a, b -> a intersect b }
     // Tam kilit: sadece izin verilen ekranlar
     val kiosk = live.kiosk
     fun visible(s: Screen) =
         (kiosk == null || s == Screen.TODAY || (s != Screen.ABOUT && s.kioskKey() in kiosk.screens)) &&
-            (focusNow == null || focusNow.screens.isEmpty() || s == Screen.TODAY || s.kioskKey() in focusNow.screens)
+            (focusNow == null || focusNow.screens.isEmpty() || s == Screen.TODAY || s.kioskKey() in focusNow.screens) &&
+            (taskScreens == null || s == Screen.TODAY || s.kioskKey() in taskScreens)
     LaunchedEffect(kiosk?.screens) { if (!visible(screen)) screen = Screen.TODAY }
     var pinOpen by remember { mutableStateOf(false) }
     if (pinOpen) PinDialog { pinOpen = false }

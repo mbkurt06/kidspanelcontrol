@@ -269,6 +269,7 @@ export const WEEKDAYS_LONG = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "
 
 export type ProofType = "none" | "photo" | "video" | "photo_or_video";
 export type RewardValidity = "today" | "tomorrow" | "date" | "wallet" | "vault";
+export type TaskPhoneRestriction = "none" | "limit" | "kiosk";
 
 export type TaskTemplate = {
   id: string;
@@ -286,6 +287,8 @@ export type TaskTemplate = {
   record_camera?: "back" | "front" | "choose";
   record_pause?: "none" | "limit" | "child";
   record_pause_max?: number | null;
+  phone_restriction?: TaskPhoneRestriction;
+  orbit_focus_profile_id?: string | null;
 };
 
 export type Task = TaskTemplate & {
@@ -301,6 +304,8 @@ export type Task = TaskTemplate & {
   reward_date: string | null;
   active: boolean;
   created_at: string;
+  phone_restriction: TaskPhoneRestriction;
+  orbit_focus_profile_id: string | null;
 };
 
 export type RunStatus = "open" | "started" | "submitted" | "approved" | "rejected" | "claimed" | "expired";

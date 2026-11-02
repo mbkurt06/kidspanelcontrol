@@ -9,6 +9,7 @@ import { currentSubscription, disablePush, enablePush, isStandalone, pushSupport
 
 type Parent = { user_id: string; email: string; display_name: string };
 type Invite = { email: string; display_name: string | null };
+type ParentDraft = { email: string; name: string; password: string };
 
 export default function Settings() {
   const fam = useFamily();
@@ -16,6 +17,7 @@ export default function Settings() {
   const [devices, setDevices] = useState<ParentDevice[]>([]);
   const [parents, setParents] = useState<Parent[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
+  const [parentDrafts, setParentDrafts] = useState<Record<string, ParentDraft>>({});
   const [viewers, setViewers] = useState<Device[]>([]);
   const [inv, setInv] = useState({ email: "", name: "" });
   const [code, setCode] = useState("");
@@ -37,6 +39,11 @@ export default function Settings() {
     ]);
     setDevices((d.data ?? []) as ParentDevice[]);
     setParents((p.data ?? []) as Parent[]);
+    setParentDrafts(
+      Object.fromEntries(
+        ((p.data ?? []) as Parent[]).map((x) => [x.user_id, { email: x.email, name: x.display_name, password: "" }]),
+      ),
+    );
     setInvites((i.data ?? []) as Invite[]);
     setViewers((v.data ?? []) as Device[]);
   }, []);
@@ -65,6 +72,21 @@ export default function Settings() {
     if (error) return setErr(errorText(error));
     setMsg(`${inv.email} davet edildi. Orbit'i açıp bu e-postayla hesap oluşturabilir; ilk cihazını buradan onaylarsın.`);
     setInv({ email: "", name: "" });
+    load();
+  }
+
+  async function saveParent(userId: string) {
+    const draft = parentDrafts[userId];
+    if (!draft?.email || !draft.name.trim()) return setErr("E-posta ve ad zorunlu.");
+    if (draft.password && draft.password.length < 6) return setErr("Parola en az 6 karakter olmalı.");
+    setErr("");
+    setMsg("");
+    const { data, error } = await supabase.functions.invoke("orbit-admin-account", {
+      body: { user_id: userId, email: draft.email, name: draft.name, password: draft.password || undefined },
+    });
+    if (error) return setErr(error.message);
+    if (!data?.ok) return setErr(data?.error ?? "Ebeveyn hesabı güncellenemedi.");
+    setMsg("Ebeveyn hesabı güncellendi.");
     load();
   }
 
@@ -179,7 +201,48 @@ export default function Settings() {
       </div>
 
       <div className="card">
-        <h2>Ebeveynler</h2>
+        <h2>Ebeveyn hesapları <Info>İki ebeveyn hesabının görünen adını, e-posta adresini ve parolasını buradan güncelleyebilirsin.</Info></h2>
+        {parents.map((p) => {
+          const draft = parentDrafts[p.user_id] ?? { email: p.email, name: p.display_name, password: "" };
+          return (
+            <div className="parent-account" key={p.user_id}>
+              <div className="muted small">{p.display_name} · {p.email}</div>
+              <div className="grid2">
+                <label className="field">
+                  <span>E-posta</span>
+                  <input
+                    type="email"
+                    value={draft.email}
+                    onChange={(e) => setParentDrafts({ ...parentDrafts, [p.user_id]: { ...draft, email: e.target.value } })}
+                  />
+                </label>
+                <label className="field">
+                  <span>Ad</span>
+                  <input
+                    value={draft.name}
+                    onChange={(e) => setParentDrafts({ ...parentDrafts, [p.user_id]: { ...draft, name: e.target.value } })}
+                  />
+                </label>
+              </div>
+              <div className="row gap-s">
+                <label className="field grow">
+                  <span>Yeni parola</span>
+                  <input
+                    type="password"
+                    autoComplete="new-password"
+                    placeholder="Değiştirmek için yaz"
+                    value={draft.password}
+                    onChange={(e) => setParentDrafts({ ...parentDrafts, [p.user_id]: { ...draft, password: e.target.value } })}
+                  />
+                </label>
+                <button className="btn small" onClick={() => saveParent(p.user_id)}>
+                  Kaydet
+                </button>
+              </div>
+            </div>
+          );
+        })}
+        <h3>Ebeveyn daveti</h3>
         {invites.map((i) => (
           <div className="app-row" key={i.email}>
             <div className="grow">

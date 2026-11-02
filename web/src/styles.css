@@ -875,6 +875,12 @@ select:focus {
   box-shadow: 0 0 0 1px var(--warn, #f2b134) inset;
 }
 
+.parent-account + .parent-account {
+  border-top: 1px solid var(--line);
+  margin-top: 18px;
+  padding-top: 18px;
+}
+
 /* --- Gün bölümleri: kural tablosu --- */
 .app-row.wrap {
   flex-wrap: wrap;

@@ -104,7 +104,7 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
         (kiosk == null || s == Screen.TODAY || (s != Screen.ABOUT && s.kioskKey() in kiosk.screens)) &&
             (focusNow == null || focusNow.screens.isEmpty() || s == Screen.TODAY || s.kioskKey() in focusNow.screens) &&
             (taskScreens == null || s == Screen.TODAY || s.kioskKey() in taskScreens)
-    LaunchedEffect(kiosk?.screens) { if (!visible(screen)) screen = Screen.TODAY }
+    LaunchedEffect(kiosk?.screens, taskScreens) { if (!visible(screen)) screen = Screen.TODAY }
     var pinOpen by remember { mutableStateOf(false) }
     if (pinOpen) PinDialog { pinOpen = false }
     BackHandler(enabled = drawer.isOpen || screen != Screen.TODAY) {

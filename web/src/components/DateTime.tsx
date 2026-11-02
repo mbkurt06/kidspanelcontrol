@@ -64,6 +64,13 @@ export function TimeField({
   cur.current = { h, m };
 
   useEffect(() => {
+    if (!open) return;
+    const close = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [open]);
+
+  useEffect(() => {
     if (!value) return;
     const [a, b] = parseTime(value);
     setH(a);
@@ -250,6 +257,12 @@ export function DateField({
       setMode("calendar");
     }
   }, [open, value]);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, [open]);
 
   const shift = (days: number) => {
     const d = value ? fromIso(value) : new Date();

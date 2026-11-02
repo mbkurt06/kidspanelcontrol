@@ -196,6 +196,10 @@ export type Device = {
   is_device_owner: boolean | null;
   status: "active" | "revoked";
   last_seen_at: string | null;
+  update_status?: string | null;
+  update_target?: number | null;
+  update_checked_at?: string | null;
+  update_error?: string | null;
   created_at: string;
 };
 

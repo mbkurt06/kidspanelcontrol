@@ -299,18 +299,19 @@ export default function TaskEdit() {
       <div className="card">
         <h2>Kanıt</h2>
         <div className="row gap-xs wrap">
-          {(Object.keys(PROOF_LABEL) as ProofType[]).map((p) => (
-            <button key={p} className={`chip small ${f.proof === p ? "on" : ""}`} onClick={() => set("proof", p)}>
-              {PROOF_LABEL[p]}
-            </button>
-          ))}
+          <button className={`chip small ${f.proof === "none" ? "on" : ""}`} onClick={() => { set("proof", "none"); set("before_after", false); }}>
+            Kanıt yok
+          </button>
+          <button className={`chip small ${f.proof === "photo" && !f.before_after ? "on" : ""}`} onClick={() => { set("proof", "photo"); set("before_after", false); }}>
+            Tamamlanınca fotoğraf
+          </button>
+          <button className={`chip small ${f.proof === "photo" && f.before_after ? "on" : ""}`} onClick={() => { set("proof", "photo"); set("before_after", true); }}>
+            Başlangıç + tamamlanınca fotoğraf
+          </button>
+          {f.proof !== "none" && f.proof !== "photo" && <span className="pill quiet">{PROOF_LABEL[f.proof]}</span>}
         </div>
-        {f.proof !== "none" && (
-          <label className="check">
-            <input type="checkbox" checked={f.before_after} onChange={(e) => set("before_after", e.target.checked)} />
-            Öncesi ve sonrası istensin
-          </label>
-        )}
+        {f.proof !== "none" && f.proof !== "photo" && <p className="muted tiny">Bu eski görev video kanıtı kullanıyor; değiştirmek için yukarıdaki fotoğraf seçeneğini seçebilirsin.</p>}
+        {f.proof === "photo" && <p className="muted tiny">Başlangıç seçilirse çocuk önce fotoğraf çeker; tamamlayınca ikinci fotoğrafı gönderir.</p>}
         <p className="muted tiny">Çocuk kanıtı Orbit'in kamerasıyla çeker; galeriden eski foto seçemez. Onay veya retten sonra dosya silinir.</p>
       </div>
 

@@ -70,7 +70,7 @@ export default function ChildPage() {
 // ---------------------------------------------------------------------------
 
 /** Telefondaki Orbit'i hemen güncelle: telefon komutu alınca (≤30 sn) kurulum/version.json'a bakar ve yeni sürümü sessizce kurar. */
-function UpdateCard({ childId, current }: { childId: string; current: string | null }) {
+function UpdateCard({ childId, device }: { childId: string; device?: Device }) {
   const [latest, setLatest] = useState<number | null>(null);
   const [msg, setMsg] = useState("");
   useEffect(() => {
@@ -79,6 +79,7 @@ function UpdateCard({ childId, current }: { childId: string; current: string | n
       .then((j) => setLatest(j?.version ?? null))
       .catch(() => {});
   }, []);
+  const current = device?.app_version ?? null;
   const cur = current ? Number(current.split(".").pop()) : null;
   const behind = latest != null && cur != null && latest > cur;
   async function command(update: boolean) {
@@ -91,8 +92,10 @@ function UpdateCard({ childId, current }: { childId: string; current: string | n
   }
   return (
     <div className="card">
-      <h2>Orbit güncellemesi</h2>
+      <h2>Orbit güncellemesi <Info>Kontrol et yalnızca sonucu sorgular. Güncelle seçilirse telefon yeni APK'yı indirip kurmayı dener.</Info></h2>
       <div className="muted small">Telefon: {current ?? "?"} · En yeni: {latest ?? "?"}{behind ? " · Yeni sürüm var" : ""}</div>
+      {device?.update_status && <div className="muted small">Son durum: {device.update_status}{device.update_checked_at ? ` · ${relTime(device.update_checked_at)}` : ""}</div>}
+      {device?.update_error && <div className="error small">Güncelleme hatası: {device.update_error}</div>}
       <div className="row gap-s wrap">
         <button className="btn" onClick={() => command(false)}>Kontrol et</button>
         {behind && <button className="btn primary" onClick={() => command(true)}>Güncelle</button>}
@@ -731,7 +734,7 @@ function TimeTab({ childId }: { childId: string }) {
             <option value="today">Bugün (bölüme / gün boyu)</option>
             <option value="tomorrow">Yarın</option>
             <option value="date">Belirli bir gün</option>
-            <option value="child">Cüzdan: çocuk istediği gün kullansın</option>
+            <option value="child">Süre cüzdanı: çocuk istediği gün kullansın</option>
             <option value="vault">Süre kasası: sonra ben veririm</option>
           </select>
         </label>
@@ -821,7 +824,7 @@ function TimeTab({ childId }: { childId: string }) {
       </div>
 
       <div className="card">
-          <h2>Çocuğun cüzdanı <Info>Çocuk bu süreyi kendisi açabilir; yalnızca izin verilen saatlerde kullanılır.</Info></h2>
+          <h2>Süre cüzdanı <Info>Çocuk bu süreyi kendisi açabilir; yalnızca izin verilen saatlerde kullanılır.</Info></h2>
         {!wallet.length && <p className="muted small">Cüzdanda süre yok.</p>}
         {wallet.length > 0 && (
           <p>
@@ -863,8 +866,8 @@ function TimeTab({ childId }: { childId: string }) {
         />
       )}
       <div className="card">
-        <h2>Verilen süreler <Info>Bu kayıtlar ebeveynin verdiği veya görev ödülü olarak oluşan süre hareketleridir. Hangi güne, bölüme ya da cüzdana aktarıldığını gösterir.</Info></h2>
-        {!live.length && <p className="muted small">Bekleyen ekstra süre yok.</p>}
+        <h2>Planlanan süreler <Info>Bu liste kullanılmış süreler değil; cüzdandan veya görev ödülünden aktif plana ayrılmış, çocuğun kullanabileceği süreleri gösterir.</Info></h2>
+        {!live.length && <p className="muted small">Planlanmış ekstra süre yok.</p>}
         {live.map((g) => (
           <div className="app-row wrap" key={g.id}>
             <div className="grow">
@@ -884,7 +887,7 @@ function TimeTab({ childId }: { childId: string }) {
                 >
                   <option value="pool">Gün boyu</option>
                   <option value="window">Saat aralığı…</option>
-                  <option value="wallet">Cüzdana</option>
+                  <option value="wallet">Süre cüzdanına</option>
                   <option value="vault">Süre kasasına geri al</option>
                   {sectionOptions.map((o) => (
                     <option key={o.id} value={o.id}>
@@ -1065,6 +1068,8 @@ function DeviceTab({ childId }: { childId: string }) {
   }, [childId]);
   useEffect(() => {
     load();
+    const timer = setInterval(load, 10000);
+    return () => clearInterval(timer);
   }, [load]);
 
   async function newCode() {
@@ -1087,7 +1092,7 @@ function DeviceTab({ childId }: { childId: string }) {
           </button>
         )}
       </div>
-      <UpdateCard childId={childId} current={devices[0]?.app_version ?? null} />
+      <UpdateCard childId={childId} device={devices[0]} />
 
       <div className="card">
         <h2>Kuralları gönder <Info>Telefon kuralları normalde 30 saniyede bir alır; burada hemen gönderebilirsin.</Info></h2>

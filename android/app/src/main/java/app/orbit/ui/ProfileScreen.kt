@@ -70,12 +70,18 @@ fun ProfileScreen() {
     var avatar by remember(rules.profileAvatar) { mutableStateOf(rules.profileAvatar ?: AVATARS.first()) }
     var message by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    val canEdit = live.snapshot?.let { it.parentMode || (!it.locked && it.remainingSeconds > 0) } == true
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         if (uri != null) runCatching {
             val source = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return@runCatching
             val bitmap = BitmapFactory.decodeByteArray(source, 0, source.size) ?: return@runCatching
+            val maxSide = 512
+            val scale = minOf(1f, maxSide.toFloat() / maxOf(bitmap.width, bitmap.height))
+            val small = if (scale < 1f) BitmapFactory.decodeByteArray(source, 0, source.size)?.let {
+                android.graphics.Bitmap.createScaledBitmap(it, (it.width * scale).toInt(), (it.height * scale).toInt(), true)
+            } ?: bitmap else bitmap
             val out = ByteArrayOutputStream()
-            bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 72, out)
+            small.compress(android.graphics.Bitmap.CompressFormat.JPEG, 72, out)
             avatar = "data:image/jpeg;base64," + Base64.encodeToString(out.toByteArray(), Base64.NO_WRAP)
         }
     }
@@ -89,12 +95,12 @@ fun ProfileScreen() {
             if (photo != null) Image(photo, contentDescription = "Profil fotoğrafı", modifier = Modifier.size(54.dp).clip(CircleShape)) else Text(avatar, fontSize = 44.sp)
             Column { Title(Store.childName.ifBlank { "Profil" }); Muted("Telefonundaki Orbit profili", 13) }
         }
-        OutlinedButton(onClick = { photoPicker.launch("image/*") }) { Text("Profil fotoğrafı seç") }
-        OutlinedTextField(name, { name = it.take(60) }, label = { Text("İsim veya takma ad") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+        OutlinedButton(enabled = canEdit, onClick = { photoPicker.launch("image/*") }) { Text("Profil fotoğrafı seç") }
+        OutlinedTextField(name, { name = it.take(60) }, enabled = canEdit, label = { Text("İsim veya takma ad") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            AVATARS.forEach { a -> Chip(a, avatar == a) { avatar = a } }
+            AVATARS.forEach { a -> Chip(a, avatar == a, canEdit) { avatar = a } }
         }
-        Button(enabled = !busy, onClick = {
+        Button(enabled = !busy && canEdit, onClick = {
             busy = true
             scope.launch {
                 val ok = withContext(Dispatchers.IO) { runCatching { val c = Store.creds ?: return@runCatching false; Api.patch("children?id=eq.${c.childId}", JSONObject().put("profile_nickname", name.trim().ifBlank { JSONObject.NULL }).put("profile_avatar", avatar)); true }.getOrDefault(false) }
@@ -103,11 +109,12 @@ fun ProfileScreen() {
                 if (ok) Live.syncRequested = true
             }
         }) { Text(if (busy) "Kaydediliyor…" else "Kaydet") }
+        if (!canEdit) Muted("Profil yalnızca telefon kilidi açıkken düzenlenebilir.", 12)
         if (message.isNotBlank()) Text(message, color = C.good, fontSize = 13.sp)
     }
 }
 
 @Composable
-private fun Chip(text: String, on: Boolean, click: () -> Unit) {
-    androidx.compose.material3.OutlinedButton(onClick = click) { Text(if (on) "✓ $text" else text) }
+private fun Chip(text: String, on: Boolean, enabled: Boolean, click: () -> Unit) {
+    androidx.compose.material3.OutlinedButton(enabled = enabled, onClick = click) { Text(if (on) "✓ $text" else text) }
 }

@@ -27,17 +27,19 @@ export default function Tasks() {
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [err, setErr] = useState("");
   const today = todayISO();
+  const [historyView, setHistoryView] = useState<"week" | "open" | "done" | "all" | "range">("week");
+  const [rangeFrom, setRangeFrom] = useState(todayISO("Europe/Berlin", -7));
+  const [rangeTo, setRangeTo] = useState(today);
 
   const load = useCallback(async () => {
     await supabase.rpc("parent_ensure_runs", { p_day: today });
-    const since = todayISO("Europe/Berlin", -7);
     const [t, r, tp] = await Promise.all([
       supabase.from("tasks").select("*").order("created_at", { ascending: false }),
       supabase
         .from("task_runs")
         .select("*")
-        .or(`day.gte.${since},status.in.(open,started,submitted,rejected)`)
-        .order("day", { ascending: false }),
+        .order("day", { ascending: false })
+        .limit(300),
       supabase.from("task_templates").select("*").order("title"),
     ]);
     if (t.error) setErr(errorText(t.error));
@@ -59,9 +61,18 @@ export default function Tasks() {
 
   const pending = runs.filter((r) => r.status === "submitted" && visibleChildIds.has(r.child_id));
   const todays = runs.filter(
-    (r) => r.day === today || (taskById[r.task_id]?.recurrence === "once" && ["open", "started", "rejected"].includes(r.status))
+    (r) => visibleChildIds.has(r.child_id) && (r.day === today || (taskById[r.task_id]?.recurrence === "once" && ["open", "started", "rejected"].includes(r.status)))
   );
   const rewards = runs.filter((r) => r.status === "approved" && r.reward_text && !r.reward_delivered_at && visibleChildIds.has(r.child_id));
+  const history = runs.filter((r) => {
+    if (!visibleChildIds.has(r.child_id)) return false;
+    if (historyView === "open") return ["open", "started", "submitted", "rejected"].includes(r.status);
+    if (historyView === "done") return ["approved", "claimed"].includes(r.status);
+    if (historyView === "all") return true;
+    const from = historyView === "range" ? rangeFrom : todayISO("Europe/Berlin", -7);
+    const to = historyView === "range" ? rangeTo : today;
+    return r.day >= from && r.day <= to;
+  });
 
   async function seedTemplates() {
     const { error } = await supabase.from("task_templates").insert(STARTER_TEMPLATES.map((t) => ({ ...t, family_id: fam.familyId })));
@@ -153,22 +164,31 @@ export default function Tasks() {
       </div>
 
       <div className="card">
-        <h2>Verilen görevler</h2>
-        {!tasks.length && <p className="muted small">Henüz görev yok. "Yeni görev" ile ekle veya aşağıdaki şablonlardan birini kullan.</p>}
-        {tasks.filter((t) => t.child_ids.some((id) => fam.visibleChildren.some((c) => c.id === id))).map((t) => (
-          <Link to={`/tasks/${t.id}`} className="app-row" key={t.id}>
+        <div className="row between wrap">
+          <h2>Görev geçmişi <Info>Bugünkü, açık, tamamlanan veya seçtiğin tarih aralığındaki görev kayıtları.</Info></h2>
+          <div className="row gap-xs wrap">
+            {(["week", "open", "done", "all", "range"] as const).map((v) => (
+              <button key={v} className={`chip small ${historyView === v ? "on" : ""}`} onClick={() => setHistoryView(v)}>
+                {v === "week" ? "Bu hafta" : v === "open" ? "Açık" : v === "done" ? "Tamamlanan" : v === "all" ? "Tümü" : "Aralık"}
+              </button>
+            ))}
+          </div>
+        </div>
+        {historyView === "range" && <div className="grid2">
+          <label className="field"><span>Başlangıç</span><DateField value={rangeFrom} onChange={setRangeFrom} /></label>
+          <label className="field"><span>Bitiş</span><DateField value={rangeTo} onChange={setRangeTo} /></label>
+        </div>}
+        {!history.length && <p className="muted small">Bu görünümde görev yok.</p>}
+        {history.map((r) => {
+          const t = taskById[r.task_id];
+          return <Link to={t ? `/tasks/${t.id}` : "/tasks"} className="app-row" key={r.id}>
             <div className="grow">
-              <b style={{ opacity: t.active ? 1 : 0.5 }}>{t.title}</b>
-              <div className="muted tiny">
-                {t.child_ids.map(childName).join(", ")}
-                {` · ${dateTimeText(t.created_at)}`}
-                {t.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}
-                {!t.active ? " · durduruldu" : ""}
-              </div>
+              <b>{t?.title ?? "Görev"}</b>
+              <div className="muted tiny">{childName(r.child_id)} · {r.day} · {STATUS_LABEL[r.status]}{t?.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}</div>
             </div>
             <Icon name="chevron" size={18} />
-          </Link>
-        ))}
+          </Link>;
+        })}
       </div>
 
       <div className="card">

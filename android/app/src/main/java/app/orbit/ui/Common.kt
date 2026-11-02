@@ -12,14 +12,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -135,7 +139,8 @@ fun Info(text: String) {
     Text("ⓘ", color = C.muted, fontSize = 16.sp, modifier = Modifier.clickable { open = true })
     if (open) AlertDialog(
         onDismissRequest = { open = false },
-        text = { Text(text, color = C.text) },
+        properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true),
+        text = { Text(text, color = C.text, modifier = Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState())) },
         confirmButton = { TextButton(onClick = { open = false }) { Text("Tamam") } },
     )
 }

@@ -123,6 +123,20 @@ object Sync {
         }.onFailure { Log.w(TAG, "durum gönderilemedi", it) }
     }
 
+    fun pushUpdateStatus(status: String, target: Int? = null, error: String? = null) {
+        val c = Store.creds ?: return
+        runCatching {
+            Api.patch(
+                "devices?id=eq.${c.deviceId}",
+                JSONObject()
+                    .put("update_status", status)
+                    .put("update_target", target ?: JSONObject.NULL)
+                    .put("update_checked_at", Instant.now().toString())
+                    .put("update_error", error ?: JSONObject.NULL),
+            )
+        }.onFailure { Log.w(TAG, "güncelleme durumu bildirilemedi", it) }
+    }
+
     fun pushUsage(u: DayUsage) {
         val c = Store.creds ?: return
         if (u.perAppTotal.isEmpty()) return

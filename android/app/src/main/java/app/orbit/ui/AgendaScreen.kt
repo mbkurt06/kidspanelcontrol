@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -77,7 +78,7 @@ fun AgendaScreen() {
                 }
             }
         }
-        FloatingActionButton(onClick = { form = true }, containerColor = C.accent, contentColor = C.text, modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)) { Text("+", fontSize = 24.sp) }
+        FloatingActionButton(onClick = { form = true }, shape = CircleShape, containerColor = C.accent, contentColor = C.text, modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp).size(56.dp)) { Text("+", fontSize = 24.sp) }
     }
     if (form) AgendaForm(onClose = { form = false })
     detail?.let { item -> AgendaDetail(item, onClose = { detail = null }, onDone = {

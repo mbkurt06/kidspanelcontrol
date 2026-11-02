@@ -1,5 +1,6 @@
 package app.orbit.ui
 
+import androidx.activity.compose.BackHandler
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.foundation.background
@@ -101,24 +102,26 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
     LaunchedEffect(kiosk?.screens) { if (!visible(screen)) screen = Screen.TODAY }
     var pinOpen by remember { mutableStateOf(false) }
     if (pinOpen) PinDialog { pinOpen = false }
+    val canEditProfile = live.snapshot?.let { it.parentMode || (!it.locked && it.remainingSeconds > 0) } == true
+    BackHandler(enabled = drawer.isOpen || screen != Screen.TODAY) {
+        if (drawer.isOpen) scope.launch { drawer.close() } else screen = Screen.TODAY
+    }
 
     ModalNavigationDrawer(
         drawerState = drawer,
         drawerContent = {
             ModalDrawerSheet(drawerContainerColor = C.surface) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Row(
-                        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable { screen = Screen.PROFILE; scope.launch { drawer.close() } }.padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         OrbitAvatar(profileRules.profileAvatar, Modifier.size(46.dp))
                         Spacer(Modifier.width(10.dp))
-                        Column { Text(Store.childName.ifBlank { "Orbit" }, color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold); Muted(profileRules.profileNickname ?: "Profil", 12) }
+                        Text(Store.childName.ifBlank { "Orbit" }, color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                     }
                     Muted(if (live.online) "bağlı" else "çevrimdışı", 12)
                     Spacer(Modifier.height(12.dp))
                     val focusNow = remember(live.lastSync, live.snapshot?.now?.minute) { app.orbit.data.Timers.activeFocus() }
                     for (s in Screen.entries) {
+                        if (s == Screen.PROFILE) continue
                         if (!visible(s)) continue
                         if (s == Screen.MESSAGES && focusNow?.messagesAllowed == false) continue
                         val on = s == screen
@@ -172,10 +175,16 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                     Modifier.size(48.dp).clip(CircleShape).clickable { scope.launch { drawer.open() } },
                     contentAlignment = Alignment.Center,
                 ) { Text("☰", color = C.text, fontSize = 24.sp) }
-                Text(
-                    if (screen == Screen.TODAY) Store.childName.ifBlank { "Orbit" } else screen.title,
-                    color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f),
-                )
+                if (screen == Screen.TODAY) {
+                    OrbitAvatar(
+                        profileRules.profileAvatar,
+                        Modifier.size(36.dp).then(if (canEditProfile) Modifier.clickable { screen = Screen.PROFILE } else Modifier),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(Store.childName.ifBlank { "Orbit" }, color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                } else {
+                    Text(screen.title, color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                }
                 if (screen != Screen.MESSAGES && unreadMsgs > 0 && visible(Screen.MESSAGES)) {
                     Box(Modifier.clip(RoundedCornerShape(12.dp)).clickable { screen = Screen.MESSAGES }.padding(8.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) { Text("💬", fontSize = 16.sp); Spacer(Modifier.width(4.dp)); Badge(unreadMsgs) }

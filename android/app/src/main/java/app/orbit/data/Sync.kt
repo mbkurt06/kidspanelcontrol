@@ -136,6 +136,12 @@ object Sync {
         Api.post("usage_daily?on_conflict=child_id,day,package", arr, upsert = true)
     }
 
+    /** Gün sonunda kullanılmayan hakkı kasaya tek seferlik yaz. */
+    fun storeDailySurplus(day: java.time.LocalDate, minutes: Int): Boolean = runCatching {
+        if (minutes > 0) Api.rpc("device_store_daily_surplus", JSONObject().put("p_day", day.toString()).put("p_minutes", minutes))
+        true
+    }.onFailure { Log.w(TAG, "artan süre kasaya yazılamadı", it) }.getOrDefault(false)
+
     /** Kanıt dosyasını yükler ve görev kaydına ekler. */
     fun uploadProof(runId: String, stage: String, media: String, bytes: ByteArray, contentType: String) {
         val c = Store.creds ?: throw Api.ApiError(401, "Eşleşmemiş")

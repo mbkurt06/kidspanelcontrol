@@ -84,13 +84,15 @@ object Store {
     }
 
     /** Gün değiştiyse dünkü sayaçları "gönderilecek" olarak ayır. */
-    fun rollover(today: LocalDate) {
-        val s = p.getString("usage", null) ?: return
-        val u = runCatching { Parse.usageFromJson(s) }.getOrNull() ?: return
+    fun rollover(today: LocalDate): DayUsage? {
+        val s = p.getString("usage", null) ?: return null
+        val u = runCatching { Parse.usageFromJson(s) }.getOrNull() ?: return null
         if (u.day != today) {
             savePreviousUsage(u)
             saveUsage(DayUsage(today))
+            return u
         }
+        return null
     }
 
     fun saveUsage(u: DayUsage) = p.edit().putString("usage", Parse.usageToJson(u)).apply()
@@ -98,6 +100,26 @@ object Store {
     /** Dünün sayaçları (gece yarısından sonra sunucuya son kez gönderilsin diye). */
     fun previousUsage(): DayUsage? = p.getString("usagePrev", null)?.let { runCatching { Parse.usageFromJson(it) }.getOrNull() }
     fun savePreviousUsage(u: DayUsage?) = p.edit().putString("usagePrev", u?.let { Parse.usageToJson(it) }).apply()
+
+    // Ağ yoksa gün sonu kasaya aktarımı kaybolmasın; başarılı RPC'den sonra silinir.
+    fun pendingSurpluses(): Map<LocalDate, Int> {
+        val raw = p.getString("pendingSurpluses", null) ?: return emptyMap()
+        val o = runCatching { JSONObject(raw) }.getOrNull() ?: return emptyMap()
+        return o.keys().asSequence().mapNotNull { k -> runCatching { LocalDate.parse(k) to o.optInt(k) }.getOrNull() }.toMap()
+    }
+
+    fun addPendingSurplus(day: LocalDate, minutes: Int) {
+        if (minutes <= 0) return
+        val o = runCatching { JSONObject(p.getString("pendingSurpluses", "{}")) }.getOrElse { JSONObject() }
+        o.put(day.toString(), minutes)
+        p.edit().putString("pendingSurpluses", o.toString()).apply()
+    }
+
+    fun clearPendingSurplus(day: LocalDate) {
+        val o = runCatching { JSONObject(p.getString("pendingSurpluses", "{}")) }.getOrElse { JSONObject() }
+        o.remove(day.toString())
+        p.edit().putString("pendingSurpluses", o.toString()).apply()
+    }
 
     // --- Güncelleme ---
     var updateToken: String

@@ -254,6 +254,14 @@ class RuleEngineTest {
     }
 
     @Test
+    fun unusedDailyAllowanceBecomesSurplus() {
+        val e = RuleEngine(rules())
+        val u = DayUsage(day, countedSeconds = 60 * 60L)
+        assertEquals(30, e.surplusMinutes(day, u))
+        assertEquals(0, e.surplusMinutes(day, u.copy(countedSeconds = 90 * 60L)))
+    }
+
+    @Test
     fun mandatoryTaskBlocksTimedApps() {
         val e = RuleEngine(rules().copy(mandatoryOpen = listOf("Ödevini yap")))
         val u = DayUsage(day)

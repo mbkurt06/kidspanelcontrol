@@ -156,6 +156,24 @@ class RuleEngine(private val rules: Rules) {
         return grants + adjust
     }
 
+    /** Önceki günün kullanılmayan günlük hakkı; sınırsız günlerde artan süre yoktur. */
+    fun surplusMinutes(day: LocalDate, usage: DayUsage): Int {
+        val sections = daySections(day)
+        val base = if (sections.isEmpty()) {
+            val profile = profileFor(day)
+            val start = day.atStartOfDay(zone).toInstant().toEpochMilli()
+            val end = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
+            val raw = profile.dailyMinutes + extraMinutes(day, start, end)
+            profile.maxTotalMinutes?.let { minOf(raw, it) } ?: raw
+        } else {
+            if (sections.any { it.budgetMinutes == null }) return 0
+            sections.sumOf { it.budgetMinutes ?: 0 } + rules.grants.filter {
+                !it.vault && it.window == null && it.validOn == day
+            }.sumOf { it.minutes }
+        }
+        return ((base * 60L - usage.countedSeconds).coerceAtLeast(0) / 60L).toInt()
+    }
+
     fun snapshot(nowZ: ZonedDateTime, usage: DayUsage): Snapshot {
         val now = nowZ.withZoneSameInstant(zone)
         val day = now.toLocalDate()

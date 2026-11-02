@@ -658,6 +658,23 @@ select:focus {
   text-align: left;
   font: inherit;
 }
+.section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.section-toggle > span:last-child { margin-left: auto; font-size: 22px; }
+.section-toggle-row { display: flex; align-items: center; gap: 8px; }
+.section-toggle-row .section-toggle { flex: 1; }
 .section-collapse-card > summary { list-style: none; cursor: pointer; }
 .section-collapse-card > summary::-webkit-details-marker { display: none; }
 .section-collapse-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 20px; font-weight: 700; }

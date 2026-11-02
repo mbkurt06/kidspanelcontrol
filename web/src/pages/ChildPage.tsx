@@ -708,16 +708,20 @@ function TimeTab({ childId }: { childId: string }) {
       <div className="grow">
         <b>{minutesText(g.minutes)}</b>
         <div className="muted tiny">
-          {g.note ?? (g.source === "task" ? "görev ödülü" : "ekstra süre")} · {dateText(g.created_at.slice(0, 10))}
+          {g.note ?? (g.source === "task_penalty" ? "görev cezası" : g.source === "task" ? "görev ödülü" : "ekstra süre")} · {dateText(g.created_at.slice(0, 10))}
           {kind === "wallet" && g.expires_on ? ` · son ${dateText(g.expires_on)}` : ""}
         </div>
       </div>
-      <button className="btn small primary" onClick={() => setPlan({ g, where: "now" })}>
-        Şimdi ver
-      </button>
-      <button className="btn small" onClick={() => setPlan({ g, where: "pool" })}>
-        Planla
-      </button>
+      {g.minutes > 0 && (
+        <>
+          <button className="btn small primary" onClick={() => setPlan({ g, where: "now" })}>
+            Şimdi ver
+          </button>
+          <button className="btn small" onClick={() => setPlan({ g, where: "pool" })}>
+            Planla
+          </button>
+        </>
+      )}
       <button
         className="icon-btn"
         aria-label="Sil"

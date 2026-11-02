@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DateField, TimeField } from "../components/DateTime";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
@@ -99,6 +99,21 @@ export default function TaskEdit() {
   const [saveTemplate, setSaveTemplate] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const [photoCountsOpen, setPhotoCountsOpen] = useState(false);
+  const [photoDefaultsMsg, setPhotoDefaultsMsg] = useState("");
+  const photoDefaultsInitialized = useRef(false);
+
+  useEffect(() => {
+    if (!isNew || params.get("template") || !fam.family || photoDefaultsInitialized.current) return;
+    photoDefaultsInitialized.current = true;
+    setF((x) => ({
+      ...x,
+      proof_before_min: String(fam.family!.task_before_photo_min ?? 1),
+      proof_before_max: String(fam.family!.task_before_photo_max ?? 4),
+      proof_after_min: String(fam.family!.task_after_photo_min ?? 1),
+      proof_after_max: String(fam.family!.task_after_photo_max ?? 4),
+    }));
+  }, [fam.family, isNew, params]);
 
   useEffect(() => {
     (async () => {
@@ -163,11 +178,31 @@ export default function TaskEdit() {
 
   const set = <K extends keyof Form>(k: K, v: Form[K]) => setF((x) => ({ ...x, [k]: v }));
 
+  async function savePhotoDefaults() {
+    setErr("");
+    setPhotoDefaultsMsg("");
+    const n = {
+      task_before_photo_min: Math.max(1, Math.min(4, Number(f.proof_before_min) || 1)),
+      task_before_photo_max: Math.max(1, Math.min(4, Number(f.proof_before_max) || 4)),
+      task_after_photo_min: Math.max(1, Math.min(4, Number(f.proof_after_min) || 1)),
+      task_after_photo_max: Math.max(1, Math.min(4, Number(f.proof_after_max) || 4)),
+    };
+    if (n.task_before_photo_min > n.task_before_photo_max || n.task_after_photo_min > n.task_after_photo_max) {
+      return setErr("En az değeri en fazla değerinden büyük olamaz.");
+    }
+    const { error } = await supabase.from("families").update(n).eq("id", fam.familyId);
+    if (error) return setErr(errorText(error));
+    setPhotoDefaultsMsg("Varsayılan fotoğraf sayıları kaydedildi.");
+    await fam.reload();
+  }
+
   async function save() {
     setErr("");
     if (!f.title.trim()) return setErr("Görev adı yaz.");
     if (!f.child_ids.length) return setErr("En az bir çocuk seç.");
     if (f.recurrence === "days" && !f.days.length) return setErr("Tekrar günlerini seç.");
+    const rewardMinutes = f.reward_minutes.trim() === "" ? null : Number(f.reward_minutes);
+    if (rewardMinutes != null && (!Number.isInteger(rewardMinutes) || rewardMinutes < -1440 || rewardMinutes > 1440)) return setErr("Süre -1440 ile 1440 dakika arasında tam sayı olmalı.");
     setBusy(true);
     const row = {
       family_id: fam.familyId,
@@ -187,7 +222,7 @@ export default function TaskEdit() {
       proof_before_max: f.proof !== "none" && f.before_after ? Math.max(Number(f.proof_before_max) || 4, Number(f.proof_before_min) || 1) : 4,
       proof_after_min: f.proof === "none" ? 1 : Math.min(4, Math.max(1, Number(f.proof_after_min) || 1)),
       proof_after_max: f.proof === "none" ? 4 : Math.max(Number(f.proof_after_max) || 4, Number(f.proof_after_min) || 1),
-      reward_minutes: f.reward_minutes ? Number(f.reward_minutes) : null,
+      reward_minutes: rewardMinutes,
       reward_text: f.reward_text.trim() || null,
       reward_validity: f.reward_validity,
       reward_date: f.reward_validity === "date" ? f.reward_date : null,
@@ -343,11 +378,20 @@ export default function TaskEdit() {
         {f.proof !== "none" && f.proof !== "photo" && <p className="muted tiny"><Info>Bu eski görev video kanıtı kullanıyor; değiştirmek için yukarıdaki fotoğraf seçeneğini seçebilirsin.</Info></p>}
         {f.proof === "photo" && (
           <>
-            <p className="muted tiny"><Info>Yeni görevlerde iki aşama varsayılan olarak açıktır. Her aşamada kaç fotoğraf gerektiğini belirleyebilirsin.</Info></p>
-            <div className="grid2">
-              {f.before_after && <PhotoCountFields title="Başlangıç fotoğrafları" min={f.proof_before_min} max={f.proof_before_max} onMin={(v) => set("proof_before_min", v)} onMax={(v) => set("proof_before_max", v)} />}
-              <PhotoCountFields title="Tamamlanma fotoğrafları" min={f.proof_after_min} max={f.proof_after_max} onMin={(v) => set("proof_after_min", v)} onMax={(v) => set("proof_after_max", v)} />
-            </div>
+            <button className="section-toggle" aria-expanded={photoCountsOpen} onClick={() => setPhotoCountsOpen((v) => !v)}>
+              Fotoğraf sayıları <span aria-hidden>{photoCountsOpen ? "⌃" : "⌄"}</span>
+            </button>
+            {photoCountsOpen && (
+              <>
+                <p className="muted tiny"><Info>Her aşamada kaç fotoğraf gerektiğini belirleyebilirsin. Bu değerleri yeni görevler için varsayılan olarak kaydedebilirsin.</Info></p>
+                <div className="grid2">
+                  {f.before_after && <PhotoCountFields title="Başlangıç fotoğrafları" min={f.proof_before_min} max={f.proof_before_max} onMin={(v) => set("proof_before_min", v)} onMax={(v) => set("proof_before_max", v)} />}
+                  <PhotoCountFields title="Tamamlanma fotoğrafları" min={f.proof_after_min} max={f.proof_after_max} onMin={(v) => set("proof_after_min", v)} onMax={(v) => set("proof_after_max", v)} />
+                </div>
+                {photoDefaultsMsg && <p className="ok">{photoDefaultsMsg}</p>}
+                <button className="btn small" onClick={savePhotoDefaults}>Varsayılanı kaydet</button>
+              </>
+            )}
           </>
         )}
       </div>
@@ -416,16 +460,16 @@ export default function TaskEdit() {
       </div>
 
       <div className="card">
-        <h2>Ödül <Info>Süre ödülü çocuğun Süre kasasına kaydedilir; sonradan bir güne, bölüme veya saat aralığına aktarabilirsin.</Info></h2>
+        <h2>Ödül / eksi süre <Info>Pozitif değer ödül olarak eklenir. Negatif değer görev zamanında yapılmazsa seçtiğin hedefe borç/eksi süre olarak yazılır.</Info></h2>
         <div className="grid2">
           <label className="field">
-            <span>Ekstra süre (dk)</span>
-            <input type="number" min={0} value={f.reward_minutes} onChange={(e) => set("reward_minutes", e.target.value)} placeholder="yok" />
+            <span>{Number(f.reward_minutes) < 0 ? "Eksi süre (dk)" : "Ekstra süre (dk)"}</span>
+            <input type="number" min={-1440} max={1440} step={1} value={f.reward_minutes} onChange={(e) => set("reward_minutes", e.target.value)} placeholder="yok" />
           </label>
           <label className="field">
             <span>Ödül</span>
             <select value={f.reward_validity} onChange={(e) => set("reward_validity", e.target.value as RewardValidity)}>
-              {REWARD_CORE.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {REWARD_CORE.map(([value, label]) => <option key={value} value={value}>{Number(f.reward_minutes) < 0 ? (({ today: "Bugünden düş", wallet: "Cüzdana borç yaz", vault: "Kasaya borç yaz" } as Record<string, string>)[value] ?? label) : label}</option>)}
               {legacyReward && <option value={f.reward_validity}>{VALIDITY_LABEL[f.reward_validity]}</option>}
             </select>
           </label>

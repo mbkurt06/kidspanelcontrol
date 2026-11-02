@@ -5,7 +5,7 @@ import { errorText, localDevice, supabase } from "../lib/supabase";
 import { relTime } from "../lib/util";
 import type { Device, ParentDevice } from "../lib/types";
 import { Info } from "../components/Info";
-import { currentSubscription, disablePush, enablePush, isIOS, isStandalone, pushSupported } from "../lib/push";
+import { currentPushTypes, currentSubscription, disablePush, enablePush, isIOS, isStandalone, PUSH_EVENT_TYPES, pushSupported, updatePushTypes } from "../lib/push";
 import { biometricEnabled, biometricSupported, disableBiometric, registerBiometric } from "../lib/biometric";
 
 type Parent = { user_id: string; email: string; display_name: string };
@@ -27,8 +27,18 @@ export default function Settings() {
 
   const [pushOn, setPushOn] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
+  const [pushTypes, setPushTypes] = useState<string[]>(PUSH_EVENT_TYPES.map(([id]) => id));
+  const [pushPrefsOpen, setPushPrefsOpen] = useState(false);
   useEffect(() => {
-    currentSubscription().then((s) => setPushOn(!!s));
+    (async () => {
+      try {
+        const s = await currentSubscription();
+        setPushOn(!!s);
+        if (s) setPushTypes((await currentPushTypes()) ?? PUSH_EVENT_TYPES.map(([id]) => id));
+      } catch (e) {
+        setErr(errorText(e));
+      }
+    })();
   }, []);
 
   const load = useCallback(async () => {
@@ -155,6 +165,7 @@ export default function Settings() {
                     try {
                       await enablePush(fam.familyId!);
                       setPushOn(true);
+                      setPushTypes((await currentPushTypes()) ?? PUSH_EVENT_TYPES.map(([id]) => id));
                       setMsg("Bildirimler açıldı");
                     } catch (e) {
                       setErr(errorText(e));
@@ -166,6 +177,46 @@ export default function Settings() {
                 </button>
               )}
             </div>
+            {pushOn && (
+              <div className="stack gap-s">
+                <button className="section-toggle" aria-expanded={pushPrefsOpen} onClick={() => setPushPrefsOpen((v) => !v)}>
+                  Bildirim türleri <span aria-hidden>{pushPrefsOpen ? "⌃" : "⌄"}</span>
+                </button>
+                {pushPrefsOpen && (
+                  <div className="card soft">
+                    <div className="grid2">
+                      {PUSH_EVENT_TYPES.map(([id, label]) => (
+                        <label className="check" key={id}>
+                          <input
+                            type="checkbox"
+                            checked={pushTypes.includes(id)}
+                            onChange={(e) => setPushTypes((old) => e.target.checked ? [...new Set([...old, id])] : old.filter((x) => x !== id))}
+                          />
+                          {label}
+                        </label>
+                      ))}
+                    </div>
+                    <button
+                      className="btn small"
+                      disabled={pushBusy}
+                      onClick={async () => {
+                        setPushBusy(true);
+                        setErr("");
+                        try {
+                          await updatePushTypes(pushTypes);
+                          setMsg("Bildirim tercihleri kaydedildi.");
+                        } catch (e) {
+                          setErr(errorText(e));
+                        }
+                        setPushBusy(false);
+                      }}
+                    >
+                      Kaydet
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -455,6 +506,7 @@ function TaskPhotoDefaultsCard() {
   const [v, setV] = useState({ beforeMin: 1, beforeMax: 4, afterMin: 1, afterMax: 4 });
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     if (!f) return;
@@ -485,16 +537,25 @@ function TaskPhotoDefaultsCard() {
   if (!f) return null;
   return (
     <div className="card">
-      <h2>Görev fotoğraf varsayılanları <Info>Yeni fotoğraflı görevlerde başlangıç ve tamamlanma aşamaları için uygulanır. Görev içinde değiştirilebilir.</Info></h2>
-      <div className="grid2">
-        <label className="field"><span>Başlangıç · en az</span><input type="number" min={1} max={4} value={v.beforeMin} onChange={(e) => setV({ ...v, beforeMin: Number(e.target.value) })} /></label>
-        <label className="field"><span>Başlangıç · en fazla</span><input type="number" min={1} max={4} value={v.beforeMax} onChange={(e) => setV({ ...v, beforeMax: Number(e.target.value) })} /></label>
-        <label className="field"><span>Tamamlanma · en az</span><input type="number" min={1} max={4} value={v.afterMin} onChange={(e) => setV({ ...v, afterMin: Number(e.target.value) })} /></label>
-        <label className="field"><span>Tamamlanma · en fazla</span><input type="number" min={1} max={4} value={v.afterMax} onChange={(e) => setV({ ...v, afterMax: Number(e.target.value) })} /></label>
+      <div className="section-toggle-row">
+        <button className="section-toggle" aria-expanded={open} onClick={() => setOpen((x) => !x)}>
+          Görev fotoğraf varsayılanları <span aria-hidden>{open ? "⌃" : "⌄"}</span>
+        </button>
+        <Info>Yeni fotoğraflı görevlerde başlangıç ve tamamlanma aşamaları için uygulanır.</Info>
       </div>
-      {err && <p className="error">{err}</p>}
-      {msg && <p className="ok">{msg}</p>}
-      <button className="btn" onClick={save}>Kaydet</button>
+      {open && (
+        <>
+          <div className="grid2">
+            <label className="field"><span>Başlangıç · en az</span><input type="number" min={1} max={4} value={v.beforeMin} onChange={(e) => setV({ ...v, beforeMin: Number(e.target.value) })} /></label>
+            <label className="field"><span>Başlangıç · en fazla</span><input type="number" min={1} max={4} value={v.beforeMax} onChange={(e) => setV({ ...v, beforeMax: Number(e.target.value) })} /></label>
+            <label className="field"><span>Tamamlanma · en az</span><input type="number" min={1} max={4} value={v.afterMin} onChange={(e) => setV({ ...v, afterMin: Number(e.target.value) })} /></label>
+            <label className="field"><span>Tamamlanma · en fazla</span><input type="number" min={1} max={4} value={v.afterMax} onChange={(e) => setV({ ...v, afterMax: Number(e.target.value) })} /></label>
+          </div>
+          {err && <p className="error">{err}</p>}
+          {msg && <p className="ok">{msg}</p>}
+          <button className="btn small" onClick={save}>Varsayılanı kaydet</button>
+        </>
+      )}
     </div>
   );
 }

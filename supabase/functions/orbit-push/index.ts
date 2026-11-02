@@ -84,6 +84,7 @@ Deno.serve(async (req) => {
       .is("disabled_at", null);
     let sent = 0;
     for (const s of subs ?? []) {
+      if (s.types?.includes("__none__")) continue;
       if (s.types?.length && !s.types.includes(ev.type)) continue;
       try {
         await webpush.sendNotification(

@@ -1,5 +1,24 @@
 import { localDevice, supabase } from "./supabase";
 
+export const PUSH_EVENT_TYPES: Array<[string, string]> = [
+  ["task_submitted", "Görev tamamlandı"],
+  ["time_request", "Süre isteği"],
+  ["app_request", "Uygulama isteği"],
+  ["app_installed", "Yeni uygulama"],
+  ["parent_device_pending", "Ebeveyn cihazı onayı"],
+  ["device_owner_lost", "Telefon yetki kaybı"],
+  ["offline_long", "Telefon çevrimdışı"],
+  ["device_paired", "Telefon eşleşti"],
+  ["message", "Mesaj"],
+  ["timer_alert", "Sayaç"],
+  ["recording_alert", "Kamera kaydı"],
+  ["pin_unlock", "PIN ile açma"],
+  ["pin_fail", "Yanlış PIN"],
+  ["push_test", "Deneme bildirimi"],
+];
+
+const PUSH_NONE = "__none__";
+
 function b64ToBytes(b64: string) {
   const pad = "=".repeat((4 - (b64.length % 4)) % 4);
   const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
@@ -28,6 +47,24 @@ async function readyRegistration(): Promise<ServiceWorkerRegistration | null> {
 export async function currentSubscription(): Promise<PushSubscription | null> {
   const reg = await readyRegistration();
   return (await reg?.pushManager.getSubscription()) ?? null;
+}
+
+export async function currentPushTypes(): Promise<string[] | null> {
+  const sub = await currentSubscription();
+  if (!sub) return null;
+  const { data, error } = await supabase.from("push_subscriptions").select("types").eq("endpoint", sub.endpoint).maybeSingle();
+  if (error) throw error;
+  const types = (data?.types as string[] | null | undefined) ?? [];
+  if (types.includes(PUSH_NONE)) return [];
+  return types.length ? types : PUSH_EVENT_TYPES.map(([id]) => id);
+}
+
+export async function updatePushTypes(types: string[]): Promise<void> {
+  const sub = await currentSubscription();
+  if (!sub) throw new Error("Önce bildirimleri aç.");
+  const stored = types.length === 0 ? [PUSH_NONE] : types.length === PUSH_EVENT_TYPES.length ? [] : types;
+  const { error } = await supabase.from("push_subscriptions").update({ types: stored }).eq("endpoint", sub.endpoint);
+  if (error) throw error;
 }
 
 /** Bu cihazda bildirimleri açar ve aboneliği kaydeder. Kullanıcı dokunuşuyla çağrılmalı (iPhone şartı). */

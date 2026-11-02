@@ -171,6 +171,14 @@ class RuleEngineTest {
     }
 
     @Test
+    fun negativeWalletDebtReducesAllowanceWithoutBecomingSpendable() {
+        val e = RuleEngine(rules(grants = listOf(Grant("debt", -15, null, null, null, "görev cezası"))))
+        val s = e.snapshot(at(15), DayUsage(day))
+        assertEquals(75, s.allowanceMinutes)
+        assertTrue(s.walletGrants.isEmpty())
+    }
+
+    @Test
     fun maxTotalCapsAllowance() {
         val r = rules(grants = listOf(Grant("g1", 200, day, null, null, null)))
         val e = RuleEngine(r.copy(profiles = mapOf("p1" to weekday.copy(maxTotalMinutes = 180))))

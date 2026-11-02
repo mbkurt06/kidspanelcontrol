@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { errorText, supabase } from "../lib/supabase";
 
+const AUTH_REDIRECT = import.meta.env.PROD ? "https://orbit-panel-nu.vercel.app/" : window.location.origin;
+
 // E-posta + şifre. iPhone'da şifre iCloud Anahtar Zinciri'ne kaydedilir ve sonraki girişlerde Face ID ile dolar.
 // Yeni hesap açma kapalı: hesaplar sadece veritabanındaki davet listesiyle açılabilir.
 export default function Login() {
@@ -15,7 +17,7 @@ export default function Login() {
     setBusy(true);
     setErr("");
     setMsg("");
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
     if (error) setErr(errorText(error));
     setBusy(false);
   }
@@ -25,7 +27,7 @@ export default function Login() {
       setErr("Önce e-posta adresini yaz.");
       return;
     }
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin });
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), { redirectTo: AUTH_REDIRECT });
     if (error) setErr(errorText(error));
     else setMsg("Şifre sıfırlama bağlantısı e-postana gönderildi.");
   }

@@ -113,10 +113,22 @@ fun TimerScreen() {
     val live by Live.state.collectAsState()
     val remoteActive = remember(live.lastSync) { Timers.active() }
     var optimisticActive by remember { mutableStateOf<TimerSession?>(null) }
+    var cancelRequested by remember { mutableStateOf(false) }
+    var finishRequested by remember { mutableStateOf(false) }
     LaunchedEffect(live.lastSync, remoteActive?.id) {
         if (remoteActive != null && optimisticActive?.id == "local") optimisticActive = null
+        if (remoteActive != null && cancelRequested && optimisticActive == null) {
+            val ok = withContext(Dispatchers.IO) { Timers.cancel(remoteActive, Timers.currentCounts(remoteActive.id)) }
+            if (ok) Live.syncRequested = true else cancelRequested = false
+        }
+        if (remoteActive != null && finishRequested && optimisticActive == null) {
+            val ok = withContext(Dispatchers.IO) { Timers.finish(remoteActive, "child", Timers.currentCounts(remoteActive.id)) }
+            if (ok) Live.syncRequested = true else finishRequested = false
+        }
+        if (remoteActive == null && cancelRequested) cancelRequested = false
+        if (remoteActive == null && finishRequested) finishRequested = false
     }
-    val active = optimisticActive?.takeIf { it.active } ?: remoteActive
+    val active = if (cancelRequested || finishRequested) null else optimisticActive?.takeIf { it.active } ?: remoteActive
     val activities = remember(live.lastSync) { Timers.activities() }
     val profiles = remember(live.lastSync) { Timers.profiles() }
     var msg by remember { mutableStateOf("") }
@@ -166,12 +178,24 @@ fun TimerScreen() {
             }, enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = C.accent)) { Text("Devam et") }
             if (active.canStop) {
                 Button(onClick = {
-                    optimisticActive = null
-                    act("Kaydedildi 👍", { Timers.finish(active, "child", Timers.currentCounts(active.id)) })
+                    if (active.id == "local") {
+                        optimisticActive = null
+                        finishRequested = true
+                        msg = "Kaydediliyor…"
+                    } else {
+                        optimisticActive = null
+                        act("Kaydedildi 👍", { Timers.finish(active, "child", Timers.currentCounts(active.id)) })
+                    }
                 }, enabled = !busy, colors = ButtonDefaults.buttonColors(containerColor = C.good)) { Text("Bitir ve kaydet") }
             }
         }
-        if (active.canStop) TextButton(onClick = { act("İptal edildi", { Timers.cancel(active, Timers.currentCounts(active.id)) }) }, enabled = !busy) { Text("İptal et", color = C.bad) }
+        if (active.canStop) TextButton(onClick = {
+            if (active.id == "local") {
+                optimisticActive = null
+                cancelRequested = true
+                msg = "İptal edildi"
+            } else act("İptal edildi", { Timers.cancel(active, Timers.currentCounts(active.id)) })
+        }, enabled = !busy) { Text("İptal et", color = C.bad) }
         else Muted("Bu sayacı ebeveynin başlattı; bitene kadar durdurulamaz.", 13)
         if (active.byParent && active.allowStop == "notify") Muted("Erken bitirirsen ebeveynine bildirilir.", 12)
         if (canPickFocus && active.canChangeFocus && profiles.isNotEmpty()) {
@@ -226,7 +250,7 @@ fun TimerScreen() {
                     System.currentTimeMillis(), null, 0, 0, 0,
                 )
                 creating = false
-                act("Başladı, kolay gelsin! 💪", { Timers.start(sessionTitle, a?.icon, a?.id, minutes, if (canPickFocus) focus else null) }) { optimisticActive = null }
+                act("Başladı, kolay gelsin! 💪", { Timers.start(sessionTitle, a?.icon, a?.id, minutes, if (canPickFocus) focus else null) }) { optimisticActive = null; cancelRequested = false; finishRequested = false }
             },
             enabled = !busy && activity != null && title.isNotBlank(),
             modifier = Modifier.fillMaxWidth().height(56.dp),
@@ -293,9 +317,29 @@ fun AlarmsScreen() {
         }
     }
 
+    fun saveAlarm(title: String, kind: String, time: LocalTime, days: Set<Int>, date: LocalDate?, active: Boolean) {
+        val old = list
+        val current = editing
+        val local = AlarmDef(
+            current?.id ?: "local-${System.nanoTime()}", title.trim().ifBlank { "Alarm" }, kind, time, days, date, active,
+            current?.byParent ?: false, current?.canEdit ?: true, current?.canDelete ?: true,
+            current?.snoozeMax ?: 3, current?.snoozeMinutes ?: 5,
+        )
+        list = if (current == null) old + local else old.map { if (it.id == current.id) local else it }
+        editing = null
+        creating = false
+        scope.launch {
+            val ok = withContext(Dispatchers.IO) { Alarms.save(current?.id, title, kind, time, days, date, active) }
+            if (!ok) {
+                list = old
+                msg = "Kaydedilemedi; bağlantıyı kontrol et"
+            } else Live.syncRequested = true
+        }
+    }
+
     if (creating || editing != null) {
         AlarmForm(editing, onCancel = { editing = null; creating = false }) { title, kind, time, days, date, active ->
-            run("Kaydedildi", { Alarms.save(editing?.id, title, kind, time, days, date, active) })
+            saveAlarm(title, kind, time, days, date, active)
         }
         return
     }
@@ -373,7 +417,7 @@ private fun AlarmForm(a: AlarmDef?, onCancel: () -> Unit, onSave: (String, Strin
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center, modifier = Modifier.fillMaxWidth()) {
             Stepper("%02d".format(hh), { hh = (hh + 23) % 24 }, { hh = (hh + 1) % 24 })
             Text(":", color = C.text, fontSize = 36.sp, modifier = Modifier.padding(horizontal = 8.dp))
-            Stepper("%02d".format(mm), { mm = (mm + 55) % 60 }, { mm = (mm + 5) % 60 })
+            Stepper("%02d".format(mm), { mm = (mm + 59) % 60 }, { mm = (mm + 1) % 60 })
         }
         Muted("Tekrar", 13)
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

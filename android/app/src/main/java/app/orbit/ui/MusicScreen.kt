@@ -48,7 +48,6 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.media3.common.Player
 import app.orbit.data.Music
-import app.orbit.data.Store
 import app.orbit.data.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -69,9 +68,6 @@ fun MusicScreen() {
     val scope = rememberCoroutineScope()
     val all by Music.tracks.collectAsState()
     val blocked by Music.blocked.collectAsState()
-    var loaded by remember { mutableStateOf(false) }
-    val fixed = remember { Store.rules().musicFolder }
-    val folder = fixed
 
     // Çalma durumu
     var title by remember { mutableStateOf<String?>(null) }
@@ -97,7 +93,6 @@ fun MusicScreen() {
     LaunchedEffect(granted) {
         if (!granted) app.orbit.device.Policy.grantSelf(ctx, perm)
         val list = withContext(Dispatchers.IO) { Music.scan(ctx) }
-        loaded = true
         withContext(Dispatchers.IO) { Music.reportFolders(ctx); if (granted) Music.syncCatalog(list) }
     }
     LaunchedEffect(Unit) {
@@ -136,7 +131,7 @@ fun MusicScreen() {
         }
     }
 
-    val list = remember(all, folder) { all }
+    val list = all
 
     fun refreshPlaylists() {
         scope.launch(Dispatchers.IO) {
@@ -201,16 +196,6 @@ fun MusicScreen() {
                 " · Karışık: " + if (shuffle) "açık" else "kapalı",
             12,
         )
-    }
-
-    // Klasör
-    val folders = remember(all) { Music.folders(all) }
-    Card {
-        Title("Klasör")
-        if (fixed != null) Muted("📁 $fixed (ebeveynin seçti)")
-        else Muted("Ebeveynin müzik klasörü seçmesi bekleniyor.", 13)
-        if (loaded && all.isEmpty()) Muted("Telefonda müzik bulunamadı. Müzikleri bilgisayardan telefonun Music klasörüne at.", 13)
-        if (!granted) Muted("Müzik dosyalarına erişim izni bekleniyor.", 13)
     }
 
     Card {

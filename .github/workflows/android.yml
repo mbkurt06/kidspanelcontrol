@@ -94,6 +94,49 @@ jobs:
           git diff --cached --quiet || git commit -m "chore(release): publish Orbit $ORBIT_VERSION_CODE installer"
           git push origin HEAD:main
 
+      - name: Telefonlara guncelleme komutu gonder
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.imza.outputs.imza == 'var'
+        shell: bash
+        env:
+          ORBIT_VERSION_CODE: ${{ steps.surum.outputs.code }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "SUPABASE_SERVICE_ROLE_KEY tanimli degil; telefonlara anlik guncelleme komutu gonderilemedi" >&2
+            exit 0
+          fi
+          python3 - <<'PY'
+          import json, os, urllib.request
+
+          base = "https://pwxbrkbljcknstjbccwu.supabase.co/rest/v1"
+          key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+          headers = {
+              "apikey": key,
+              "Authorization": f"Bearer {key}",
+              "Accept-Profile": "orbit",
+              "Content-Profile": "orbit",
+          }
+          req = urllib.request.Request(f"{base}/children?select=id", headers=headers)
+          with urllib.request.urlopen(req) as response:
+              children = json.load(response)
+          for child in children:
+              payload = json.dumps({
+                  "child_id": child["id"],
+                  "type": "resync",
+                  "payload": {"update": True, "version": int(os.environ["ORBIT_VERSION_CODE"])},
+              }).encode()
+              req = urllib.request.Request(
+                  f"{base}/commands",
+                  data=payload,
+                  method="POST",
+                  headers={**headers, "Content-Type": "application/json", "Prefer": "return=minimal"},
+              )
+              with urllib.request.urlopen(req) as response:
+                  if response.status not in (200, 201, 204):
+                      raise RuntimeError(f"commands insert HTTP {response.status}")
+          print(f"{len(children)} telefona Orbit {os.environ['ORBIT_VERSION_CODE']} guncelleme komutu gonderildi")
+          PY
+
       - uses: actions/upload-artifact@v4
         if: success()
         with:

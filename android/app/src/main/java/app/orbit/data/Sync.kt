@@ -132,6 +132,7 @@ object Sync {
                     .put("update_status", status)
                     .put("update_target", target ?: JSONObject.NULL)
                     .put("update_checked_at", Instant.now().toString())
+                    .put("last_update_at", Store.lastUpdateAt.takeIf { it > 0 }?.let { Instant.ofEpochMilli(it).toString() } ?: JSONObject.NULL)
                     .put("update_error", error ?: JSONObject.NULL),
             )
         }.onFailure { Log.w(TAG, "güncelleme durumu bildirilemedi", it) }

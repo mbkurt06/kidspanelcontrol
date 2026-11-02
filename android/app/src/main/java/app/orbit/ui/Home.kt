@@ -608,5 +608,10 @@ private fun AboutScreen() {
         Muted("Cihaz yöneticisi: " + if (Policy.isOwner(ctx)) "evet" else "hayır")
         Muted("Kullanım erişimi: " + if (Policy.hasUsageAccess(ctx)) "açık" else "kapalı")
         Updater.status().takeIf { it.isNotBlank() }?.let { Muted("Güncelleme: $it") }
+        Muted(
+            "Son güncelleme: " + if (Store.lastUpdateAt > 0) {
+                java.text.SimpleDateFormat("dd.MM.yyyy · HH:mm", java.util.Locale("tr", "TR")).format(java.util.Date(Store.lastUpdateAt))
+            } else "henüz yok",
+        )
     }
 }

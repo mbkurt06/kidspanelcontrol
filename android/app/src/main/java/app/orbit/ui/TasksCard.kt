@@ -81,13 +81,16 @@ fun TasksCard(tasks: List<TaskItem>) {
     val scope = rememberCoroutineScope()
     var pending by remember { mutableStateOf<Pair<TaskItem, String>?>(null) }
     var busyRun by remember { mutableStateOf<String?>(null) }
+    var optimisticSubmitted by remember { mutableStateOf<Set<String>>(emptySet()) }
     var msg by remember { mutableStateOf("") }
 
     fun submit(t: TaskItem) {
+        optimisticSubmitted = optimisticSubmitted + t.runId
         busyRun = t.runId
         scope.launch {
             val ok = withContext(Dispatchers.IO) { runCatching { Sync.submitTask(t.runId) } }
             busyRun = null
+            if (ok.isFailure) optimisticSubmitted = optimisticSubmitted - t.runId
             msg = if (ok.isSuccess) "\"${t.title}\" gönderildi, onay bekleniyor"
                 else if ("recording_missing" in (ok.exceptionOrNull()?.message ?: "")) "Önce kaydı tamamla"
                 else "Gönderilemedi: ${ok.exceptionOrNull()?.message ?: "internet?"}"
@@ -103,6 +106,7 @@ fun TasksCard(tasks: List<TaskItem>) {
         val media = res.data?.getStringExtra("media") ?: "photo"
         val (task, stage) = p
         busyRun = task.runId
+        if (stage != "before") optimisticSubmitted = optimisticSubmitted + task.runId
         msg = "Yükleniyor…"
         scope.launch {
             val r = withContext(Dispatchers.IO) {
@@ -114,6 +118,7 @@ fun TasksCard(tasks: List<TaskItem>) {
                 }
             }
             busyRun = null
+            if (r.isFailure && stage != "before") optimisticSubmitted = optimisticSubmitted - task.runId
             msg = when {
                 r.isFailure -> "Yüklenemedi: ${r.exceptionOrNull()?.message ?: "internet?"}"
                 stage == "before" -> "Öncesi kaydedildi. Görevi yap, sonra \"Tamamladım\"a bas."
@@ -136,7 +141,8 @@ fun TasksCard(tasks: List<TaskItem>) {
     Card {
         Title("Görevlerim")
         if (tasks.isEmpty()) Muted("Bugün görev yok.")
-        for (t in tasks) {
+        for (raw in tasks) {
+            val t = if (raw.runId in optimisticSubmitted) raw.copy(status = "submitted") else raw
             Column(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface2).padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),

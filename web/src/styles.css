@@ -216,9 +216,15 @@ a {
   justify-content: space-between;
   gap: 12px;
   min-height: 44px;
+  padding-left: 52px;
 }
 .page-head > .icon-btn:first-child {
-  margin-left: 52px;
+  margin-left: 0;
+}
+.page-head h1 {
+  min-width: 0;
+  flex: 1;
+  text-align: center;
 }
 .section-title {
   font-size: 20px;
@@ -1364,6 +1370,7 @@ select:focus {
 .df-value {
   flex: 1;
   min-height: 44px;
+  min-width: 0;
   text-align: left;
   background: var(--line);
   border: 0;
@@ -1371,6 +1378,9 @@ select:focus {
   color: var(--text);
   font: inherit;
   font-size: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   padding: 0 12px;
   cursor: pointer;
 }

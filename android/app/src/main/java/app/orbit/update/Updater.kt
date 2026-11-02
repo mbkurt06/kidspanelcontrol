@@ -134,6 +134,7 @@ class InstallReceiver : BroadcastReceiver() {
         Store.prefs().edit().putString("updateStatus", text).apply()
         Sync.pushUpdateStatus(text, target, if (st == PackageInstaller.STATUS_SUCCESS) null else detail ?: "PackageInstaller kodu $st")
         if (st == PackageInstaller.STATUS_SUCCESS) {
+            Store.lastUpdateAt = System.currentTimeMillis()
             app.orbit.data.Notifier.init(context)
             val stamp = java.text.SimpleDateFormat("dd.MM.yyyy · HH:mm", java.util.Locale("tr", "TR")).format(java.util.Date())
             app.orbit.data.Notifier.show(app.orbit.data.Notifier.CH_TASKS, 1460, "Orbit güncellendi", "Yeni sürüm $target kuruldu · $stamp", "ABOUT")

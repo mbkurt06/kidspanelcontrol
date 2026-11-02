@@ -226,6 +226,12 @@ export function dateLabel(s: string) {
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}, ${WD[(d.getDay() + 6) % 7]}`;
 }
 
+function dateCompactLabel(s: string) {
+  if (!s) return "";
+  const d = fromIso(s);
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()} · ${WD[(d.getDay() + 6) % 7]}`;
+}
+
 /** Tarih seçici: klavye, kaydırmalı gün/ay/yıl veya klasik takvim. */
 export function DateField({
   value,
@@ -304,7 +310,7 @@ export function DateField({
         </button>
       )}
       <button type="button" className="df-value" onClick={() => setOpen(true)} aria-label={label ?? "Tarih"}>
-        📅 {value ? dateLabel(value) : placeholder}
+        {value ? dateCompactLabel(value) : placeholder}
       </button>
       {value && (
         <button type="button" className="tf-more" aria-label="Sonraki gün" onClick={() => shift(1)}>

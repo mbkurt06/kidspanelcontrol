@@ -192,6 +192,12 @@ class OrbitService : Service() {
         val online = nowMs - Store.lastSync < 120_000
         if (Store.creds == null) { stopSelf(); return }
 
+        if (Store.installedVersion != BuildConfig.VERSION_CODE) {
+            Store.installedVersion = BuildConfig.VERSION_CODE
+            if (Store.lastUpdateAt == 0L) Store.lastUpdateAt = nowMs
+            scope.launch(Dispatchers.IO) { Sync.pushUpdateStatus("Güncel (${BuildConfig.VERSION_CODE})", BuildConfig.VERSION_CODE) }
+        }
+
         // 1) Ağ işleri arka planda (internet yoksa sessizce geçer; kurallar telefonda kayıtlı)
         if ((firstRun || Live.syncRequested || nowMs - lastPull > 30_000) && netBusy.compareAndSet(false, true)) {
             lastPull = nowMs

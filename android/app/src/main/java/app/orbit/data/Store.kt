@@ -111,4 +111,12 @@ object Store {
     var updateCheckOnly: Boolean
         get() = p.getBoolean("updateCheckOnly", false)
         set(v) = p.edit().putBoolean("updateCheckOnly", v).apply()
+
+    var lastUpdateAt: Long
+        get() = p.getLong("lastUpdateAt", 0)
+        set(v) = p.edit().putLong("lastUpdateAt", v).apply()
+
+    var installedVersion: Int
+        get() = p.getInt("installedVersion", 0)
+        set(v) = p.edit().putInt("installedVersion", v).apply()
 }

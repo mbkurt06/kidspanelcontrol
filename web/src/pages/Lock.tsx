@@ -77,47 +77,42 @@ export default function Lock({ embeddedChildId }: { embeddedChildId?: string } =
         ))}
       </section>
 
-      <section className="stack">
-        <div className="row between">
-          <h2 className="section-title">Haftalık program</h2>
-          <button className="btn small" onClick={add}>
-            <Icon name="plus" size={16} /> Kural
-          </button>
-        </div>
-        <div className="row gap-xs wrap">
-          <button className={`chip small ${kid === "all" ? "on" : ""}`} onClick={() => setKid("all")}>
-            Hepsi
-          </button>
-          {shownChildren.map((c) => (
-            <button key={c.id} className={`chip small ${kid === c.id ? "on" : ""}`} onClick={() => setKid(c.id)}>
-              {c.name}
+      <details className="card section-collapse-card">
+        <summary className="section-collapse-head"><span>Haftalık program <Info>Aynı saate iki kural denk gelirse güçlü olan geçerli: Kilitle → Sınırla → Serbest.</Info></span><span>⌄</span></summary>
+        <div className="stack">
+          <div className="row between">
+            <span className="muted small">Kurallar</span>
+            <button className="btn small" onClick={add}>
+              <Icon name="plus" size={16} /> Kural
             </button>
-          ))}
+          </div>
+          <div className="row gap-xs wrap">
+            <button className={`chip small ${kid === "all" ? "on" : ""}`} onClick={() => setKid("all")}>Hepsi</button>
+            {shownChildren.map((c) => <button key={c.id} className={`chip small ${kid === c.id ? "on" : ""}`} onClick={() => setKid(c.id)}>{c.name}</button>)}
+          </div>
+          <div className="card">
+            <WeekGrid
+              rules={rules}
+              onPick={(id) => {
+                setOpenRule(id);
+                setTimeout(() => document.getElementById(`rule-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+              }}
+            />
+          </div>
+          {!rules.length && <p className="muted small">Henüz kural yok. "Kural" ile ekle.</p>}
+          {rules.map((r) => <RuleCard key={r.id} r={r} kinds={["kiosk", "limit", "free"]} open={openRule === r.id} onToggle={() => setOpenRule(openRule === r.id ? null : r.id)} onErr={setErr} />)}
         </div>
-        <div className="card">
-          <WeekGrid
-            rules={rules}
-            onPick={(id) => {
-              setOpenRule(id);
-              setTimeout(() => document.getElementById(`rule-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
-            }}
-          />
-          <p className="muted tiny">Aynı saate iki kural denk gelirse güçlü olan geçerli: Kilitle → Sınırla → Serbest. Kural yoksa gün tipindeki bölümler geçerli.</p>
-        </div>
-        {!rules.length && <p className="muted small">Henüz kural yok. "Kural" ile ekle.</p>}
-        {rules.map((r) => (
-          <RuleCard key={r.id} r={r} kinds={["kiosk", "limit", "free"]} open={openRule === r.id} onToggle={() => setOpenRule(openRule === r.id ? null : r.id)} onErr={setErr} />
-        ))}
-      </section>
+      </details>
 
-      <section className="stack">
-        <h2 className="section-title">Kilit ekranı</h2>
-        {shownChildren.map((c) => (
-          <KioskLook key={c.id} child={c} onErr={setErr} />
-        ))}
-      </section>
+      <details className="card section-collapse-card">
+        <summary className="section-collapse-head"><span>Kilit ekranı</span><span>⌄</span></summary>
+        <div className="stack">{shownChildren.map((c) => <KioskLook key={c.id} child={c} onErr={setErr} />)}</div>
+      </details>
 
-      <LockButtonCard onErr={setErr} />
+      <details className="card section-collapse-card">
+        <summary className="section-collapse-head"><span>Ana sayfadaki kilit tuşu</span><span>⌄</span></summary>
+        <LockButtonCard onErr={setErr} />
+      </details>
     </div>
   );
 }
@@ -210,11 +205,10 @@ function NowCard({ child, onErr }: { child: Child; onErr: (e: string) => void })
           🌙 Sınırla
         </button>
         <button className="btn ghost" onClick={release}>
-          Kaldır
+          Kaldır <Info>Elle verilen kilidi ve o an süren programlı kilidi/sınırlamayı bitirir.</Info>
         </button>
       </div>
       {msg && <p className="ok small">{msg}</p>}
-      <p className="muted tiny">"Kaldır" elle verilen kilidi ve o an süren programlı kilidi/sınırlamayı bitirir; program bir sonraki sefer yine başlar.</p>
     </div>
   );
 }
@@ -233,7 +227,7 @@ function KioskLook({ child, onErr }: { child: Child; onErr: (e: string) => void 
     <div className="card">
       <b>{child.name}</b>
       <input value={m} onChange={(e) => setM(e.target.value)} onBlur={() => m !== (ks.message ?? "") && save({ message: m.trim() || null })} placeholder="Kilit ekranında mesaj (ör. Ders saati)" />
-      <span className="small">Kilitliyken Orbit'te açık ekranlar</span>
+      <span className="small">Kilitliyken Orbit'te açık ekranlar <Info>Burada seçilen ekranlar telefon kilitliyken görülebilir.</Info></span>
       <ScreenPicker value={ks.screens} onChange={(v) => save({ screens: v })} />
       <label className="field">
         <span>Telefon aramaları</span>

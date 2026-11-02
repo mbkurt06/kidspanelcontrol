@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { fromPatch, grantMinutes, insertGrant, nowPatch, sendCommand, type GrantPatch } from "../lib/actions";
-import { dateText, hhmm, minutesText, relTime, todayISO } from "../lib/util";
+import { dateText, dateTimeText, hhmm, minutesText, relTime, todayISO } from "../lib/util";
 import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type DayOverride, type Device, type ExtraTarget, type Section, type TimeGrant } from "../lib/types";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
@@ -95,7 +95,8 @@ function UpdateCard({ childId, device }: { childId: string; device?: Device }) {
     <div className="card">
       <h2>Orbit güncellemesi <Info>Kontrol et yalnızca sonucu sorgular. Güncelle seçilirse telefon yeni APK'yı indirip kurmayı dener.</Info></h2>
       <div className="muted small">Telefon: {current ?? "?"} · En yeni: {latest ?? "?"}{behind ? " · Yeni sürüm var" : ""}</div>
-      {device?.update_status && <div className="muted small">Son durum: {device.update_status}{device.update_checked_at ? ` · ${relTime(device.update_checked_at)}` : ""}</div>}
+      {device?.update_status && <div className="muted small">Son durum: {device.update_status}</div>}
+      <div className="muted small">Son güncelleme: {device?.last_update_at ? dateTimeText(device.last_update_at) : "henüz yok"}</div>
       {device?.update_error && <div className="error small">Güncelleme hatası: {device.update_error}</div>}
       <div className="row gap-s wrap">
         <button className="btn" onClick={() => command(false)}>Kontrol et</button>
@@ -764,7 +765,7 @@ function TimeTab({ childId }: { childId: string }) {
               <span className="small">'den itibaren</span>
             </div>
             <label className="field">
-              <span>Ne zamana kadar kullanabilir</span>
+              <span>Ne zamana kadar kullanabilir <Info>O saat gelince süre çocuğun kalan süresine eklenir. Bitiş saatine kadar kullanmazsa düşer; kapalı saatlere denk gelirse o aralıkta telefon bu süre kadar açılır.</Info></span>
               <select value={endMode} onChange={(e) => setEndMode(e.target.value as typeof endMode)}>
                 <option value="open">Açık saatler bitene kadar</option>
                 <option value="until">Belirli saate kadar</option>
@@ -772,7 +773,6 @@ function TimeTab({ childId }: { childId: string }) {
               </select>
             </label>
             {endMode === "until" && <TimeField value={until} onChange={(v) => setUntil(v)} label="Bitiş" />}
-            <p className="muted tiny">O saat gelince süre çocuğun kalan süresine eklenir. Bitiş saatine kadar kullanmazsa düşer. Kapalı saatlere denk gelirse o aralıkta telefon bu süre kadar açılır.</p>
           </>
         )}
         {when === "date" && (
@@ -1023,7 +1023,7 @@ function PlanSheet({
             {!(!grant.vault && !grant.valid_on) && <option value="wallet">Çocuğun cüzdanına (kendisi kullansın)</option>}
           </select>
         </label>
-        {where === "now" && <p className="muted tiny">Açık saatlerdeyse kalan süresine hemen eklenir; kapalı saatlerdeyse şu andan itibaren bu süre kadar telefon açılır.</p>}
+        {where === "now" && <Info>Açık saatlerdeyse kalan süresine hemen eklenir; kapalı saatlerdeyse şu andan itibaren bu süre kadar telefon açılır.</Info>}
         {dated && (
           <label className="field">
             <span>Hangi gün</span>
@@ -1132,7 +1132,7 @@ function DeviceTab({ childId }: { childId: string }) {
                 {d.os_version ? `Android ${d.os_version} · ` : ""}
                 {d.app_version ? `Orbit ${d.app_version} · ` : ""}
                 {d.is_device_owner === false ? "device owner DEĞİL · " : ""}
-                son görülme {relTime(d.last_seen_at)}
+                Eşleşme: {d.created_at ? dateTimeText(d.created_at) : "—"} · son görülme {relTime(d.last_seen_at)}
               </div>
             </div>
             {d.status === "active" ? (

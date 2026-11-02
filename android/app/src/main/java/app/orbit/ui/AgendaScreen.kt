@@ -28,9 +28,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,7 +50,9 @@ import java.time.format.DateTimeFormatter
 
 private val DAY = DateTimeFormatter.ofPattern("dd.MM.yyyy")
 private val WEEKDAY = DateTimeFormatter.ofPattern("EEEE", java.util.Locale("tr", "TR"))
+private val COMPACT_DATE = DateTimeFormatter.ofPattern("dd.MM.yyyy · EEE", java.util.Locale("tr", "TR"))
 private fun dateText(value: String) = runCatching { LocalDate.parse(value.take(10)).format(DAY) + " " + LocalDate.parse(value.take(10)).format(WEEKDAY) }.getOrDefault(value)
+private fun compactDateText(value: String) = runCatching { LocalDate.parse(value.take(10)).format(COMPACT_DATE) }.getOrDefault(value)
 private fun enteredText(value: String) = runCatching { Instant.parse(value).atZone(java.time.ZoneId.systemDefault()).toLocalDate().format(DAY) + " · " + Instant.parse(value).atZone(java.time.ZoneId.systemDefault()).toLocalTime().toString().take(5) }.getOrDefault(value.take(16))
 
 @Composable
@@ -59,14 +61,18 @@ fun AgendaScreen() {
     val scope = rememberCoroutineScope()
     var form by remember { mutableStateOf(false) }
     var detail by remember { mutableStateOf<AgendaItem?>(null) }
-    val items = remember(live.lastSync) { Agenda.current() }
+    var items by remember(live.lastSync) { mutableStateOf(Agenda.current()) }
 
     val openItems = items.filter { it.status != "done" }
     val doneItems = items.filter { it.status == "done" }
 
     fun toggle(item: AgendaItem) {
+        val nextDone = item.status != "done"
+        val before = items
+        items = items.map { if (it.id == item.id) it.copy(status = if (nextDone) "done" else "open") else it }
         scope.launch {
-            withContext(Dispatchers.IO) { Agenda.setDone(item.id, item.status != "done") }
+            val ok = withContext(Dispatchers.IO) { Agenda.setDone(item.id, nextDone) }
+            if (!ok) items = before
             Live.syncRequested = true
         }
     }
@@ -111,7 +117,8 @@ fun AgendaScreen() {
     }
     if (form) AgendaForm(onClose = { form = false })
     detail?.let { item -> AgendaDetail(item, onClose = { detail = null }, onDone = {
-        scope.launch { withContext(Dispatchers.IO) { Agenda.setDone(item.id, item.status != "done") }; detail = null; Live.syncRequested = true }
+        toggle(item)
+        detail = null
     }) }
 }
 
@@ -178,7 +185,7 @@ private fun DateSelector(value: String, onChange: (String) -> Unit) {
                 OutlinedTextField(year, { year = it.filter(Char::isDigit).take(4); if (year.length == 4) apply(day.toIntOrNull() ?: 1, month.toIntOrNull() ?: 1, year.toInt()) }, label = { Text("Yıl") }, singleLine = true, modifier = Modifier.weight(1.3f))
             }
             "wheel" -> {
-                OutlinedButton(onClick = { wheel = true }) { Text(dateText(value) + " · gün/ay/yıl seç") }
+                OutlinedButton(onClick = { wheel = true }) { Text(compactDateText(value)) }
                 if (wheel) AlertDialog(
                     onDismissRequest = { wheel = false },
                     title = { Text("Tarihi kaydırarak seç") },
@@ -192,7 +199,7 @@ private fun DateSelector(value: String, onChange: (String) -> Unit) {
                     confirmButton = { TextButton(onClick = { wheel = false }) { Text("Tamam") } },
                 )
             }
-            else -> OutlinedButton(onClick = { DatePickerDialog(context, { _, y, m, d -> onChange("%04d-%02d-%02d".format(y, m + 1, d)) }, date.year, date.monthValue - 1, date.dayOfMonth).show() }) { Text("📅 ${dateText(value)}") }
+            else -> OutlinedButton(onClick = { DatePickerDialog(context, { _, y, m, d -> onChange("%04d-%02d-%02d".format(y, m + 1, d)) }, date.year, date.monthValue - 1, date.dayOfMonth).show() }) { Text(compactDateText(value)) }
         }
     }
 }

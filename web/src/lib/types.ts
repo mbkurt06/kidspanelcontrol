@@ -198,6 +198,7 @@ export type Device = {
   update_status?: string | null;
   update_target?: number | null;
   update_checked_at?: string | null;
+  last_update_at?: string | null;
   update_error?: string | null;
   created_at: string;
 };

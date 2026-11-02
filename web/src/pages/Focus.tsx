@@ -98,8 +98,7 @@ export function FocusEdit() {
         <h2 className="section-title">Odak profili <Info>Sayaç bu profille çalışırken yalnızca aşağıda seçtiklerin açık kalır. Mevcut kuralları gevşetmez.</Info></h2>
       </div>
       <div className="card">
-        <h2>Orbit menüleri</h2>
-        <p className="muted small">Sayaç bu profille çalışırken yalnızca seçtiğin menüler görünür. Hiçbiri seçilmezse tüm menüler açık kalır.</p>
+        <h2>Orbit menüleri <Info>Sayaç bu profille çalışırken yalnızca seçtiğin menüler görünür. Hiçbiri seçilmezse tüm menüler açık kalır.</Info></h2>
         {MENU_OPTIONS.map(([key, label]) => (
           <label className="check" key={key}>
             <input
@@ -161,7 +160,7 @@ export function FocusEdit() {
         <label className="check">
           <input type="checkbox" checked={p.calls_allowed} onChange={(e) => setP({ ...p, calls_allowed: e.target.checked })} /> Telefon araması açık
         </label>
-        <p className="muted tiny">Acil arama her zaman yapılabilir. Kapalı uygulamaların bildirimleri de görünmez.</p>
+        <Info>Acil arama her zaman yapılabilir. Kapalı uygulamaların bildirimleri de görünmez.</Info>
       </div>
       <button className="btn primary wide" onClick={save}>
         {saved ? "Kaydedildi" : "Kaydet"}

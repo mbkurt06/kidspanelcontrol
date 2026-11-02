@@ -22,6 +22,10 @@ type Form = {
   due_time: string;
   proof: ProofType;
   before_after: boolean;
+  proof_before_min: string;
+  proof_before_max: string;
+  proof_after_min: string;
+  proof_after_max: string;
   reward_minutes: string;
   reward_text: string;
   reward_validity: RewardValidity;
@@ -38,7 +42,7 @@ type Form = {
   orbit_focus_profile_id: string;
 };
 
-const empty = (childIds: string[]): Form => ({
+const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; task_before_photo_max?: number; task_after_photo_min?: number; task_after_photo_max?: number }): Form => ({
   title: "",
   description: "",
   child_ids: childIds,
@@ -50,7 +54,11 @@ const empty = (childIds: string[]): Form => ({
   due_date: todayISO(),
   due_time: "",
   proof: "photo",
-  before_after: false,
+  before_after: true,
+  proof_before_min: String(defaults?.task_before_photo_min ?? 1),
+  proof_before_max: String(defaults?.task_before_photo_max ?? 4),
+  proof_after_min: String(defaults?.task_after_photo_min ?? 1),
+  proof_after_max: String(defaults?.task_after_photo_max ?? 4),
   reward_minutes: "15",
   reward_text: "",
   reward_validity: "today",
@@ -87,7 +95,7 @@ export default function TaskEdit() {
   const fam = useFamily();
   const nav = useNavigate();
   const isNew = !id || id === "new";
-  const [f, setF] = useState<Form>(empty(fam.children.map((c) => c.id)));
+  const [f, setF] = useState<Form>(() => empty(fam.children.map((c) => c.id), fam.family ?? undefined));
   const [saveTemplate, setSaveTemplate] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
@@ -111,6 +119,10 @@ export default function TaskEdit() {
             due_time: t.due_time?.slice(0, 5) ?? "",
             proof: t.proof,
             before_after: t.before_after,
+            proof_before_min: String(t.proof_before_min ?? (t.before_after ? 1 : 0)),
+            proof_before_max: String(t.proof_before_max ?? 4),
+            proof_after_min: String(t.proof_after_min ?? 1),
+            proof_after_max: String(t.proof_after_max ?? 4),
             reward_minutes: t.reward_minutes?.toString() ?? "",
             reward_text: t.reward_text ?? "",
             reward_validity: t.reward_validity,
@@ -133,6 +145,10 @@ export default function TaskEdit() {
               description: data.description ?? "",
               proof: data.proof,
               before_after: data.before_after,
+              proof_before_min: String(data.proof_before_min ?? (data.before_after ? 1 : 0)),
+              proof_before_max: String(data.proof_before_max ?? 4),
+              proof_after_min: String(data.proof_after_min ?? 1),
+              proof_after_max: String(data.proof_after_max ?? 4),
               reward_minutes: data.reward_minutes?.toString() ?? "",
               reward_text: data.reward_text ?? "",
               reward_validity: data.reward_validity,
@@ -167,6 +183,10 @@ export default function TaskEdit() {
       due_time: f.due_time || null,
       proof: f.proof,
       before_after: f.proof !== "none" && f.before_after,
+      proof_before_min: f.proof !== "none" && f.before_after ? Math.min(4, Math.max(1, Number(f.proof_before_min) || 1)) : 0,
+      proof_before_max: f.proof !== "none" && f.before_after ? Math.max(Number(f.proof_before_max) || 4, Number(f.proof_before_min) || 1) : 4,
+      proof_after_min: f.proof === "none" ? 1 : Math.min(4, Math.max(1, Number(f.proof_after_min) || 1)),
+      proof_after_max: f.proof === "none" ? 4 : Math.max(Number(f.proof_after_max) || 4, Number(f.proof_after_min) || 1),
       reward_minutes: f.reward_minutes ? Number(f.reward_minutes) : null,
       reward_text: f.reward_text.trim() || null,
       reward_validity: f.reward_validity,
@@ -190,6 +210,10 @@ export default function TaskEdit() {
         description: row.description,
         proof: row.proof,
         before_after: row.before_after,
+        proof_before_min: row.proof_before_min,
+        proof_before_max: row.proof_before_max,
+        proof_after_min: row.proof_after_min,
+        proof_after_max: row.proof_after_max,
         reward_minutes: row.reward_minutes,
         reward_text: row.reward_text,
         reward_validity: row.reward_validity === "date" ? "today" : row.reward_validity,
@@ -317,7 +341,15 @@ export default function TaskEdit() {
           {f.proof !== "none" && f.proof !== "photo" && <span className="pill quiet">{PROOF_LABEL[f.proof]}</span>}
         </div>
         {f.proof !== "none" && f.proof !== "photo" && <p className="muted tiny"><Info>Bu eski görev video kanıtı kullanıyor; değiştirmek için yukarıdaki fotoğraf seçeneğini seçebilirsin.</Info></p>}
-        {f.proof === "photo" && <p className="muted tiny"><Info>Başlangıç seçilirse çocuk önce fotoğraf çeker; tamamlayınca ikinci fotoğrafı gönderir.</Info></p>}
+        {f.proof === "photo" && (
+          <>
+            <p className="muted tiny"><Info>Yeni görevlerde iki aşama varsayılan olarak açıktır. Her aşamada kaç fotoğraf gerektiğini belirleyebilirsin.</Info></p>
+            <div className="grid2">
+              {f.before_after && <PhotoCountFields title="Başlangıç fotoğrafları" min={f.proof_before_min} max={f.proof_before_max} onMin={(v) => set("proof_before_min", v)} onMax={(v) => set("proof_before_max", v)} />}
+              <PhotoCountFields title="Tamamlanma fotoğrafları" min={f.proof_after_min} max={f.proof_after_max} onMin={(v) => set("proof_after_min", v)} onMax={(v) => set("proof_after_max", v)} />
+            </div>
+          </>
+        )}
       </div>
 
       <div className="card">
@@ -449,6 +481,18 @@ export default function TaskEdit() {
             Görevi sil
           </button>
         )}
+      </div>
+    </div>
+  );
+}
+
+function PhotoCountFields({ title, min, max, onMin, onMax }: { title: string; min: string; max: string; onMin: (v: string) => void; onMax: (v: string) => void }) {
+  return (
+    <div className="card soft">
+      <b>{title}</b>
+      <div className="grid2">
+        <label className="field"><span>En az</span><input type="number" min={1} max={4} value={min} onChange={(e) => onMin(e.target.value)} /></label>
+        <label className="field"><span>En fazla</span><input type="number" min={1} max={4} value={max} onChange={(e) => onMax(e.target.value)} /></label>
       </div>
     </div>
   );

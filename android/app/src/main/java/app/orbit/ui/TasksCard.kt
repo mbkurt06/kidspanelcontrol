@@ -102,7 +102,7 @@ fun TasksCard(tasks: List<TaskItem>) {
         val p = pending ?: return@rememberLauncherForActivityResult
         pending = null
         if (res.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
-        val path = res.data?.getStringExtra("path") ?: return@rememberLauncherForActivityResult
+        val paths = res.data?.getStringArrayListExtra("paths") ?: res.data?.getStringExtra("path")?.let { arrayListOf(it) } ?: return@rememberLauncherForActivityResult
         val media = res.data?.getStringExtra("media") ?: "photo"
         val (task, stage) = p
         busyRun = task.runId
@@ -111,9 +111,11 @@ fun TasksCard(tasks: List<TaskItem>) {
         scope.launch {
             val r = withContext(Dispatchers.IO) {
                 runCatching {
-                    val f = File(path)
-                    Sync.uploadProof(task.runId, stage, media, f.readBytes(), if (media == "video") "video/mp4" else "image/jpeg")
-                    f.delete()
+                    for (path in paths) {
+                        val f = File(path)
+                        Sync.uploadProof(task.runId, stage, media, f.readBytes(), if (media == "video") "video/mp4" else "image/jpeg")
+                        f.delete()
+                    }
                     if (stage != "before") Sync.submitTask(task.runId)
                 }
             }
@@ -121,21 +123,27 @@ fun TasksCard(tasks: List<TaskItem>) {
             if (r.isFailure && stage != "before") optimisticSubmitted = optimisticSubmitted - task.runId
             msg = when {
                 r.isFailure -> "Yüklenemedi: ${r.exceptionOrNull()?.message ?: "internet?"}"
-                stage == "before" -> "Öncesi kaydedildi. Görevi yap, sonra \"Tamamladım\"a bas."
+                stage == "before" -> "${paths.size} öncesi fotoğrafı kaydedildi. Görevi yap, sonra \"Tamamladım\"a bas."
                 else -> "\"${task.title}\" gönderildi, onay bekleniyor"
             }
             Live.syncRequested = true
         }
     }
 
-    fun capture(t: TaskItem, stage: String) {
+    fun capture(t: TaskItem, stage: String, minPhotos: Int, maxPhotos: Int) {
         pending = t to stage
         val title = when (stage) {
             "before" -> "${t.title} — öncesi"
             "after" -> "${t.title} — sonrası"
             else -> t.title
         }
-        launcher.launch(Intent(ctx, CaptureActivity::class.java).putExtra("media", mediaFor(t.proof)).putExtra("title", title))
+        launcher.launch(
+            Intent(ctx, CaptureActivity::class.java)
+                .putExtra("media", mediaFor(t.proof))
+                .putExtra("title", title)
+                .putExtra("minPhotos", minPhotos)
+                .putExtra("maxPhotos", maxPhotos),
+        )
     }
 
     Card {
@@ -161,7 +169,7 @@ fun TasksCard(tasks: List<TaskItem>) {
                 if (t.open && t.needsRecording) {
                     val rec = app.orbit.data.Recorder.current()?.takeIf { it.runId == t.runId }
                     when {
-                        rec?.active == true || (!t.recordingDone && !(t.needsProof && t.beforeAfter && !t.hasBefore)) -> Button(
+                        rec?.active == true || (!t.recordingDone && !(t.needsProof && t.beforeCount < t.beforePhotoMin)) -> Button(
                             onClick = { ctx.startActivity(Intent(ctx, RecordActivity::class.java).putExtra("runId", t.runId)) },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = C.bad),
@@ -178,15 +186,16 @@ fun TasksCard(tasks: List<TaskItem>) {
                         t.recordingDone -> Text("📹 Kayıt tamam (${t.recSeconds / 60} dk)", color = C.good, fontSize = 13.sp)
                     }
                 }
-                val recordFirst = t.needsRecording && !t.recordingDone && !(t.needsProof && t.beforeAfter && !t.hasBefore)
+                val needBefore = t.needsProof && t.beforeCount < t.beforePhotoMin
+                val needAfter = t.needsProof && t.afterCount < t.afterPhotoMin
+                val recordFirst = t.needsRecording && !t.recordingDone && !needBefore
                 if (t.open && !recordFirst && !(t.needsRecording && app.orbit.data.Recorder.current()?.let { it.runId == t.runId && it.active } == true)) {
                     val busy = busyRun == t.runId
-                    val needBefore = t.needsProof && t.beforeAfter && !t.hasBefore
                     Button(
                         onClick = {
                             when {
-                                needBefore -> capture(t, "before")
-                                t.needsProof -> capture(t, if (t.beforeAfter) "after" else "single")
+                                needBefore -> capture(t, "before", t.beforePhotoMin, t.beforePhotoMax)
+                                needAfter -> capture(t, if (t.beforeAfter) "after" else "single", t.afterPhotoMin, t.afterPhotoMax)
                                 else -> submit(t)
                             }
                         },
@@ -197,8 +206,8 @@ fun TasksCard(tasks: List<TaskItem>) {
                         Text(
                             when {
                                 busy -> "Gönderiliyor…"
-                                needBefore -> "Başla (öncesi ${if (t.proof == "video") "videosu" else "fotoğrafı"})"
-                                t.needsProof -> "Tamamladım (${if (t.beforeAfter) "sonrası " else ""}${if (t.proof == "video") "video" else "fotoğraf"})"
+                                needBefore -> "Başla (${t.beforeCount}/${t.beforePhotoMin} öncesi)"
+                                needAfter -> "Tamamladım (${t.afterCount}/${t.afterPhotoMin} sonrası)"
                                 else -> "Tamamladım"
                             }
                         )

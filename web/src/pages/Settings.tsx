@@ -5,7 +5,8 @@ import { errorText, localDevice, supabase } from "../lib/supabase";
 import { relTime } from "../lib/util";
 import type { Device, ParentDevice } from "../lib/types";
 import { Info } from "../components/Info";
-import { currentSubscription, disablePush, enablePush, isStandalone, pushSupported } from "../lib/push";
+import { currentSubscription, disablePush, enablePush, isIOS, isStandalone, pushSupported } from "../lib/push";
+import { biometricEnabled, biometricSupported, disableBiometric, registerBiometric } from "../lib/biometric";
 
 type Parent = { user_id: string; email: string; display_name: string };
 type Invite = { email: string; display_name: string | null };
@@ -103,10 +104,12 @@ export default function Settings() {
 
       <ThemeCard />
       <ProofCard />
+      <TaskPhotoDefaultsCard />
+      <BiometricCard />
 
       <div className="card">
         <h2>Bildirimler <Info>Görev, süre, uygulama ve telefon durumlarıyla ilgili bildirimleri bu cihazda yönetirsin.</Info></h2>
-        {!pushSupported() || (/iPhone|iPad/.test(navigator.userAgent) && !isStandalone()) ? (
+        {!pushSupported() || (isIOS() && !isStandalone()) ? (
           <p className="muted tiny">Bildirimleri açmak için paneli iPhone ana ekranından açman gerekir.</p>
         ) : (
           <>
@@ -118,9 +121,13 @@ export default function Settings() {
                     className="btn small"
                     disabled={pushBusy}
                     onClick={async () => {
+                      setPushBusy(true);
+                      setErr("");
                       const { data: u } = await supabase.auth.getUser();
-                      await supabase.from("events").insert({ family_id: fam.familyId, type: "push_test", payload: { by: u.user?.email } });
-                      setMsg("Deneme bildirimi gönderildi");
+                      const { error } = await supabase.from("events").insert({ family_id: fam.familyId, type: "push_test", payload: { by: u.user?.email } });
+                      if (error) setErr(errorText(error));
+                      else setMsg("Deneme bildirimi gönderildi. iPhone'da birkaç saniye içinde görünmeli.");
+                      setPushBusy(false);
                     }}
                   >
                     Deneme gönder
@@ -438,6 +445,98 @@ function ProofCard() {
         <option value={7}>7 gün saklansın</option>
         <option value={30}>30 gün saklansın</option>
       </select>
+    </div>
+  );
+}
+
+function TaskPhotoDefaultsCard() {
+  const fam = useFamily();
+  const f = fam.family;
+  const [v, setV] = useState({ beforeMin: 1, beforeMax: 4, afterMin: 1, afterMax: 4 });
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    if (!f) return;
+    setV({
+      beforeMin: f.task_before_photo_min ?? 1,
+      beforeMax: f.task_before_photo_max ?? 4,
+      afterMin: f.task_after_photo_min ?? 1,
+      afterMax: f.task_after_photo_max ?? 4,
+    });
+  }, [f]);
+
+  async function save() {
+    setErr("");
+    setMsg("");
+    const n = {
+      task_before_photo_min: Math.max(1, Math.min(4, v.beforeMin)),
+      task_before_photo_max: Math.max(1, Math.min(4, v.beforeMax)),
+      task_after_photo_min: Math.max(1, Math.min(4, v.afterMin)),
+      task_after_photo_max: Math.max(1, Math.min(4, v.afterMax)),
+    };
+    if (n.task_before_photo_min > n.task_before_photo_max || n.task_after_photo_min > n.task_after_photo_max) return setErr("En az değeri en fazla değerinden büyük olamaz.");
+    const { error } = await supabase.from("families").update(n).eq("id", fam.familyId);
+    if (error) return setErr(errorText(error));
+    setMsg("Yeni görev varsayılanları kaydedildi.");
+    await fam.reload();
+  }
+
+  if (!f) return null;
+  return (
+    <div className="card">
+      <h2>Görev fotoğraf varsayılanları <Info>Yeni fotoğraflı görevlerde başlangıç ve tamamlanma aşamaları için uygulanır. Görev içinde değiştirilebilir.</Info></h2>
+      <div className="grid2">
+        <label className="field"><span>Başlangıç · en az</span><input type="number" min={1} max={4} value={v.beforeMin} onChange={(e) => setV({ ...v, beforeMin: Number(e.target.value) })} /></label>
+        <label className="field"><span>Başlangıç · en fazla</span><input type="number" min={1} max={4} value={v.beforeMax} onChange={(e) => setV({ ...v, beforeMax: Number(e.target.value) })} /></label>
+        <label className="field"><span>Tamamlanma · en az</span><input type="number" min={1} max={4} value={v.afterMin} onChange={(e) => setV({ ...v, afterMin: Number(e.target.value) })} /></label>
+        <label className="field"><span>Tamamlanma · en fazla</span><input type="number" min={1} max={4} value={v.afterMax} onChange={(e) => setV({ ...v, afterMax: Number(e.target.value) })} /></label>
+      </div>
+      {err && <p className="error">{err}</p>}
+      {msg && <p className="ok">{msg}</p>}
+      <button className="btn" onClick={save}>Kaydet</button>
+    </div>
+  );
+}
+
+function BiometricCard() {
+  const [supported, setSupported] = useState(false);
+  const [enabled, setEnabled] = useState(() => biometricEnabled());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => { biometricSupported().then(setSupported); }, []);
+
+  async function enable() {
+    setBusy(true);
+    setErr("");
+    try {
+      const { data } = await supabase.auth.getUser();
+      if (!data.user) throw new Error("Oturum bulunamadı.");
+      await registerBiometric({ id: data.user.id, email: data.user.email ?? "Orbit" });
+      setEnabled(true);
+      setMsgAndReload();
+    } catch (e) {
+      setErr(errorText(e));
+      setBusy(false);
+    }
+  }
+
+  function setMsgAndReload() {
+    window.location.reload();
+  }
+
+  function disable() {
+    disableBiometric();
+    setEnabled(false);
+  }
+
+  return (
+    <div className="card">
+      <h2>Face ID ile aç <Info>Orbit ana ekrandan açıldığında cihazın Face ID/Touch ID doğrulamasını ister.</Info></h2>
+      {!supported ? <p className="muted tiny">Bu cihaz veya tarayıcı platform doğrulamasını desteklemiyor.</p> : enabled ? (
+        <div className="row gap-s wrap"><span className="pill">Face ID kilidi açık</span><button className="btn small ghost" onClick={disable}>Kapat</button></div>
+      ) : <button className="btn" onClick={enable} disabled={busy}>{busy ? "Hazırlanıyor…" : "Face ID ile korumayı aç"}</button>}
+      {err && <p className="error">{err}</p>}
     </div>
   );
 }

@@ -83,6 +83,10 @@ export type FamilySettings = {
   lock_button_minutes: number | null;
   pin_unlock_minutes: number;
   parent_pin_hash: string | null;
+  task_before_photo_min: number;
+  task_before_photo_max: number;
+  task_after_photo_min: number;
+  task_after_photo_max: number;
 };
 
 export type RuleKind = "kiosk" | "limit" | "free" | "music_off" | "music_on";
@@ -278,6 +282,10 @@ export type TaskTemplate = {
   description: string | null;
   proof: ProofType;
   before_after: boolean;
+  proof_before_min: number;
+  proof_before_max: number;
+  proof_after_min: number;
+  proof_after_max: number;
   reward_minutes: number | null;
   reward_text: string | null;
   reward_validity: RewardValidity;

@@ -44,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,11 +81,18 @@ class CaptureActivity : ComponentActivity() {
     private var error by mutableStateOf("")
     private var useFront by mutableStateOf(false)
     private var previewView: PreviewView? = null
+    private val photos = mutableStateListOf<String>()
+    private var minPhotos = 1
+    private var maxPhotos = 1
+    private var multiPhoto = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val media = intent.getStringExtra("media") ?: "photo"
         val title = intent.getStringExtra("title") ?: "Kanıt"
+        minPhotos = intent.getIntExtra("minPhotos", 1).coerceIn(1, 4)
+        maxPhotos = intent.getIntExtra("maxPhotos", 1).coerceIn(minPhotos, 4)
+        multiPhoto = media != "video" && maxPhotos > 1
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO), 1)
         }
@@ -96,12 +104,15 @@ class CaptureActivity : ComponentActivity() {
                         AndroidView(factory = { ctx ->
                             PreviewView(ctx).also { previewView = it; bind() }
                         }, modifier = Modifier.fillMaxSize())
-                        if (recordingSecs >= 0) {
+                    if (recordingSecs >= 0) {
                             Text(
                                 "● ${recordingSecs}s / ${MAX_VIDEO_SECONDS}s", color = C.bad, fontWeight = FontWeight.Bold,
                                 modifier = Modifier.align(Alignment.TopCenter).padding(12.dp),
                             )
                         }
+                    }
+                    if (multiPhoto && photos.isNotEmpty()) {
+                        Text("Fotoğraf ${photos.size}/$maxPhotos", color = C.text, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp))
                     }
                     if (error.isNotEmpty()) Text(error, color = C.bad, modifier = Modifier.padding(12.dp))
                     Controls(media)
@@ -124,7 +135,7 @@ class CaptureActivity : ComponentActivity() {
                         onClick = { takePhoto() }, enabled = !busy,
                         modifier = Modifier.weight(1f).height(56.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = C.accent),
-                    ) { Text("Fotoğraf çek") }
+                    ) { Text(if (multiPhoto) "Fotoğraf çek" else "Fotoğraf çek") }
                 }
                 if (media != "photo") {
                     Button(
@@ -138,7 +149,12 @@ class CaptureActivity : ComponentActivity() {
                 OutlinedButton(onClick = { useFront = !useFront; bind() }, enabled = recordingSecs < 0, modifier = Modifier.weight(1f)) {
                     Text("Kamerayı çevir")
                 }
-                OutlinedButton(onClick = { setResult(Activity.RESULT_CANCELED); finish() }, enabled = recordingSecs < 0, modifier = Modifier.weight(1f)) {
+                if (multiPhoto) {
+                    OutlinedButton(onClick = { finishPhotos() }, enabled = recordingSecs < 0 && photos.size >= minPhotos && !busy, modifier = Modifier.weight(1f)) {
+                        Text("Bitti")
+                    }
+                }
+                OutlinedButton(onClick = { cancelCapture(); }, enabled = recordingSecs < 0 && !busy, modifier = Modifier.weight(1f)) {
                     Text("Vazgeç")
                 }
             }
@@ -192,7 +208,12 @@ class CaptureActivity : ComponentActivity() {
                 }.onFailure { Log.e(TAG, "foto", it) }
                 runOnUiThread {
                     busy = false
-                    if (out.exists() && out.length() > 0) done(out, "photo") else error = "Fotoğraf kaydedilemedi"
+                    if (out.exists() && out.length() > 0) {
+                        if (multiPhoto) {
+                            photos += out.absolutePath
+                            if (photos.size >= maxPhotos) finishPhotos()
+                        } else done(listOf(out.absolutePath), "photo")
+                    } else error = "Fotoğraf kaydedilemedi"
                 }
             }
 
@@ -231,13 +252,26 @@ class CaptureActivity : ComponentActivity() {
         recording?.stop()
     }
 
-    private fun done(file: File, media: String) {
-        setResult(Activity.RESULT_OK, Intent().putExtra("path", file.absolutePath).putExtra("media", media))
+    private fun done(paths: List<String>, media: String) {
+        photos.clear()
+        setResult(Activity.RESULT_OK, Intent().putStringArrayListExtra("paths", ArrayList(paths)).putExtra("path", paths.firstOrNull()).putExtra("media", media))
+        finish()
+    }
+
+    private fun finishPhotos() {
+        if (photos.size < minPhotos) return
+        done(photos.toList(), "photo")
+    }
+
+    private fun cancelCapture() {
+        photos.forEach { File(it).delete() }
+        setResult(Activity.RESULT_CANCELED)
         finish()
     }
 
     override fun onDestroy() {
         recording?.stop()
+        if (isFinishing && !isChangingConfigurations && photos.isNotEmpty()) photos.forEach { File(it).delete() }
         exec.shutdown()
         super.onDestroy()
     }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink, Route, Routes } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import { confirmDevice, deviceLabel, errorText, renewDeviceFor, selectDeviceFor, supabase } from "./lib/supabase";
@@ -23,6 +23,7 @@ import Agenda from "./pages/Agenda";
 import TaskEdit from "./pages/TaskEdit";
 import Vault from "./pages/Vault";
 import { Icon } from "./components/Icon";
+import { authenticateBiometric, biometricEnabled } from "./lib/biometric";
 
 type Gate = "loading" | "pending" | "revoked" | "approved" | "error";
 
@@ -186,6 +187,55 @@ function DeviceGate({ userId, email }: { userId: string; email: string }) {
 }
 
 function Shell() {
+  return <BiometricGate><ShellContent /></BiometricGate>;
+}
+
+function BiometricGate({ children }: { children: React.ReactNode }) {
+  const [locked, setLocked] = useState(() => biometricEnabled());
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const authenticating = useRef(false);
+
+  async function unlock() {
+    if (authenticating.current) return;
+    authenticating.current = true;
+    setBusy(true);
+    setErr("");
+    try {
+      if (await authenticateBiometric()) setLocked(false);
+      else setErr("Face ID doğrulaması yapılamadı.");
+    } catch {
+      setErr("Face ID doğrulaması iptal edildi veya başarısız oldu.");
+    }
+    setBusy(false);
+    authenticating.current = false;
+  }
+
+  useEffect(() => {
+    if (!biometricEnabled()) return;
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") setLocked(true);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    if (document.visibilityState === "visible") unlock();
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, []);
+
+  if (!locked) return <>{children}</>;
+  return (
+    <div className="center-screen">
+      <div className="card narrow center">
+        <img src="/icon-192.png" alt="" width={64} height={64} />
+        <h1>Orbit kilitli</h1>
+        <p className="muted">Devam etmek için Face ID veya Touch ID kullan.</p>
+        {err && <p className="error">{err}</p>}
+        <button className="btn primary wide" onClick={unlock} disabled={busy}>{busy ? "Doğrulanıyor…" : "Face ID ile aç"}</button>
+      </div>
+    </div>
+  );
+}
+
+function ShellContent() {
   const fam = useFamily();
   const [menuOpen, setMenuOpen] = useState(false);
   return (

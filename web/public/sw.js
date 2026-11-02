@@ -1,6 +1,6 @@
 // Orbit ebeveyn paneli — service worker: uygulama kabuğu + bildirimler.
 // Veri (Supabase) asla önbelleğe alınmaz.
-const CACHE = "orbit-shell-v2";
+const CACHE = "orbit-shell-v3";
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => {
   e.waitUntil(
@@ -32,6 +32,8 @@ self.addEventListener("push", (e) => {
     self.registration.showNotification(d.title || "Orbit", {
       body: d.body || "",
       tag: d.tag,
+      renotify: true,
+      silent: false,
       icon: "/icon-192.png",
       badge: "/icon-192.png",
       data: { url: d.url || "/" },

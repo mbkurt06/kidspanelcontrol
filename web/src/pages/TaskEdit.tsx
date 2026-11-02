@@ -73,6 +73,11 @@ const recForm = (t: RecFields) => ({
   record_pause: t.record_pause ?? "child",
   record_pause_max: t.record_pause_max?.toString() ?? "10",
 });
+const REWARD_CORE: Array<[RewardValidity, string]> = [
+  ["today", "Hemen kullan"],
+  ["wallet", "Cüzdana ekle"],
+  ["vault", "Kasaya ekle"],
+];
 
 export default function TaskEdit() {
   const { id } = useParams();
@@ -206,6 +211,7 @@ export default function TaskEdit() {
 
   const toggleChild = (cid: string) =>
     set("child_ids", f.child_ids.includes(cid) ? f.child_ids.filter((x) => x !== cid) : [...f.child_ids, cid]);
+  const legacyReward = f.reward_validity === "tomorrow" || f.reward_validity === "date";
 
   return (
     <div className="page">
@@ -263,7 +269,7 @@ export default function TaskEdit() {
         {f.recurrence === "days" ? (
           <>
             <DayPicker value={f.days} onChange={(d) => set("days", d)} />
-            <div className="grid2">
+            <div className="grid2 task-date-grid">
               <div className="field">
                 <span>Başlangıç</span>
                 <DateField value={f.start_date} onChange={(v) => set("start_date", v)} />
@@ -275,7 +281,7 @@ export default function TaskEdit() {
             </div>
           </>
         ) : (
-          <div className="grid2">
+          <div className="grid2 task-date-grid">
             <div className="field">
               <span>Başlangıç</span>
               <DateField value={f.start_date} onChange={(v) => set("start_date", v)} />
@@ -365,13 +371,10 @@ export default function TaskEdit() {
             <input type="number" min={0} value={f.reward_minutes} onChange={(e) => set("reward_minutes", e.target.value)} placeholder="yok" />
           </label>
           <label className="field">
-            <span>Geçerli</span>
+            <span>Ödül</span>
             <select value={f.reward_validity} onChange={(e) => set("reward_validity", e.target.value as RewardValidity)}>
-              {(Object.keys(VALIDITY_LABEL) as RewardValidity[]).map((v) => (
-                <option key={v} value={v}>
-                  {VALIDITY_LABEL[v]}
-                </option>
-              ))}
+              {REWARD_CORE.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {legacyReward && <option value={f.reward_validity}>{VALIDITY_LABEL[f.reward_validity]}</option>}
             </select>
           </label>
         </div>
@@ -381,7 +384,7 @@ export default function TaskEdit() {
             <DateField value={f.reward_date} onChange={(v) => set("reward_date", v)} />
           </div>
         )}
-        {f.reward_validity !== "wallet" && f.reward_validity !== "vault" && (
+        {legacyReward && (
           <label className="field">
             <span>Kazandığı süre nereye eklensin</span>
             <select value={f.reward_section_id} onChange={(e) => set("reward_section_id", e.target.value)}>

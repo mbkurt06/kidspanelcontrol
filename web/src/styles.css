@@ -128,6 +128,11 @@ a {
     grid-template-columns: 1fr;
   }
 }
+@media (max-width: 520px) {
+  .task-date-grid {
+    grid-template-columns: 1fr;
+  }
+}
 
 /* Düzen */
 .center-screen {

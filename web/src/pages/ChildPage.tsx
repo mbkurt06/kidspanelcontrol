@@ -562,7 +562,7 @@ function ProgramTab({ childId }: { childId: string }) {
 
 // ---------------------------------------------------------------------------
 
-function DurationField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function DurationField({ value, onChange, unlimited = true }: { value: string; onChange: (v: string) => void; unlimited?: boolean }) {
   const total = value === "" ? 0 : Math.max(0, Number(value) || 0);
   const hours = Math.floor(total / 60);
   const minutes = total % 60;
@@ -574,11 +574,11 @@ function DurationField({ value, onChange }: { value: string; onChange: (v: strin
     <input className="mini" type="number" min={0} max={59} value={value === "" ? "" : minutes} onChange={(e) => set(hours, Number(e.target.value) || 0)} aria-label="Dakika" />
     <span>dk</span>
     <button type="button" className="icon-btn" aria-label="Süreyi kaydırarak seç" onClick={() => setOpen(true)}>⌄</button>
-    <button type="button" className="icon-btn" aria-label="Sınırsız" onClick={() => onChange("")}>∞</button>
+    {unlimited && <button type="button" className="icon-btn" aria-label="Sınırsız" onClick={() => onChange("")}>∞</button>}
     {open && <div className="sheet-backdrop" onClick={() => setOpen(false)}><div className="sheet" onClick={(e) => e.stopPropagation()}>
       <h2>Günlük sınır</h2>
       <div className="date-wheel">
-        <select size={5} value={hours} onChange={(e) => set(hours, Number(e.target.value))}>{Array.from({ length: 25 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")} sa</option>)}</select>
+        <select size={5} value={hours} onChange={(e) => set(Number(e.target.value), minutes)}>{Array.from({ length: 25 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")} sa</option>)}</select>
         <select size={5} value={minutes} onChange={(e) => set(hours, Number(e.target.value))}>{Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")} dk</option>)}</select>
       </div>
       <button type="button" className="btn primary wide" onClick={() => setOpen(false)}>Tamam</button>
@@ -586,14 +586,16 @@ function DurationField({ value, onChange }: { value: string; onChange: (v: strin
   </div>;
 }
 
-type When = "now" | "from" | "today" | "tomorrow" | "date" | "child" | "vault";
+type When = "now" | "custom" | "child" | "vault";
+type CustomWhen = "from" | "today" | "tomorrow" | "date";
 
 function TimeTab({ childId }: { childId: string }) {
   const fam = useFamily();
   const child = fam.children.find((c) => c.id === childId)!;
   const [grants, setGrants] = useState<TimeGrant[]>([]);
   const [minutes, setMinutes] = useState("20");
-  const [when, setWhen] = useState<When>(child.extra_default === "wallet" ? "child" : child.extra_default === "now" ? "now" : "today");
+  const [when, setWhen] = useState<When>(child.extra_default === "wallet" ? "child" : child.extra_default === "now" ? "now" : "custom");
+  const [customWhen, setCustomWhen] = useState<CustomWhen>("today");
   const [plan, setPlan] = useState<{ g: TimeGrant; where: string } | null>(null);
   // Nereye: "current" (şu anki bölüm), "pool" (gün boyu) ya da bölüm id
   const [target, setTarget] = useState<string>(child.extra_default === "pool" ? "pool" : "current");
@@ -641,11 +643,12 @@ function TimeTab({ childId }: { childId: string }) {
     const m = Number(minutes);
     if (!m) return;
     try {
+      const detail = when === "custom" ? customWhen : null;
       if (when === "now") {
         const { patch, text } = await nowPatch(childId, m, fam);
         await insertGrant(childId, m, patch, note);
         setMsg(`${minutesText(m)} verildi · ${text}`);
-      } else if (when === "from") {
+      } else if (detail === "from") {
         const day = fromDay === "today" ? today : todayISO("Europe/Berlin", 1);
         const { patch, text } = await fromPatch(childId, fam, day, start, endMode, until);
         await insertGrant(childId, m, patch, note);
@@ -654,8 +657,8 @@ function TimeTab({ childId }: { childId: string }) {
         await grantMinutes(childId, m, { validOn: null, vault: true, note: note || undefined });
         setMsg(`${minutesText(m)} süre kasasına kaydedildi`);
       } else {
-        const validOn = when === "today" ? today : when === "tomorrow" ? todayISO("Europe/Berlin", 1) : when === "date" ? date : null;
-        const sectionId = when === "child" ? null : target === "current" ? (when === "today" ? cur?.id ?? null : null) : target === "pool" ? null : target;
+        const validOn = detail === "today" ? today : detail === "tomorrow" ? todayISO("Europe/Berlin", 1) : detail === "date" ? date : null;
+        const sectionId = when === "child" ? null : target === "current" ? (detail === "today" ? cur?.id ?? null : null) : target === "pool" ? null : target;
         await grantMinutes(childId, m, { validOn, sectionId, expiresOn: when === "child" ? expires || null : null, note: note || undefined });
         setMsg(`${minutesText(m)} verildi${sectionId ? ` · ${secName(sectionId)}` : when === "child" ? " · cüzdana" : " · gün boyu"}`);
       }
@@ -738,22 +741,28 @@ function TimeTab({ childId }: { childId: string }) {
               {m} dk
             </button>
           ))}
-          <input className="mini" type="number" min={1} value={minutes} onChange={(e) => setMinutes(e.target.value)} aria-label="Dakika" />
+          <DurationField value={minutes} onChange={setMinutes} unlimited={false} />
         </div>
         <label className="field">
           <span>Ne zaman</span>
           <select value={when} onChange={(e) => setWhen(e.target.value as When)}>
             <option value="now">Hemen kullansın</option>
-            <option value="from">Belirli saatten itibaren</option>
-            <option value="today">Bugün (bölüme / gün boyu)</option>
-            <option value="tomorrow">Yarın</option>
-            <option value="date">Belirli bir gün</option>
-            <option value="child">Süre cüzdanı: çocuk istediği gün kullansın</option>
-            <option value="vault">Süre kasası: sonra ben veririm</option>
+            <option value="vault">Süre kasası</option>
+            <option value="child">Süre cüzdanı</option>
+            <option value="custom">Özel</option>
           </select>
         </label>
+        {when === "custom" && <label className="field">
+          <span>Özel kullanım</span>
+          <select value={customWhen} onChange={(e) => setCustomWhen(e.target.value as CustomWhen)}>
+            <option value="today">Bugün (bölüme / gün boyu)</option>
+            <option value="from">Belirli saatten itibaren</option>
+            <option value="tomorrow">Yarın</option>
+            <option value="date">Belirli bir gün</option>
+          </select>
+        </label>}
         {when === "now" && <p className="muted small">{nowHint}</p>}
-        {when === "from" && (
+        {when === "custom" && customWhen === "from" && (
           <>
             <div className="row gap-s wrap" style={{ alignItems: "center" }}>
               <select value={fromDay} onChange={(e) => setFromDay(e.target.value as typeof fromDay)} aria-label="Gün">
@@ -775,17 +784,17 @@ function TimeTab({ childId }: { childId: string }) {
             {endMode === "until" && <TimeField value={until} onChange={(v) => setUntil(v)} label="Bitiş" />}
           </>
         )}
-        {when === "date" && (
+        {when === "custom" && customWhen === "date" && (
           <div className="field">
             <span>Gün</span>
             <DateField value={date} onChange={(v) => setDate(v)} />
           </div>
         )}
-        {(when === "today" || when === "tomorrow" || when === "date") && (
+        {when === "custom" && (customWhen === "today" || customWhen === "tomorrow" || customWhen === "date") && (
           <label className="field">
             <span>Nereye eklensin</span>
             <select value={target} onChange={(e) => setTarget(e.target.value)}>
-              {when === "today" && <option value="current">Şu anki bölüm{cur ? ` (${cur.name})` : " (şu an bölüm yok → gün boyu)"}</option>}
+              {customWhen === "today" && <option value="current">Şu anki bölüm{cur ? ` (${cur.name})` : " (şu an bölüm yok → gün boyu)"}</option>}
               <option value="pool">Gün boyu: süreli her bölümde kullanılır</option>
               {sectionOptions.map((o) => (
                 <option key={o.id} value={o.id}>

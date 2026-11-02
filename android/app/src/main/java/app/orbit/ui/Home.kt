@@ -390,30 +390,31 @@ private fun NowCard(s: Snapshot) {
             }
         }
         message?.let { Text(it, color = C.text, fontSize = 16.sp) }
-        if (!s.locked && !(s.sectionMode && s.sectionClosed)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                val frac = if (unlimited) 1f else if (s.allowanceMinutes > 0) s.remainingSeconds / (s.allowanceMinutes * 60f) else 0f
-                Ring(frac, if (unlimited || s.remainingSeconds > 600) C.blue else C.warn, 110.dp) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(if (unlimited) "∞" else minutesText(s.remainingSeconds / 60), color = C.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        Muted(if (unlimited) "sınırsız" else "kaldı", 12)
-                    }
-                }
-                Spacer(Modifier.width(16.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (s.sectionMode) {
-                        s.sectionLeftSeconds?.let { Muted("Bu bölümde: ${minutesText(it / 60)}") }
-                        if (s.poolLeftSeconds > 0) Muted("Ekstra süre: ${minutesText(s.poolLeftSeconds / 60)}")
-                        s.capLeftSeconds?.let { Muted("Bugün en fazla: ${minutesText(it / 60)} daha") }
-                    } else {
-                        Muted("Bugünkü hak: ${minutesText(s.allowanceMinutes.toLong())}")
-                        if (s.extraMinutesToday != 0) Muted("Ekstra: ${minutesText(s.extraMinutesToday.toLong())}")
-                    }
-                    Muted("Bugün kullanılan: ${minutesText(s.usedMinutes.toLong())}")
-                    s.modeRemainingSeconds?.let { Muted("Durum süresi: ${minutesText(it / 60)}") }
+        // Kilitli ekranda da gün özeti görünür; çocuk kalan ve toplam kullanılan süreyi görebilir.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            val frac = if (unlimited) 1f else if (s.allowanceMinutes > 0) s.remainingSeconds / (s.allowanceMinutes * 60f) else 0f
+            Ring(frac, if (unlimited || s.remainingSeconds > 600) C.blue else C.warn, 110.dp) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(if (unlimited) "∞" else minutesText(s.remainingSeconds / 60), color = C.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Muted(if (unlimited) "sınırsız" else "kaldı", 12)
                 }
             }
-        } else if (s.sectionMode && s.sectionClosed) {
+            Spacer(Modifier.width(16.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Muted(if (unlimited) "Bugün kalan: sınırsız" else "Bugün kalan: ${minutesText(s.remainingSeconds / 60)}")
+                Muted("Toplam kullanılan: ${minutesText(s.usedMinutes.toLong())}")
+                if (s.sectionMode) {
+                    s.sectionLeftSeconds?.let { Muted("Bu bölümde: ${minutesText(it / 60)}") }
+                    if (s.poolLeftSeconds > 0) Muted("Ekstra süre: ${minutesText(s.poolLeftSeconds / 60)}")
+                    s.capLeftSeconds?.let { Muted("Bugün en fazla: ${minutesText(it / 60)} daha") }
+                } else {
+                    Muted("Bugünkü hak: ${minutesText(s.allowanceMinutes.toLong())}")
+                    if (s.extraMinutesToday != 0) Muted("Ekstra: ${minutesText(s.extraMinutesToday.toLong())}")
+                }
+                s.modeRemainingSeconds?.let { Muted("Durum süresi: ${minutesText(it / 60)}") }
+            }
+        }
+        if (s.sectionMode && s.sectionClosed) {
             Muted("Şu an sadece her zaman açık uygulamalar kullanılabilir.")
         }
     }

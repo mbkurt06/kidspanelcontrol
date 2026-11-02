@@ -348,10 +348,23 @@ fun AlarmsScreen() {
         }
     }
 
-    if (creating || editing != null) {
-        AlarmForm(editing, onCancel = { editing = null; creating = false }) { title, kind, time, days, date, active ->
-            saveAlarm(title, kind, time, days, date, active)
+    fun deleteAlarm(a: AlarmDef) {
+        val old = list
+        list = list.filterNot { it.id == a.id }
+        editing = null
+        creating = false
+        run({ Alarms.delete(a.id) }) {
+            list = old
+            msg = "Silinemedi"
         }
+    }
+
+    if (creating || editing != null) {
+        AlarmForm(
+            editing,
+            onCancel = { editing = null; creating = false },
+            onDelete = { deleteAlarm(it) },
+        ) { title, kind, time, days, date, active -> saveAlarm(title, kind, time, days, date, active) }
         return
     }
 
@@ -414,8 +427,12 @@ fun AlarmsScreen() {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun AlarmForm(a: AlarmDef?, onCancel: () -> Unit, onSave: (String, String, LocalTime, Set<Int>, LocalDate?, Boolean) -> Unit) {
-    val scope = rememberCoroutineScope()
+private fun AlarmForm(
+    a: AlarmDef?,
+    onCancel: () -> Unit,
+    onDelete: (AlarmDef) -> Unit,
+    onSave: (String, String, LocalTime, Set<Int>, LocalDate?, Boolean) -> Unit,
+) {
     var title by remember { mutableStateOf(a?.title ?: "") }
     var kind by remember { mutableStateOf(a?.kind ?: "alarm") }
     var hh by remember { mutableStateOf(a?.time?.hour ?: 7) }
@@ -453,12 +470,7 @@ private fun AlarmForm(a: AlarmDef?, onCancel: () -> Unit, onSave: (String, Strin
                 if (title.isBlank()) err = "Başlık yaz" else onSave(title, kind, t, days, date, a?.active ?: true)
             }, colors = ButtonDefaults.buttonColors(containerColor = C.accent)) { Text("Kaydet") }
             OutlinedButton(onClick = onCancel) { Text("Vazgeç") }
-            if (a != null && a.deletable) TextButton(onClick = {
-                scope.launch {
-                    val ok = withContext(Dispatchers.IO) { Alarms.delete(a.id) }
-                    if (ok) { Live.syncRequested = true; onCancel() } else err = "Silinemedi"
-                }
-            }) { Text("Sil", color = C.bad) }
+            if (a != null && a.deletable) TextButton(onClick = { onDelete(a) }) { Text("Sil", color = C.bad) }
         }
     }
 }

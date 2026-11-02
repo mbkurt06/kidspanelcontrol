@@ -231,6 +231,8 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                     Screen.MESSAGES -> Unit
                     Screen.TIMER -> TimerScreen()
                     Screen.MUSIC -> MusicScreen()
+                    Screen.AGENDA -> Unit
+                    Screen.ALARMS -> Unit
                 }
             }
         }

@@ -30,6 +30,7 @@ type Gate = "loading" | "pending" | "revoked" | "approved" | "error";
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [access, setAccess] = useState(hasAccess());
+  const [recovery, setRecovery] = useState(() => window.location.hash.includes("type=recovery"));
 
   useEffect(() => {
     consumeKeyFromUrl().then((ok) => ok && setAccess(true));
@@ -40,13 +41,62 @@ export default function App() {
       }
       setSession(data.session);
     });
-    const { data } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
+    const { data } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === "PASSWORD_RECOVERY") setRecovery(true);
+      setSession(s);
+    });
     return () => data.subscription.unsubscribe();
   }, []);
 
   if (session === undefined) return access ? <Splash /> : <Blank onUnlock={() => setAccess(true)} />;
   if (!session) return access ? <Login /> : <Blank onUnlock={() => setAccess(true)} />;
+  if (recovery) return <PasswordReset onDone={() => setRecovery(false)} />;
   return <DeviceGate key={session.user.id} userId={session.user.id} email={session.user.email ?? ""} />;
+}
+
+function PasswordReset({ onDone }: { onDone: () => void }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setErr("");
+    setMsg("");
+    if (password.length < 6) return setErr("Şifre en az 6 karakter olmalı.");
+    if (password !== confirm) return setErr("Şifreler aynı değil.");
+    setBusy(true);
+    const { error } = await supabase.auth.updateUser({ password });
+    setBusy(false);
+    if (error) return setErr(errorText(error));
+    setMsg("Şifren güncellendi. Panel açılıyor...");
+    setTimeout(onDone, 600);
+  }
+
+  return (
+    <div className="center-screen">
+      <form className="card narrow" onSubmit={save}>
+        <img src="/icon-192.png" alt="" width={64} height={64} />
+        <h1>Yeni şifre</h1>
+        <p className="muted">Orbit hesabın için yeni bir şifre belirle.</p>
+        <label className="field">
+          <span>Yeni şifre</span>
+          <input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        </label>
+        <label className="field">
+          <span>Yeni şifre tekrar</span>
+          <input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} required />
+        </label>
+        {err && <p className="error">{err}</p>}
+        {msg && <p className="ok">{msg}</p>}
+        <button className="btn primary wide" disabled={busy}>
+          Şifreyi kaydet
+        </button>
+      </form>
+    </div>
+  );
 }
 
 // Anahtarı bilmeyen ziyaretçi sadece boş bir sayfa görür.

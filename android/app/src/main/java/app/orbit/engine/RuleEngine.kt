@@ -190,9 +190,12 @@ class RuleEngine(private val rules: Rules) {
         val dayEnd = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
 
         val profile = profileFor(day)
-        val (locked0, free0, lockUntil0) = lockState(nowMs)
+        val (lockedCmd, free0, lockUntil0) = lockState(nowMs)
+        // Ebeveynin şu an için verdiği saat aralıklı süre "Sınırla"yı (elle ya da programdan) o süre boyunca açar
+        val windowNow = activeWindows(day, t).isNotEmpty()
+        val locked0 = lockedCmd && !windowNow
         // Kilit programı: "Sınırla" (sadece her zaman açık uygulamalar) ve "Serbest"
-        val limit = if (locked0) null else Extras.limitNow(rules, this, day, t)
+        val limit = if (locked0 || windowNow) null else Extras.limitNow(rules, this, day, t)
         val freeRule = if (locked0 || limit != null || free0) null else Extras.freeNow(rules, this, day, t)
         val locked = locked0 || limit != null
         val lockUntil = if (locked0) lockUntil0 else limit?.second
@@ -258,7 +261,8 @@ class RuleEngine(private val rules: Rules) {
     fun windowSection(day: LocalDate, t: LocalTime): SectionNow? {
         val reg = regularSection(day, t)
         if (reg != null && timedPossible(reg.section)) return null
-        return activeWindows(day, t).firstOrNull()?.let { windowAsSection(it, day) }
+        // Birden fazla süre verildiyse en son biteni taşıyıcı olur; kalanlar toplanır (bkz. sectionSnapshot)
+        return activeWindows(day, t).maxByOrNull { it.window!!.end }?.let { windowAsSection(it, day) }
     }
 
     /** Bugünün bölümleri (saat sırasıyla) — çocuğun "Günüm" ekranı için. */
@@ -335,9 +339,10 @@ class RuleEngine(private val rules: Rules) {
             carry = if (sec.carryOver) left else 0
         }
         if (virtualWin) {
-            val gid = cur!!.section.id.removePrefix("grant:")
-            curEff = cur.section.budgetMinutes!! * 60L
-            curLeft = (curEff - bucket(usage, "s:${cur.key}") - bucket(usage, "w:$gid")).coerceAtLeast(0)
+            // Kapalı saatte verilen süreler üst üste eklenir: o an geçerli bütün aralıkların toplamı
+            val wins = activeWindows(day, t)
+            curEff = wins.sumOf { it.minutes } * 60L
+            curLeft = (curEff - wins.sumOf { bucket(usage, "s:grant:${it.id}@$day") + bucket(usage, "w:${it.id}") }).coerceAtLeast(0)
         } else if (cur != null && cur.section.id !in todayIds && cur.section.budgetMinutes != null) {
             // Dünden taşan gece bölümü: kendi süresi (devretme yok)
             val eff = cur.section.budgetMinutes * 60L

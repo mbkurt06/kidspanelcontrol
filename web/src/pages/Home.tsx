@@ -1,15 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { supabase, errorText } from "../lib/supabase";
-import { quickGrant, seedDefaults, sendCommand } from "../lib/actions";
-import { unlockNow } from "./Lock";
+import { grantMinutes, insertGrant, nowPatch, seedDefaults, sendCommand } from "../lib/actions";
+import { kioskOf, lockNow, unlockNow, untilFrom } from "./Lock";
+import { currentSectionFor, hm, mins, nowBerlin, timedPossible } from "../lib/sections";
+import { TimeField } from "../components/DateTime";
 import { timerElapsed, timerRemaining } from "../lib/types";
-import { minutesText, relTime } from "../lib/util";
+import { hhmm, minutesText } from "../lib/util";
 import { Ring } from "../components/Ring";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
-import type { Child } from "../lib/types";
+import type { Child, Section } from "../lib/types";
 
 const COLORS = ["#4F7CFF", "#FF7A59", "#2BB673", "#C25BFF"];
 
@@ -44,15 +46,42 @@ export default function Home() {
   );
 }
 
+type LockKind = "kiosk" | "limit" | string;
+
 function ChildCard({ child }: { child: Child }) {
   const fam = useFamily();
   const st = fam.statuses[child.id];
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
-  const stale = !st || Date.now() - new Date(st.updated_at).getTime() > 15 * 60000;
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [profileId, setProfileId] = useState(fam.modes[0]?.id ?? "");
-  const [profileMinutes, setProfileMinutes] = useState("30");
+  const [lockOpen, setLockOpen] = useState(false);
+  const [lockKind, setLockKind] = useState<LockKind>("kiosk");
+  const [lockDur, setLockDur] = useState("none");
+  const [lockUntil, setLockUntil] = useState("19:00");
+  const [give, setGive] = useState(0);
+  const [giveText, setGiveText] = useState<string | null>(null);
+  const [sec, setSec] = useState<Section | null>(null);
+  const timer = fam.timers[child.id];
+
+  useEffect(() => {
+    currentSectionFor(child.id, fam.sections).then(setSec);
+  }, [child.id, fam.sections, st?.updated_at]);
+
+  const staleMin = st ? Math.floor((Date.now() - new Date(st.updated_at).getTime()) / 60000) : 0;
+  const kiosk = !!st?.lock_reason?.startsWith("🔒");
+  const limited = !kiosk && !!st?.locked;
+  const unlimited = !!st && st.remaining_minutes >= 1440;
+  const closed = !!st && !kiosk && !limited && st.remaining_minutes === 0 && st.allowance_minutes >= 1440;
+  const finished = !!st && !kiosk && !limited && !closed && st.remaining_minutes === 0;
+  const open = !!st && !kiosk && !limited && !closed && !finished;
+
+  // Kapalıysa bir sonraki açık saat
+  const nextOpen = (() => {
+    const { minute } = nowBerlin();
+    const timed = fam.sections.filter((x) => x.profile_id === sec?.profile_id && timedPossible(x, fam.sectionRules)).map((x) => mins(x.start_time)).sort((a, b) => a - b);
+    const today = timed.find((m) => m > minute);
+    if (today != null) return `${hm(today)}'de açılır`;
+    return timed.length ? `Yarın ${hm(timed[0])}'de açılır` : null;
+  })();
 
   async function run(key: string, fn: () => Promise<unknown>, ok: string | ((r: unknown) => string)) {
     setBusy(key);
@@ -70,11 +99,68 @@ function ChildCard({ child }: { child: Child }) {
     setBusy("");
   }
 
+  function applyLock() {
+    const until =
+      lockDur === "none" ? null : lockDur === "until" ? untilFrom("until", lockUntil) : new Date(Date.now() + Number(lockDur) * 60000).toISOString();
+    setLockOpen(false);
+    if (lockKind === "kiosk") run("lock", () => lockNow(child.id, "kiosk", until, kioskOf(child).message), "Kilitleniyor");
+    else if (lockKind === "limit") run("lock", () => lockNow(child.id, "limit", until), "Sınırlanıyor");
+    else run("lock", () => sendCommand(child.id, "start_mode", { mode_id: lockKind }, until), "Profil uygulanıyor");
+  }
+
+  function giveTime() {
+    const m = give;
+    if (!m) return;
+    run(
+      "give",
+      async () => {
+        if (kiosk) {
+          // Kilitliyken kilit açılmaz: süre kalan süreye eklenir, kilit kalkınca kullanır
+          await grantMinutes(child.id, m, {});
+          return "kalan süreye eklendi · kilit kalkınca kullanır";
+        }
+        const { patch, text } = await nowPatch(child.id, m, fam, { closed: limited || closed || finished });
+        await insertGrant(child.id, m, patch);
+        return text;
+      },
+      (r) => `+${minutesText(m)} · ${r}`
+    );
+    setGive(0);
+    setGiveText(null);
+  }
+  const step = (d: number) => setGive((g) => Math.max(0, Math.min(600, g + d)));
+
+  // Halka içi
+  const ringColor = kiosk ? "var(--bad)" : limited || closed ? "var(--warn)" : child.color;
+  const ringInner = !st ? (
+    <b>—</b>
+  ) : kiosk ? (
+    <span className="ring-state bad"><Icon name="lock" size={22} /><small>Kilitli</small></span>
+  ) : limited || closed ? (
+    <span className="ring-state warn"><span aria-hidden="true">☾</span><small>{limited ? "Sınırlı" : "Kapalı"}</small></span>
+  ) : unlimited ? (
+    <span className="ring-state"><b>∞</b><small>sınırsız</small></span>
+  ) : (
+    <span className="ring-state"><b>{minutesText(st.remaining_minutes)}</b><small>kaldı</small></span>
+  );
+
+  const stateLine = !st
+    ? null
+    : kiosk
+      ? { cls: "bad", text: `Kilitli · ${st.lock_reason!.replace("🔒", "").trim() || "sen kaldırana kadar"}` }
+      : limited
+        ? { cls: "warn", text: `Sınırlı · ${st.lock_reason ?? ""}`.replace(/ · $/, "") }
+        : closed
+          ? { cls: "warn", text: [st.current_mode_name ?? "Kapalı saatler", nextOpen].filter(Boolean).join(" · ") }
+          : finished
+            ? { cls: "warn", text: `${st.current_mode_name ?? "Bugün"} · süresi bitti` }
+            : { cls: "good", text: [st.current_mode_name ?? "Açık", sec && open ? `${hhmm(sec.end_time)}'e kadar` : null].filter(Boolean).join(" · ") };
+
   return (
     <div className="card child-card">
       <Link to={`/child/${child.id}`} className="child-main">
-        <Ring value={st?.remaining_minutes ?? 0} max={st?.allowance_minutes || 1} color={child.color}>
-          <b>{st ? (st.remaining_minutes >= 1440 ? "∞" : minutesText(st.remaining_minutes)) : "—"}</b>
+        <Ring value={open && !unlimited ? st!.remaining_minutes : kiosk || limited || closed ? 1 : 0} max={open && !unlimited ? st!.allowance_minutes || 1 : 1} color={ringColor} size={92}>
+          {ringInner}
         </Ring>
         <div className="grow">
           <div className="row between">
@@ -83,72 +169,120 @@ function ChildCard({ child }: { child: Child }) {
           </div>
           {st ? (
             <>
-              <p className="muted small">
-                {minutesText(st.used_minutes)} kullandı
-                {st.allowance_minutes < 1440 ? ` · hakkı ${minutesText(st.allowance_minutes)}` : " · süre sınırı yok"}
-              </p>
-              <div className="row wrap gap-s">
-                {st.lock_reason?.startsWith("🔒") ? (
-                  <span className="pill danger">🔒 Kilitli</span>
-                ) : (
-                  st.locked && <span className="pill danger">🌙 {st.lock_reason ?? "Sınırlı"}</span>
-                )}
-                {st.current_mode_name && <span className="pill">{st.current_mode_name}</span>}
-                {fam.timers[child.id] && (
-                  <span className="pill accent">
-                    {fam.timers[child.id].icon ?? "⏱"} {fam.timers[child.id].title}
-                    {fam.timers[child.id].status === "paused"
-                      ? " · mola"
-                      : timerRemaining(fam.timers[child.id]) != null
-                        ? ` · ${Math.ceil((timerRemaining(fam.timers[child.id]) ?? 0) / 60)} dk kaldı`
-                        : ` · ${Math.floor(timerElapsed(fam.timers[child.id]) / 60)} dk`}
-                  </span>
-                )}
-                <span className={`pill ${stale ? "warn" : "quiet"}`}>{relTime(st.updated_at)}</span>
-              </div>
+              {stateLine && (
+                <span className={`state-line ${stateLine.cls}`}>
+                  <span className="state-dot" />
+                  {stateLine.text}
+                </span>
+              )}
+              {kiosk && st.remaining_minutes > 0 && st.remaining_minutes < 1440 && <span className="muted small">Kalan süresi {minutesText(st.remaining_minutes)} · kilit kalkınca kullanır</span>}
+              <span className="muted small">Bugün {minutesText(st.used_minutes)} kullandı</span>
+              {timer && (
+                <span className="pill accent">
+                  {timer.icon ?? "⏱"} {timer.title}
+                  {timer.status === "paused"
+                    ? " · mola"
+                    : timerRemaining(timer) != null
+                      ? ` · ${Math.ceil((timerRemaining(timer) ?? 0) / 60)} dk kaldı`
+                      : ` · ${Math.floor(timerElapsed(timer) / 60)} dk`}
+                </span>
+              )}
             </>
           ) : (
             <p className="muted small">Telefon henüz eşleşmedi. Çocuğun sayfasından eşleştirme kodu al.</p>
           )}
         </div>
       </Link>
-      <div className="actions">
-        {st?.locked || st?.lock_reason?.startsWith("🔒") ? (
-          <button className="btn" disabled={!!busy} onClick={() => run("unlock", () => unlockNow(child.id), "Kilit kaldırılıyor")}>
-            <Icon name="unlock" size={18} /> Kilidi kaldır
-          </button>
-        ) : (
-          profileOpen ? (
-            <div className="row gap-xs wrap">
-              <select value={profileId} onChange={(e) => setProfileId(e.target.value)} aria-label="Kullanım profili">
-                {fam.modes.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-              <select value={profileMinutes} onChange={(e) => setProfileMinutes(e.target.value)} aria-label="Profil süresi">
-                <option value="15">15 dk</option><option value="30">30 dk</option><option value="60">1 saat</option><option value="120">2 saat</option><option value="none">Programa dönene kadar</option>
-              </select>
-              <button className="btn primary" disabled={!!busy || !profileId} onClick={() => {
-                setProfileOpen(false);
-                const until = profileMinutes === "none" ? null : new Date(Date.now() + Number(profileMinutes) * 60000).toISOString();
-                run("profile", () => sendCommand(child.id, "start_mode", { mode_id: profileId }, until), "Profil uygulanıyor");
-              }}>Uygula</button>
-              <button className="btn ghost" onClick={() => setProfileOpen(false)}>×</button>
-            </div>
-          ) : (
-            <button className="btn" disabled={!!busy || !fam.modes.length} onClick={() => setProfileOpen(true)}>
-              <Icon name="lock" size={18} /> Profil uygula
-            </button>
-          )
-        )}
-        <button className="btn" disabled={!!busy} onClick={() => run("15", () => quickGrant(child, 15, fam), (r) => `+15 dk verildi (${r})`)}>
-          +15 dk
+
+      {kiosk || limited ? (
+        <button className="btn danger-fill wide" disabled={!!busy} onClick={() => run("unlock", () => unlockNow(child.id), "Kilit kaldırılıyor")}>
+          <Icon name="unlock" size={18} /> Kilidi kaldır
         </button>
-        <button className="btn" disabled={!!busy} onClick={() => run("30", () => quickGrant(child, 30, fam), (r) => `+30 dk verildi (${r})`)}>
-          +30 dk
+      ) : null}
+
+      <div className="card-actions">
+        {!(kiosk || limited) && (
+          <button className={`btn grow ${lockOpen ? "on" : ""}`} disabled={!!busy} onClick={() => setLockOpen(!lockOpen)} aria-expanded={lockOpen}>
+            <Icon name="lock" size={18} /> Kilitle…
+          </button>
+        )}
+        <div className={`give-box ${kiosk || limited ? "grow" : ""}`}>
+          <button type="button" aria-label="5 dk azalt" disabled={give === 0} onClick={() => step(-5)}>
+            −
+          </button>
+          <input
+            inputMode="numeric"
+            aria-label="Verilecek dakika"
+            value={giveText ?? String(give)}
+            onFocus={(e) => {
+              setGiveText(String(give));
+              e.target.select();
+            }}
+            onChange={(e) => {
+              const t = e.target.value.replace(/\D/g, "").slice(0, 3);
+              setGiveText(t);
+              setGive(Math.min(600, Number(t) || 0));
+            }}
+            onBlur={() => setGiveText(null)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") giveTime();
+              if (e.key === "ArrowUp") { e.preventDefault(); setGiveText(null); step(5); }
+              if (e.key === "ArrowDown") { e.preventDefault(); setGiveText(null); step(-5); }
+            }}
+          />
+          <span className="give-unit">dk</span>
+          <button type="button" aria-label="5 dk artır" onClick={() => step(5)}>
+            +
+          </button>
+        </div>
+        <button className="btn primary give-btn" disabled={!!busy || give === 0} onClick={giveTime}>
+          Ver
         </button>
       </div>
+
+      {lockOpen && (
+        <div className="lock-panel">
+          <div className="field">
+            <span>Ne olsun</span>
+            <select value={lockKind} onChange={(e) => setLockKind(e.target.value)}>
+              <option value="kiosk">🔒 Kilitle — ekranda sadece Orbit</option>
+              <option value="limit">🌙 Sınırla — sadece temel uygulamalar</option>
+              {fam.modes.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <span>Ne kadar</span>
+            <select value={lockDur} onChange={(e) => setLockDur(e.target.value)}>
+              <option value="none">{lockKind === "kiosk" || lockKind === "limit" ? "Kilidi kaldırana kadar" : "Programa dönene kadar"}</option>
+              <option value="15">15 dk</option>
+              <option value="30">30 dk</option>
+              <option value="60">1 saat</option>
+              <option value="120">2 saat</option>
+              <option value="until">Belirli saate kadar…</option>
+            </select>
+          </div>
+          {lockDur === "until" && <TimeField value={lockUntil} onChange={setLockUntil} label="Bitiş saati" />}
+          <div className="row gap-s">
+            <button className="btn primary grow" disabled={!!busy} onClick={applyLock}>
+              {lockKind === "kiosk" ? "Kilitle" : lockKind === "limit" ? "Sınırla" : "Uygula"}
+            </button>
+            <button className="btn ghost" onClick={() => setLockOpen(false)}>
+              Vazgeç
+            </button>
+          </div>
+        </div>
+      )}
+
       <Link to={`/messages/${child.id}`} className="btn ghost small">
         <Icon name="chat" size={16} /> {child.name}'e mesaj yaz
       </Link>
+      {st && staleMin > 15 && (
+        <p className="small warn-text">⚠ Telefon {staleMin >= 60 ? `${Math.floor(staleMin / 60)} saattir` : `${staleMin} dakikadır`} bağlanmadı</p>
+      )}
       {msg && <p className="small muted center">{msg}</p>}
     </div>
   );

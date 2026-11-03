@@ -1467,3 +1467,156 @@ select:focus {
   color: #fff;
   font-weight: 700;
 }
+
+/* Ana ekran çocuk kartı */
+.ring-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  line-height: 1.05;
+}
+.ring-state b {
+  font-size: 18px;
+}
+.ring-state small {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+.ring-state.warn,
+.ring-state.warn small {
+  color: var(--warn);
+}
+.ring-state.warn > span {
+  font-size: 24px;
+}
+.ring-state.bad,
+.ring-state.bad small {
+  color: var(--bad);
+}
+.state-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+}
+.state-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.state-line.good {
+  color: var(--good);
+}
+.state-line.warn {
+  color: var(--warn);
+}
+.state-line.bad {
+  color: var(--bad);
+}
+.card-actions {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+.card-actions .btn.grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.give-box {
+  display: flex;
+  align-items: center;
+  background: var(--surface2, var(--line));
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  flex: none;
+}
+.give-box.grow {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+.give-box button {
+  width: 36px;
+  height: 46px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-size: 22px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.give-box button:disabled {
+  color: var(--muted);
+  opacity: 0.5;
+}
+.give-box input {
+  width: 40px;
+  text-align: right;
+  font-size: 19px;
+  font-weight: 700;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  padding: 0;
+  font-variant-numeric: tabular-nums;
+}
+.give-box input:focus {
+  outline: 2px solid var(--accent);
+  border-radius: 6px;
+}
+.give-unit {
+  font-size: 12px;
+  color: var(--muted);
+  margin-left: 3px;
+}
+.give-btn {
+  flex: none;
+  padding: 0 14px;
+}
+.lock-panel {
+  background: var(--surface2, var(--line));
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.btn.danger-fill {
+  background: var(--bad);
+  color: #1a0d10;
+  font-weight: 700;
+  border: 0;
+}
+.btn.on {
+  outline: 2px solid var(--accent);
+}
+.choice {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--surface2, var(--line));
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  cursor: pointer;
+}
+.choice.on {
+  border-color: var(--accent);
+}
+.choice input {
+  margin-top: 3px;
+  accent-color: var(--accent);
+}
+.choice .grow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.choice select {
+  margin-top: 6px;
+  max-width: 260px;
+}

@@ -209,6 +209,24 @@ class SectionEngineTest {
     }
 
     @Test
+    fun closedHourGrantsStackAndOpenLimit() {
+        val W = { a: String, b: String -> app.orbit.engine.TimeWindow(t(a), t(b)) }
+        val g1 = Grant("a1", 5, day, null, null, null, null, window = W("21:00", "23:59"))
+        val g2 = Grant("a2", 15, day, null, null, null, null, window = W("21:02", "23:59"))
+        val e = RuleEngine(rules(grants = listOf(g1, g2)))
+        // 21:05 Uyku: iki süre toplanır (5 + 15)
+        assertEquals(20 * 60L, e.snapshot(at(21, 5), DayUsage(day)).remainingSeconds)
+        val u = use(e, DayUsage(day), "com.insta", at(21, 5), 3)
+        assertEquals(17 * 60L, e.snapshot(at(21, 10), u).remainingSeconds)
+        // Programdaki "Sınırla" verilen süre boyunca açılır
+        val lim = app.orbit.engine.TimeRule("l2", "Akşam", "limit", (1..7).toSet(), W("16:00", "18:00"))
+        val g3 = Grant("a3", 10, day, null, null, null, null, window = W("16:30", "17:30"))
+        val e2 = RuleEngine(rules(grants = listOf(g3)).copy(timeRules = listOf(lim)))
+        assertFalse(e2.snapshot(at(16, 40), DayUsage(day)).locked)
+        assertTrue(e2.snapshot(at(17, 40), DayUsage(day)).locked)
+    }
+
+    @Test
     fun timeWindowGrantOpensClosedHoursAndVaultIsNotUsable() {
         val window = Grant("w1", 30, day, null, null, "Film", null, window = app.orbit.engine.TimeWindow(t("21:00"), t("22:00")))
         val vault = Grant("v1", 45, null, null, null, "Kasada", null, vault = true)

@@ -44,24 +44,44 @@ export async function grantMinutes(
   if (error) throw error;
 }
 
-type FamLike = { sections: Section[]; sectionRules: SectionRule[] };
+type FamLike = { sections: Section[]; sectionRules: SectionRule[]; children?: Child[] };
 export type GrantPatch = { valid_on: string | null; section_id: string | null; vault: boolean; window_start: string | null; window_end: string | null };
 
 /**
  * "Hemen kullanılsın": telefon şu an açık saatlerdeyse süre o anki bölüme eklenir (kalan süre hemen artar);
  * kapalı saatlerdeyse şu andan itibaren `minutes` dakikalık bir aralık açılır, bitince telefon yine kapanır.
  */
-export async function nowPatch(childId: string, minutes: number, fam: FamLike): Promise<{ patch: GrantPatch; text: string }> {
+export async function nowPatch(
+  childId: string,
+  minutes: number,
+  fam: FamLike,
+  opts: { closed?: boolean } = {}
+): Promise<{ patch: GrantPatch; text: string }> {
   const sec = await currentSectionFor(childId, fam.sections);
-  if (sec && timedPossible(sec, fam.sectionRules)) {
-    return { patch: { valid_on: todayISO(), section_id: sec.id, vault: false, window_start: null, window_end: null }, text: `hemen · ${sec.name}` };
+  if (!opts.closed && sec && timedPossible(sec, fam.sectionRules)) {
+    return { patch: { valid_on: todayISO(), section_id: sec.id, vault: false, window_start: null, window_end: null }, text: `${sec.name} süresine eklendi` };
   }
+  // Kapalı / sınırlı saatte: çocuğun ayarına göre aralık (Kurallar → Kapalıyken verilen süre)
+  const child = fam.children?.find((c) => c.id === childId);
+  const mode = child?.closed_grant_mode ?? "usage";
   const { minute } = nowBerlin();
-  const end = Math.min(minute + minutes, 1439);
-  return {
-    patch: { valid_on: todayISO(), section_id: null, vault: false, window_start: hm(minute), window_end: hm(end > minute ? end : minute + 1) },
-    text: `hemen · ${hm(minute)}–${hm(end)} arası açık`,
-  };
+  let end: number;
+  if (mode === "clock") end = minute + minutes;
+  else if (mode === "within") end = minute + (child?.closed_grant_within_factor ? minutes * child.closed_grant_within_factor : child?.closed_grant_within_minutes ?? 120);
+  else {
+    // Kullandıkça düşer: bir sonraki açık saatler başlayınca ya da gece yarısı biter
+    const pid = await profileIdOn(childId, todayISO());
+    const next = fam.sections
+      .filter((x) => x.profile_id === pid && timedPossible(x, fam.sectionRules) && mins(x.start_time) > minute)
+      .map((x) => mins(x.start_time))
+      .sort((a, b) => a - b)[0];
+    end = next ?? 1439;
+  }
+  end = Math.min(end, 1439);
+  if (end <= minute) end = Math.min(minute + 1, 1439);
+  const text =
+    mode === "clock" ? `şu andan ${hm(end)}'e kadar açık` : mode === "within" ? `kullandıkça düşer · ${hm(end)}'e kadar kullanmalı` : `kullandıkça düşer · ${hm(end)}'e kadar geçerli`;
+  return { patch: { valid_on: todayISO(), section_id: null, vault: false, window_start: hm(minute), window_end: hm(end) }, text };
 }
 
 /**

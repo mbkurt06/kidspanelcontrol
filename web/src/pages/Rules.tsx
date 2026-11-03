@@ -7,7 +7,7 @@ import { Info } from "../components/Info";
 import { useState } from "react";
 import { createDefaultSections } from "./ProfileEdit";
 import { mins } from "../lib/sections";
-import type { Profile } from "../lib/types";
+import type { Child, Profile } from "../lib/types";
 import Lock from "./Lock";
 
 export default function Rules() {
@@ -66,6 +66,15 @@ export default function Rules() {
       <details className="card section-collapse-card">
         <summary className="section-collapse-head"><span>🔒 Kilit <Info>Eski kilit kuralları korunur; yeni kullanım profilleri bunların yerine geçebilir.</Info></span><span className="collapse-arrow">⌄</span></summary>
         <Lock inline />
+      </details>
+
+      <details className="card section-collapse-card">
+        <summary className="section-collapse-head"><span>⏳ Kapalıyken verilen süre <Info>Kapalı ya da sınırlı saatte ana ekrandan süre verince telefonun nasıl açılacağı. Açık saatlerde verilen süre her zaman kalan süreye eklenir.</Info></span><span className="collapse-arrow">⌄</span></summary>
+        <div className="stack">
+          {fam.children.map((c) => (
+            <ClosedGrantSetting key={c.id} child={c} />
+          ))}
+        </div>
       </details>
 
       <details className="card section-collapse-card">
@@ -194,6 +203,60 @@ export default function Rules() {
           ))}
         </div>
       </details>
+    </div>
+  );
+}
+
+function ClosedGrantSetting({ child }: { child: Child }) {
+  const fam = useFamily();
+  const [err, setErr] = useState("");
+  const mode = child.closed_grant_mode ?? "usage";
+  const within = child.closed_grant_within_factor ? `x${child.closed_grant_within_factor}` : String(child.closed_grant_within_minutes ?? 120);
+  async function save(v: Record<string, unknown>) {
+    setErr("");
+    const { error } = await supabase.from("children").update(v).eq("id", child.id);
+    if (error) setErr(errorText(error));
+    fam.reload();
+  }
+  const opt = (k: "clock" | "usage" | "within", title: string, hint: string, extra?: React.ReactNode) => (
+    <label className={`choice ${mode === k ? "on" : ""}`}>
+      <input type="radio" name={`cg-${child.id}`} checked={mode === k} onChange={() => save({ closed_grant_mode: k })} />
+      <span className="grow">
+        <b>{title}</b>
+        <span className="muted small">{hint}</span>
+        {extra}
+      </span>
+    </label>
+  );
+  return (
+    <div className="stack-s">
+      <b>
+        <span className="dot" style={{ background: child.color, marginTop: 0 }} /> {child.name}
+      </b>
+      {err && <p className="error">{err}</p>}
+      {opt("clock", "Saat gibi aksın", "15 dk verince telefon 15 dakikalığına açılır, kullanılmasa da sonunda kapanır.")}
+      {opt("usage", "Süre bitene kadar açık kalsın", "Süre kullandıkça düşer. Kullanılmayan süre açık saatler başlayınca ya da gece yarısı biter.")}
+      {opt(
+        "within",
+        "Belirli süre içinde kullansın",
+        "Süre kullandıkça düşer ama sadece bu süre içinde kullanılabilir.",
+        mode === "within" ? (
+          <select
+            value={within}
+            onChange={(e) => {
+              const v = e.target.value;
+              save(v.startsWith("x") ? { closed_grant_within_factor: Number(v.slice(1)), closed_grant_within_minutes: null } : { closed_grant_within_minutes: Number(v), closed_grant_within_factor: null });
+            }}
+            aria-label="Kullanma süresi"
+          >
+            <option value="60">1 saat içinde</option>
+            <option value="120">2 saat içinde</option>
+            <option value="180">3 saat içinde</option>
+            <option value="x2">Verilen sürenin 2 katı içinde</option>
+            <option value="x4">Verilen sürenin 4 katı içinde</option>
+          </select>
+        ) : null
+      )}
     </div>
   );
 }

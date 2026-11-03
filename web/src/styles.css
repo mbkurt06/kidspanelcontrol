@@ -1549,6 +1549,12 @@ select:focus {
   font-size: 22px;
   cursor: pointer;
   touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.give-box button:active {
+  color: var(--accent);
 }
 .give-box button:disabled {
   color: var(--muted);

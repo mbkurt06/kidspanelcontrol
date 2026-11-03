@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { supabase, errorText } from "../lib/supabase";
@@ -44,6 +44,43 @@ export default function Home() {
       </div>
     </div>
   );
+}
+
+/** Basılı tutunca tekrarlayan düğme: önce tek adım, sonra hızlanarak seri artar/azalır. */
+function useHold(fn: () => void) {
+  const t = useRef<number | null>(null);
+  const f = useRef(fn);
+  f.current = fn;
+  const stop = () => {
+    if (t.current != null) window.clearTimeout(t.current);
+    t.current = null;
+  };
+  useEffect(() => stop, []);
+  const loop = (delay: number) => {
+    t.current = window.setTimeout(() => {
+      f.current();
+      loop(Math.max(40, delay * 0.85));
+    }, delay);
+  };
+  return {
+    onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      f.current();
+      stop();
+      t.current = window.setTimeout(() => loop(120), 400);
+    },
+    onPointerUp: stop,
+    onPointerCancel: stop,
+    onLostPointerCapture: stop,
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        f.current();
+      }
+    },
+  };
 }
 
 type LockKind = "kiosk" | "limit" | string;
@@ -129,6 +166,8 @@ function ChildCard({ child }: { child: Child }) {
     setGiveText(null);
   }
   const step = (d: number) => setGive((g) => Math.max(0, Math.min(600, g + d)));
+  const holdUp = useHold(() => step(1));
+  const holdDown = useHold(() => step(-1));
 
   // Halka içi
   const ringColor = kiosk ? "var(--bad)" : limited || closed ? "var(--warn)" : child.color;
@@ -207,7 +246,7 @@ function ChildCard({ child }: { child: Child }) {
           </button>
         )}
         <div className={`give-box ${kiosk || limited ? "grow" : ""}`}>
-          <button type="button" aria-label="5 dk azalt" disabled={give === 0} onClick={() => step(-5)}>
+          <button type="button" aria-label="1 dk azalt" disabled={give === 0} {...holdDown}>
             −
           </button>
           <input
@@ -226,12 +265,12 @@ function ChildCard({ child }: { child: Child }) {
             onBlur={() => setGiveText(null)}
             onKeyDown={(e) => {
               if (e.key === "Enter") giveTime();
-              if (e.key === "ArrowUp") { e.preventDefault(); setGiveText(null); step(5); }
-              if (e.key === "ArrowDown") { e.preventDefault(); setGiveText(null); step(-5); }
+              if (e.key === "ArrowUp") { e.preventDefault(); setGiveText(null); step(1); }
+              if (e.key === "ArrowDown") { e.preventDefault(); setGiveText(null); step(-1); }
             }}
           />
           <span className="give-unit">dk</span>
-          <button type="button" aria-label="5 dk artır" onClick={() => step(5)}>
+          <button type="button" aria-label="1 dk artır" {...holdUp}>
             +
           </button>
         </div>

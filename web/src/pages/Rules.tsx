@@ -14,7 +14,7 @@ export default function Rules() {
   const fam = useFamily();
   const nav = useNavigate();
   const [err, setErr] = useState("");
-  const [open, setOpen] = useState({ days: false, focus: false, modes: false, groups: false, lock: false });
+  const [open, setOpen] = useState({ days: false, focus: false, modes: false });
 
   async function newProfile() {
     const { data, error } = await supabase
@@ -64,37 +64,35 @@ export default function Rules() {
       </header>
       {err && <p className="error">{err}</p>}
 
-      <details className="card section-collapse-card" open={open.lock} onToggle={(e) => setOpen((v) => ({ ...v, lock: e.currentTarget.open }))}>
-        <summary className="section-collapse-head"><span>🔒 Kilit <Info>Eski kilit kuralları korunur; yeni kullanım profilleri bunların yerine geçebilir.</Info></span><span>⌄</span></summary>
-        {open.lock && <Lock inline />}
+      <details className="card section-collapse-card">
+        <summary className="section-collapse-head"><span>🔒 Kilit <Info>Eski kilit kuralları korunur; yeni kullanım profilleri bunların yerine geçebilir.</Info></span><span className="collapse-arrow">⌄</span></summary>
+        <Lock inline />
       </details>
 
-      <details className="card section-collapse-card" open={open.groups} onToggle={(e) => setOpen((v) => ({ ...v, groups: e.currentTarget.open }))}>
-        <summary className="section-collapse-head"><span>Uygulama grupları</span><span>⌄</span></summary>
-        {open.groups && <Link to="/rules/groups" className="link-card inner-link">
+      <details className="card section-collapse-card">
+        <summary className="section-collapse-head"><span>Uygulama grupları</span><span className="collapse-arrow">⌄</span></summary>
+        <Link to="/rules/groups" className="link-card inner-link">
           <div className="row wrap gap-s">
             {fam.groups.map((g) => <span className="pill" key={g.id} style={{ borderColor: g.color }}>{g.name} · {Object.values(fam.members).filter((x) => x === g.id).length}</span>)}
+            {!fam.groups.length && <span className="muted small">Grupları yönet</span>}
           </div>
           <Icon name="chevron" size={18} />
-        </Link>}
+        </Link>
       </details>
 
-      <section className="stack">
-        <div className="row between"><h2 className="section-title">Uygulama kullanım kuralları</h2><button className="btn small" onClick={newAppRule}><Icon name="plus" size={16} /> Yeni</button></div>
-        <p className="muted small">Uygulamanın ne kadar açık kalacağını ve günlük süreden düşüp düşmeyeceğini tek bir kural olarak tanımla; Uygulamalar ekranından ata.</p>
-        {fam.appUsageRules.map((r) => <Link to={`/rules/app-rule/${r.id}`} className="card link-card" key={r.id}><div className="grow"><b>{r.name}</b><div className="muted small">{r.mode === "open" ? "Açık" : r.mode === "blocked" ? "Kapalı" : `${r.max_minutes == null ? "Sınırsız" : `${r.max_minutes} dk`} · ${r.counts_toward_daily ? "günlük süreden düşer" : "günlük süreden düşmez"}`}{r.start_time && r.end_time ? ` · ${r.start_time.slice(0, 5)}–${r.end_time.slice(0, 5)}` : ""}</div></div><Icon name="chevron" size={18} /></Link>)}
-      </section>
-
-      <section className="stack">
-        <div className="row between">
-          <button type="button" className="section-title row gap-xs collapse-title" onClick={() => setOpen((v) => ({ ...v, days: !v.days }))}>
-            <span>{open.days ? "⌃" : "⌄"}</span><span>Günlük program</span><Info>Hafta içi, hafta sonu ve özel günlerin hangi kullanım profiline bağlanacağını ve saatlerini tutar.</Info>
-          </button>
-          {open.days && <button className="btn small" onClick={newProfile}>
-            <Icon name="plus" size={16} /> Yeni
-          </button>}
+      <details className="card section-collapse-card" open>
+        <summary className="section-collapse-head"><span>Uygulama kullanım kuralları <Info>Uygulamanın ne kadar açık kalacağını ve günlük süreden düşüp düşmeyeceğini tanımlar.</Info></span><span className="collapse-arrow">⌄</span></summary>
+        <div className="stack">
+          <div className="row between"><span className="muted small">Uygulamaların süre ve izin kuralları</span><button className="btn small" onClick={newAppRule}><Icon name="plus" size={16} /> Yeni</button></div>
+          {fam.appUsageRules.map((r) => <Link to={`/rules/app-rule/${r.id}`} className="card link-card" key={r.id}><div className="grow"><b>{r.name}</b><div className="muted small">{r.mode === "open" ? "Açık" : r.mode === "blocked" ? "Kapalı" : `${r.max_minutes == null ? "Sınırsız" : `${r.max_minutes} dk`} · ${r.counts_toward_daily ? "günlük süreden düşer" : "günlük süreden düşmez"}`}{r.start_time && r.end_time ? ` · ${r.start_time.slice(0, 5)}–${r.end_time.slice(0, 5)}` : ""}</div></div><Icon name="chevron" size={18} /></Link>)}
         </div>
-        {open.days && fam.profiles.map((p) => {
+      </details>
+
+      <details className="card section-collapse-card" open={open.days} onToggle={(e) => setOpen((v) => ({ ...v, days: e.currentTarget.open }))}>
+        <summary className="section-collapse-head"><span>Günlük program <Info>Hafta içi, hafta sonu ve özel günlerin hangi kullanım profiline bağlanacağını ve saatlerini tutar.</Info></span><span className="collapse-arrow">⌄</span></summary>
+        <div className="stack">
+          <div className="row between"><span className="muted small">Gün ve saat profilleri</span><button className="btn small" onClick={newProfile}><Icon name="plus" size={16} /> Yeni</button></div>
+          {fam.profiles.map((p) => {
           const slots = fam.slots.filter((s) => s.profile_id === p.id);
           const secs = fam.sections.filter((s) => s.profile_id === p.id).sort((a, b) => mins(a.start_time) - mins(b.start_time));
           return (
@@ -132,19 +130,15 @@ export default function Rules() {
               <Icon name="chevron" size={18} />
             </Link>
           );
-        })}
-      </section>
-
-      <section className="stack">
-        <div className="row between">
-          <button type="button" className="section-title row gap-xs collapse-title" onClick={() => setOpen((v) => ({ ...v, focus: !v.focus }))}>
-            <span>{open.focus ? "⌃" : "⌄"}</span><span>Odak profilleri</span><Info>Sayaç çalışırken telefonda nelerin açık kalacağını belirler. Kuralların üstüne yalnızca ek kısıt koyar.</Info>
-          </button>
-          {open.focus && <button className="btn small" onClick={newFocus}>
-            <Icon name="plus" size={16} /> Yeni
-          </button>}
+          })}
         </div>
-        {open.focus && fam.focusProfiles.map((f) => (
+      </details>
+
+      <details className="card section-collapse-card" open={open.focus} onToggle={(e) => setOpen((v) => ({ ...v, focus: e.currentTarget.open }))}>
+        <summary className="section-collapse-head"><span>Odak profilleri <Info>Sayaç çalışırken telefonda nelerin açık kalacağını belirler. Kuralların üstüne yalnızca ek kısıt koyar.</Info></span><span className="collapse-arrow">⌄</span></summary>
+        <div className="stack">
+          <div className="row between"><span className="muted small">Sayaç ve etkinlik profilleri</span><button className="btn small" onClick={newFocus}><Icon name="plus" size={16} /> Yeni</button></div>
+          {fam.focusProfiles.map((f) => (
           <Link to={`/rules/focus/${f.id}`} className="card link-card" key={f.id}>
             <span style={{ fontSize: 22 }}>{f.icon ?? "🎯"}</span>
             <div className="grow">
@@ -161,8 +155,8 @@ export default function Rules() {
             </div>
             <Icon name="chevron" size={18} />
           </Link>
-        ))}
-        {open.focus && <Link to="/rules/activities" className="card link-card">
+          ))}
+          <Link to="/rules/activities" className="card link-card">
           <div className="grow">
             <b>Etkinlikler</b>
             <div className="row wrap gap-s">
@@ -174,19 +168,15 @@ export default function Rules() {
             </div>
           </div>
           <Icon name="chevron" size={18} />
-        </Link>}
-      </section>
-
-      <section className="stack">
-        <div className="row between">
-          <button type="button" className="section-title row gap-xs collapse-title" onClick={() => setOpen((v) => ({ ...v, modes: !v.modes }))}>
-            <span>{open.modes ? "⌃" : "⌄"}</span><span>Kullanım profilleri</span><Info>Uyku, ders, dinlenme ve serbest gibi profillerde kiosk, menü, uygulama ve süre davranışını belirler.</Info>
-          </button>
-          {open.modes && <button className="btn small" onClick={newMode}>
-            <Icon name="plus" size={16} /> Yeni
-          </button>}
+          </Link>
         </div>
-        {open.modes && fam.modes.map((m) => (
+      </details>
+
+      <details className="card section-collapse-card" open={open.modes} onToggle={(e) => setOpen((v) => ({ ...v, modes: e.currentTarget.open }))}>
+        <summary className="section-collapse-head"><span>Kullanım profilleri <Info>Uyku, ders, dinlenme ve serbest gibi profillerde kiosk, menü, uygulama ve süre davranışını belirler.</Info></span><span className="collapse-arrow">⌄</span></summary>
+        <div className="stack">
+          <div className="row between"><span className="muted small">Kiosk, uygulama ve süre profilleri</span><button className="btn small" onClick={newMode}><Icon name="plus" size={16} /> Yeni</button></div>
+          {fam.modes.map((m) => (
           <Link to={`/rules/mode/${m.id}`} className="card link-card" key={m.id}>
             <span className="dot" style={{ background: m.color }} />
             <div className="grow">
@@ -202,8 +192,9 @@ export default function Rules() {
             </div>
             <Icon name="chevron" size={18} />
           </Link>
-        ))}
-      </section>
+          ))}
+        </div>
+      </details>
     </div>
   );
 }

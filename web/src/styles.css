@@ -677,8 +677,9 @@ select:focus {
 .section-toggle-row .section-toggle { flex: 1; }
 .section-collapse-card > summary { list-style: none; cursor: pointer; }
 .section-collapse-card > summary::-webkit-details-marker { display: none; }
-.section-collapse-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 20px; font-weight: 700; }
-.section-collapse-card[open] > .section-collapse-head > span:last-child { transform: rotate(180deg); }
+.section-collapse-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; font-size: 20px; line-height: 1.25; font-weight: 700; }
+.section-collapse-card[open] > .section-collapse-head > .collapse-arrow { transform: rotate(180deg); }
+.collapse-arrow { margin-left: auto; flex: 0 0 auto; font-size: 22px; transition: transform .15s ease; }
 .collapse-title { border: 0; background: transparent; color: inherit; cursor: pointer; padding: 0; text-align: left; }
 .templates-head { font-size: 18px; font-weight: 600; }
 .date-edit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }

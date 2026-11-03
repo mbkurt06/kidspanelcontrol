@@ -14,7 +14,6 @@ export default function Rules() {
   const fam = useFamily();
   const nav = useNavigate();
   const [err, setErr] = useState("");
-  const [open, setOpen] = useState({ days: false, focus: false, modes: false });
 
   async function newProfile() {
     const { data, error } = await supabase
@@ -88,7 +87,7 @@ export default function Rules() {
         </div>
       </details>
 
-      <details className="card section-collapse-card" open={open.days} onToggle={(e) => setOpen((v) => ({ ...v, days: e.currentTarget.open }))}>
+      <details className="card section-collapse-card">
         <summary className="section-collapse-head"><span>Günlük program <Info>Hafta içi, hafta sonu ve özel günlerin hangi kullanım profiline bağlanacağını ve saatlerini tutar.</Info></span><span className="collapse-arrow">⌄</span></summary>
         <div className="stack">
           <div className="row between"><span className="muted small">Gün ve saat profilleri</span><button className="btn small" onClick={newProfile}><Icon name="plus" size={16} /> Yeni</button></div>
@@ -134,7 +133,7 @@ export default function Rules() {
         </div>
       </details>
 
-      <details className="card section-collapse-card" open={open.focus} onToggle={(e) => setOpen((v) => ({ ...v, focus: e.currentTarget.open }))}>
+      <details className="card section-collapse-card">
         <summary className="section-collapse-head"><span>Odak profilleri <Info>Sayaç çalışırken telefonda nelerin açık kalacağını belirler. Kuralların üstüne yalnızca ek kısıt koyar.</Info></span><span className="collapse-arrow">⌄</span></summary>
         <div className="stack">
           <div className="row between"><span className="muted small">Sayaç ve etkinlik profilleri</span><button className="btn small" onClick={newFocus}><Icon name="plus" size={16} /> Yeni</button></div>
@@ -172,7 +171,7 @@ export default function Rules() {
         </div>
       </details>
 
-      <details className="card section-collapse-card" open={open.modes} onToggle={(e) => setOpen((v) => ({ ...v, modes: e.currentTarget.open }))}>
+      <details className="card section-collapse-card">
         <summary className="section-collapse-head"><span>Kullanım profilleri <Info>Uyku, ders, dinlenme ve serbest gibi profillerde kiosk, menü, uygulama ve süre davranışını belirler.</Info></span><span className="collapse-arrow">⌄</span></summary>
         <div className="stack">
           <div className="row between"><span className="muted small">Kiosk, uygulama ve süre profilleri</span><button className="btn small" onClick={newMode}><Icon name="plus" size={16} /> Yeni</button></div>

@@ -148,6 +148,12 @@ class RuleEngine(private val rules: Rules) {
         return out
     }
 
+    /** Tek aktif profil: elle uygulanan profil programlı profilin önüne geçer. */
+    fun activeModeAt(day: LocalDate, t: LocalTime): Mode? {
+        val nowMs = day.atTime(t).atZone(zone).toInstant().toEpochMilli()
+        return manualMode(nowMs)?.first ?: scheduledModes(day, t).maxByOrNull { it.first.priority }?.first
+    }
+
     fun extraMinutes(day: LocalDate, dayStartMs: Long, dayEndMs: Long): Int {
         val grants = rules.grants.filter { !it.vault && it.window == null && (it.validOn == day || it.activatedOn == day) }.sumOf { it.minutes }
         val walletDebt = rules.grants.filter { !it.vault && it.minutes < 0 && it.validOn == null && it.activatedOn == null && (it.expiresOn == null || !it.expiresOn.isBefore(day)) }.sumOf { it.minutes }

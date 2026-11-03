@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
+import Music from "./Music";
+import TaskSettingsCard from "../components/TaskSettingsCard";
 
 const AVATARS = ["🙂", "😎", "🦊", "🐼", "🐯", "🦄", "🚀", "⭐"];
 
@@ -10,6 +12,14 @@ export default function ChildSettings() {
     <div className="page">
       <header className="page-head"><h1>Ayarlar</h1></header>
       {!fam.visibleChildren.length && <p className="muted small">Çocuk bulunamadı.</p>}
+      <details className="card section-collapse-card" open>
+        <summary className="section-collapse-head"><span>Görev ayarları</span><span>⌄</span></summary>
+        <div className="stack"><TaskSettingsCard /></div>
+      </details>
+      <details className="card section-collapse-card" open>
+        <summary className="section-collapse-head"><span>Müzik</span><span>⌄</span></summary>
+        <Music inline />
+      </details>
       {fam.visibleChildren.map((child) => (
         <section className="card settings-card" key={child.id}>
           <ProfileRow child={child} />

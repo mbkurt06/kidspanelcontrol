@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import { confirmDevice, deviceLabel, errorText, renewDeviceFor, selectDeviceFor, supabase } from "./lib/supabase";
 import { FamilyProvider } from "./lib/family";
@@ -10,8 +10,6 @@ import Rules from "./pages/Rules";
 import ProfileEdit from "./pages/ProfileEdit";
 import Groups from "./pages/Groups";
 import { ActivitiesPage, FocusEdit } from "./pages/Focus";
-import Lock from "./pages/Lock";
-import Music from "./pages/Music";
 import ModeEdit from "./pages/ModeEdit";
 import Events from "./pages/Events";
 import { MessagesChat, MessagesList } from "./pages/Messages";
@@ -261,10 +259,10 @@ function ShellContent() {
           <Route path="/rules/groups" element={<Groups />} />
           <Route path="/rules/focus/:id" element={<FocusEdit />} />
           <Route path="/rules/activities" element={<ActivitiesPage />} />
+          <Route path="/rules/lock" element={<Navigate to="/rules" replace />} />
+          <Route path="/rules/music" element={<Navigate to="/child-settings" replace />} />
+          <Route path="/rules/time" element={<Navigate to="/rules" replace />} />
           <Route path="/rules/app-rule/:id" element={<AppRuleEdit />} />
-          <Route path="/rules/lock" element={<Lock />} />
-          <Route path="/rules/music" element={<Music />} />
-          <Route path="/rules/time" element={<Lock />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/tasks/new" element={<TaskEdit />} />
           <Route path="/tasks/:id" element={<TaskEdit />} />

@@ -8,7 +8,7 @@ import { Info } from "../components/Info";
 import { RuleCard, WeekGrid, addRule } from "../components/RuleEditor";
 
 /** Müzik: çocuk başına ne zaman çalabileceği, klasör ve müzik programı. */
-export default function Music({ embeddedChildId }: { embeddedChildId?: string } = {}) {
+export default function Music({ embeddedChildId, inline = false }: { embeddedChildId?: string; inline?: boolean } = {}) {
   const fam = useFamily();
   const [params] = useSearchParams();
   const childParam = embeddedChildId ?? params.get("child");
@@ -27,8 +27,8 @@ export default function Music({ embeddedChildId }: { embeddedChildId?: string } 
   }
 
   return (
-    <div className={embeddedChildId ? "stack" : "page"}>
-      {!embeddedChildId && <header className="page-head">
+    <div className={embeddedChildId || inline ? "stack" : "page"}>
+      {!embeddedChildId && !inline && <header className="page-head">
         <Link to="/rules" className="icon-btn" aria-label="Geri">
           <Icon name="back" />
         </Link>
@@ -40,7 +40,7 @@ export default function Music({ embeddedChildId }: { embeddedChildId?: string } 
       {fam.visibleChildren.filter((c) => !childParam || c.id === childParam).map((c) => (
         <ChildMusic key={c.id} child={c} onErr={setErr} />
       ))}
-      <section className="stack">
+      {!embeddedChildId && <section className="stack">
         <div className="row between">
           <h2 className="section-title">Müzik programı</h2>
           <button className="btn small" onClick={add}>
@@ -56,7 +56,7 @@ export default function Music({ embeddedChildId }: { embeddedChildId?: string } 
         {rules.map((r) => (
           <RuleCard key={r.id} r={r} kinds={["music_off", "music_on"]} open={openRule === r.id} onToggle={() => setOpenRule(openRule === r.id ? null : r.id)} onErr={setErr} />
         ))}
-      </section>
+      </section>}
     </div>
   );
 }

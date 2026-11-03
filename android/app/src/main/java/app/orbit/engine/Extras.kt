@@ -47,6 +47,9 @@ object Extras {
         if (last?.type == CommandType.KIOSK_START && (last.untilAt == null || last.untilAt > nowMs)) {
             return KioskNow("manual", "Tam kilit", last.message ?: def.message, last.screens ?: def.screens, last.untilAt)
         }
+        engine.activeModeAt(day, t)?.takeIf { it.kioskEnabled }?.let { mode ->
+            return KioskNow("profile", mode.name, def.message, mode.kioskScreens.ifEmpty { def.screens }, null)
+        }
         rules.taskRestrictions.firstOrNull { it.active && it.phoneMode == "kiosk" }?.let { task ->
             return KioskNow("task", task.title, def.message, def.screens, null)
         }

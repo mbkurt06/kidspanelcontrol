@@ -53,6 +53,9 @@ data class Mode(
     val extraTimeAllowed: Boolean,
     val warnMinutes: List<Int>,
     val priority: Int,
+    val kioskEnabled: Boolean = false,
+    val kioskScreens: Set<String> = emptySet(),
+    val kioskCalls: String = "emergency",
 )
 
 data class ModeSlot(

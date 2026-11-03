@@ -2,8 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { supabase, errorText } from "../lib/supabase";
-import { quickGrant, seedDefaults } from "../lib/actions";
-import { kioskOf, lockNow, unlockNow } from "./Lock";
+import { quickGrant, seedDefaults, sendCommand } from "../lib/actions";
+import { unlockNow } from "./Lock";
 import { timerElapsed, timerRemaining } from "../lib/types";
 import { minutesText, relTime } from "../lib/util";
 import { Ring } from "../components/Ring";
@@ -50,8 +50,9 @@ function ChildCard({ child }: { child: Child }) {
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
   const stale = !st || Date.now() - new Date(st.updated_at).getTime() > 15 * 60000;
-  const [asking, setAsking] = useState(false);
-  const untilAt = () => (fam.family?.lock_button_minutes ? new Date(Date.now() + fam.family.lock_button_minutes * 60000).toISOString() : null);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileId, setProfileId] = useState(fam.modes[0]?.id ?? "");
+  const [profileMinutes, setProfileMinutes] = useState("30");
 
   async function run(key: string, fn: () => Promise<unknown>, ok: string | ((r: unknown) => string)) {
     setBusy(key);
@@ -116,32 +117,27 @@ function ChildCard({ child }: { child: Child }) {
           <button className="btn" disabled={!!busy} onClick={() => run("unlock", () => unlockNow(child.id), "Kilit kaldırılıyor")}>
             <Icon name="unlock" size={18} /> Kilidi kaldır
           </button>
-        ) : (fam.family?.lock_button ?? "kiosk") === "ask" ? (
-          asking ? (
-            <>
-              <button className="btn" disabled={!!busy} onClick={() => { setAsking(false); run("lock", () => lockNow(child.id, "kiosk", untilAt(), kioskOf(child).message), "Kilitleniyor"); }}>
-                🔒 Kilitle
-              </button>
-              <button className="btn" disabled={!!busy} onClick={() => { setAsking(false); run("lock", () => lockNow(child.id, "limit", untilAt()), "Sınırlanıyor"); }}>
-                🌙 Sınırla
-              </button>
-            </>
+        ) : (
+          profileOpen ? (
+            <div className="row gap-xs wrap">
+              <select value={profileId} onChange={(e) => setProfileId(e.target.value)} aria-label="Kullanım profili">
+                {fam.modes.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+              <select value={profileMinutes} onChange={(e) => setProfileMinutes(e.target.value)} aria-label="Profil süresi">
+                <option value="15">15 dk</option><option value="30">30 dk</option><option value="60">1 saat</option><option value="120">2 saat</option><option value="none">Programa dönene kadar</option>
+              </select>
+              <button className="btn primary" disabled={!!busy || !profileId} onClick={() => {
+                setProfileOpen(false);
+                const until = profileMinutes === "none" ? null : new Date(Date.now() + Number(profileMinutes) * 60000).toISOString();
+                run("profile", () => sendCommand(child.id, "start_mode", { mode_id: profileId }, until), "Profil uygulanıyor");
+              }}>Uygula</button>
+              <button className="btn ghost" onClick={() => setProfileOpen(false)}>×</button>
+            </div>
           ) : (
-            <button className="btn" disabled={!!busy} onClick={() => setAsking(true)}>
-              <Icon name="lock" size={18} /> Kilit…
+            <button className="btn" disabled={!!busy || !fam.modes.length} onClick={() => setProfileOpen(true)}>
+              <Icon name="lock" size={18} /> Profil uygula
             </button>
           )
-        ) : (
-          <button
-            className="btn"
-            disabled={!!busy}
-            onClick={() => {
-              const kind = fam.family?.lock_button === "limit" ? "limit" : "kiosk";
-              run("lock", () => lockNow(child.id, kind, untilAt(), kioskOf(child).message), kind === "kiosk" ? "Kilitleniyor" : "Sınırlanıyor");
-            }}
-          >
-            <Icon name="lock" size={18} /> {fam.family?.lock_button === "limit" ? "Sınırla" : "Kilitle"}
-          </button>
         )}
         <button className="btn" disabled={!!busy} onClick={() => run("15", () => quickGrant(child, 15, fam), (r) => `+15 dk verildi (${r})`)}>
           +15 dk

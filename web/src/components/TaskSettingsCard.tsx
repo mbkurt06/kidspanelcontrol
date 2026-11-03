@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useFamily } from "../lib/family";
 import { supabase } from "../lib/supabase";
 
-export default function TaskSettingsCard() {
+export default function TaskSettingsCard({ embedded = false }: { embedded?: boolean }) {
   const fam = useFamily();
   const [open, setOpen] = useState(false);
   const defaults = {
@@ -26,10 +26,7 @@ export default function TaskSettingsCard() {
     await supabase.from("families").update({ task_before_photo_min: next.beforeMin, task_before_photo_max: next.beforeMax, task_after_photo_min: next.afterMin, task_after_photo_max: next.afterMax }).eq("id", fam.familyId);
     await fam.reload();
   }
-  return (
-    <section className="card">
-      <button className="row between wide plain" onClick={() => setOpen((x) => !x)}><h2>Görev ayarları</h2><span aria-hidden>{open ? "⌃" : "⌄"}</span></button>
-      {open && <div className="stack">
+  const content = <div className="stack">
         <div>
           <h3>Görev kanıtları</h3>
           <select value={fam.family?.proof_retention_days ?? 0} onChange={(e) => supabase.from("families").update({ proof_retention_days: Number(e.target.value) }).eq("id", fam.familyId).then(() => fam.reload())}>
@@ -44,7 +41,12 @@ export default function TaskSettingsCard() {
           </div>
           <button className="btn small" onClick={save}>Varsayılanı kaydet</button>
         </div>
-      </div>}
+      </div>;
+  if (embedded) return content;
+  return (
+    <section className="card">
+      <button className="row between wide plain" onClick={() => setOpen((x) => !x)}><h2>Görev ayarları</h2><span aria-hidden>{open ? "⌃" : "⌄"}</span></button>
+      {open && content}
     </section>
   );
 }

@@ -14,17 +14,23 @@ export default function ChildSettings() {
       {!fam.visibleChildren.length && <p className="muted small">Çocuk bulunamadı.</p>}
       <details className="card section-collapse-card" open>
         <summary className="section-collapse-head"><span>Görev ayarları</span><span>⌄</span></summary>
-        <div className="stack"><TaskSettingsCard /></div>
+        <TaskSettingsCard embedded />
       </details>
       <details className="card section-collapse-card" open>
         <summary className="section-collapse-head"><span>Müzik</span><span>⌄</span></summary>
         <Music inline />
       </details>
-      {fam.visibleChildren.map((child) => (
-        <section className="card settings-card" key={child.id}>
-          <ProfileRow child={child} />
-        </section>
-      ))}
+      <details className="card section-collapse-card" open>
+        <summary className="section-collapse-head"><span>Profil ayarları</span><span>⌄</span></summary>
+        <div className="stack">
+          {fam.visibleChildren.map((child) => (
+            <details className="card section-collapse-card" key={child.id}>
+              <summary className="section-collapse-head"><span>{child.name}</span><span>⌄</span></summary>
+              <ProfileRow child={child} />
+            </details>
+          ))}
+        </div>
+      </details>
     </div>
   );
 }

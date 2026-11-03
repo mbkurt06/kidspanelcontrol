@@ -499,7 +499,9 @@ select {
   min-height: 44px;
   width: 100%;
 }
-input[type="checkbox"] {
+input[type="checkbox"],
+input[type="radio"] {
+  padding: 0;
   width: 20px;
   min-height: 20px;
   height: 20px;
@@ -1342,7 +1344,7 @@ select:focus {
   display: flex;
   flex-direction: column;
   align-items: center;
-  background: var(--surface2, var(--line));
+  background: var(--surface-2, var(--line));
   border-radius: 12px;
   padding: 2px;
 }
@@ -1529,7 +1531,7 @@ select:focus {
 .give-box {
   display: flex;
   align-items: center;
-  background: var(--surface2, var(--line));
+  background: var(--surface-2, var(--line));
   border: 1px solid var(--line);
   border-radius: 14px;
   flex: none;
@@ -1577,7 +1579,7 @@ select:focus {
   padding: 0 14px;
 }
 .lock-panel {
-  background: var(--surface2, var(--line));
+  background: var(--surface-2, var(--line));
   border: 1px solid var(--line);
   border-radius: 16px;
   padding: 12px;
@@ -1596,9 +1598,11 @@ select:focus {
 }
 .choice {
   display: flex;
+  width: 100%;
+  box-sizing: border-box;
   gap: 12px;
   align-items: flex-start;
-  background: var(--surface2, var(--line));
+  background: var(--surface-2, var(--line));
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 12px;
@@ -1607,11 +1611,13 @@ select:focus {
 .choice.on {
   border-color: var(--accent);
 }
-.choice input {
-  margin-top: 3px;
+.choice input[type="radio"] {
+  margin: 2px 0 0;
   accent-color: var(--accent);
 }
 .choice .grow {
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 4px;

@@ -104,8 +104,30 @@ function ChildCard({ child }: { child: Child }) {
   }, [child.id, fam.sections, st?.updated_at]);
 
   const staleMin = st ? Math.floor((Date.now() - new Date(st.updated_at).getTime()) / 60000) : 0;
-  const kiosk = !!st?.lock_reason?.startsWith("🔒");
-  const limited = !kiosk && !!st?.locked;
+  // Telefonun bildirdiği durum
+  const realKiosk = !!st?.lock_reason?.startsWith("🔒");
+  const realLimited = !realKiosk && !!st?.locked;
+  // Tuşa basınca ekran hemen değişir; telefon onaylayınca gerçek duruma geçilir (en fazla 20 sn bekler)
+  const [pending, setPending] = useState<{ kind: "kiosk" | "limit" | "open"; at: number } | null>(null);
+  const realKind = realKiosk ? "kiosk" : realLimited ? "limit" : "open";
+  useEffect(() => {
+    if (!pending) return;
+    if (pending.kind === realKind) {
+      setPending(null);
+      return;
+    }
+    // Telefon onaylayana kadar sık yokla
+    const iv = window.setInterval(() => {
+      if (Date.now() - pending.at > 20000) {
+        setPending(null);
+        window.clearInterval(iv);
+      } else fam.reload();
+    }, 1500);
+    return () => window.clearInterval(iv);
+  }, [pending, realKind]); // eslint-disable-line react-hooks/exhaustive-deps
+  const kiosk = pending ? pending.kind === "kiosk" : realKiosk;
+  const limited = pending ? pending.kind === "limit" : realLimited;
+  const waiting = !!pending;
   const unlimited = !!st && st.remaining_minutes >= 1440;
   const closed = !!st && !kiosk && !limited && st.remaining_minutes === 0 && st.allowance_minutes >= 1440;
   const finished = !!st && !kiosk && !limited && !closed && st.remaining_minutes === 0;
@@ -131,6 +153,7 @@ function ChildCard({ child }: { child: Child }) {
       setTimeout(() => fam.reload(), 5000);
       setTimeout(() => fam.reload(), 12000);
     } catch (e) {
+      setPending(null);
       setMsg(errorText(e));
     }
     setBusy("");
@@ -140,8 +163,13 @@ function ChildCard({ child }: { child: Child }) {
     const until =
       lockDur === "none" ? null : lockDur === "until" ? untilFrom("until", lockUntil) : new Date(Date.now() + Number(lockDur) * 60000).toISOString();
     setLockOpen(false);
-    if (lockKind === "kiosk") run("lock", () => lockNow(child.id, "kiosk", until, kioskOf(child).message), "Kilitleniyor");
-    else if (lockKind === "limit") run("lock", () => lockNow(child.id, "limit", until), "Sınırlanıyor");
+    if (lockKind === "kiosk") {
+      setPending({ kind: "kiosk", at: Date.now() });
+      run("lock", () => lockNow(child.id, "kiosk", until, kioskOf(child).message), "");
+    } else if (lockKind === "limit") {
+      setPending({ kind: "limit", at: Date.now() });
+      run("lock", () => lockNow(child.id, "limit", until), "");
+    }
     else run("lock", () => sendCommand(child.id, "start_mode", { mode_id: lockKind }, until), "Profil uygulanıyor");
   }
 
@@ -186,9 +214,9 @@ function ChildCard({ child }: { child: Child }) {
   const stateLine = !st
     ? null
     : kiosk
-      ? { cls: "bad", text: `Kilitli · ${st.lock_reason!.replace("🔒", "").trim() || "sen kaldırana kadar"}` }
+      ? { cls: "bad", text: waiting && !realKiosk ? "Kilitli · telefona iletiliyor…" : `Kilitli · ${(st.lock_reason ?? "").replace("🔒", "").trim() || "sen kaldırana kadar"}` }
       : limited
-        ? { cls: "warn", text: `Sınırlı · ${st.lock_reason ?? ""}`.replace(/ · $/, "") }
+        ? { cls: "warn", text: waiting && !realLimited ? "Sınırlı · telefona iletiliyor…" : `Sınırlı · ${st.lock_reason ?? ""}`.replace(/ · $/, "") }
         : closed
           ? { cls: "warn", text: [st.current_mode_name ?? "Kapalı saatler", nextOpen].filter(Boolean).join(" · ") }
           : finished
@@ -240,7 +268,8 @@ function ChildCard({ child }: { child: Child }) {
           onClick={() => {
             if (kiosk || limited) {
               setLockOpen(false);
-              run("unlock", () => unlockNow(child.id), "Kilit kaldırılıyor");
+              setPending({ kind: "open", at: Date.now() });
+              run("unlock", () => unlockNow(child.id), "");
             } else setLockOpen(!lockOpen);
           }}
           aria-expanded={kiosk || limited ? undefined : lockOpen}

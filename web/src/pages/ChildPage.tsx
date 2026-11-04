@@ -5,9 +5,10 @@ import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { fromPatch, grantMinutes, insertGrant, nowPatch, sendCommand, type GrantPatch } from "../lib/actions";
 import { dateText, dateTimeText, hhmm, minutesText, relTime, todayISO } from "../lib/util";
-import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type DayOverride, type Device, type ExtraTarget, type Section, type TimeGrant } from "../lib/types";
+import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type DayOverride, type Device, type Section, type TimeGrant } from "../lib/types";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
+import { MinuteStepper } from "../components/MinuteStepper";
 import TimerTab from "./TimerTab";
 import { currentSectionFor, suggestGroup, timedPossible } from "../lib/sections";
 
@@ -181,13 +182,13 @@ function ParentModeCard({ childId }: { childId: string }) {
           {active && <p className="muted tiny" style={{ margin: "4px 0 0" }}>{until!.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}'e kadar açık.</p>}
         </div>
         {active ? (
-          <button className="btn" disabled={busy} onClick={stop}>
+          <button className="pill-btn" disabled={busy} onClick={stop}>
             Bitir
           </button>
         ) : (
-          <div className="row gap-s">
+          <div className="chips">
             {[30, 60, 180].map((m) => (
-              <button key={m} className="btn" disabled={busy} onClick={() => start(m)}>
+              <button key={m} className="chip-btn" disabled={busy} onClick={() => start(m)}>
                 {m < 60 ? `${m} dk` : `${m / 60} sa`}
               </button>
             ))}
@@ -569,23 +570,13 @@ function DurationField({ value, onChange, unlimited = true }: { value: string; o
   const total = value === "" ? 0 : Math.max(0, Number(value) || 0);
   const hours = Math.floor(total / 60);
   const minutes = total % 60;
-  const [open, setOpen] = useState(false);
   const set = (h: number, m: number) => onChange(String(Math.min(24 * 60, h * 60 + m)));
   return <div className="duration-field">
-    <input className="mini" type="number" min={0} max={24} value={value === "" ? "" : hours} onChange={(e) => set(Number(e.target.value) || 0, minutes)} aria-label="Saat" />
+    <input className="mini" inputMode="numeric" value={value === "" ? "" : hours} onChange={(e) => set(Math.min(24, Number(e.target.value.replace(/\D/g, "")) || 0), minutes)} aria-label="Saat" />
     <span>sa</span>
-    <input className="mini" type="number" min={0} max={59} value={value === "" ? "" : minutes} onChange={(e) => set(hours, Number(e.target.value) || 0)} aria-label="Dakika" />
+    <input className="mini" inputMode="numeric" value={value === "" ? "" : minutes} onChange={(e) => set(hours, Math.min(59, Number(e.target.value.replace(/\D/g, "")) || 0))} aria-label="Dakika" />
     <span>dk</span>
-    <button type="button" className="icon-btn" aria-label="Süreyi kaydırarak seç" onClick={() => setOpen(true)}><span className="collapse-arrow" aria-hidden="true" /></button>
-    {unlimited && <button type="button" className="icon-btn" aria-label="Sınırsız" onClick={() => onChange("")}>∞</button>}
-    {open && <div className="sheet-backdrop" onClick={() => setOpen(false)}><div className="sheet" onClick={(e) => e.stopPropagation()}>
-      <h2>Günlük sınır</h2>
-      <div className="date-wheel">
-        <select size={5} value={hours} onChange={(e) => set(Number(e.target.value), minutes)}>{Array.from({ length: 25 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")} sa</option>)}</select>
-        <select size={5} value={minutes} onChange={(e) => set(hours, Number(e.target.value))}>{Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")} dk</option>)}</select>
-      </div>
-      <button type="button" className="btn primary wide" onClick={() => setOpen(false)}>Tamam</button>
-    </div></div>}
+    {unlimited && <button type="button" className={`chip-btn ${value === "" ? "on" : ""}`} aria-label="Sınırsız" onClick={() => onChange("")}>∞</button>}
   </div>;
 }
 
@@ -687,10 +678,6 @@ function TimeTab({ childId }: { childId: string }) {
     load();
   }
 
-  async function saveDefault(v: ExtraTarget) {
-    await supabase.from("children").update({ extra_default: v }).eq("id", childId);
-    fam.reload();
-  }
 
   async function saveWalletMax() {
     const v = walletMax.trim() === "" ? null : Math.max(0, Math.round(Number(walletMax)));
@@ -740,35 +727,40 @@ function TimeTab({ childId }: { childId: string }) {
 
   return (
     <div className="stack">
-      <div className="card">
+      <div className="card extra-card">
         <h2>Ekstra süre ver</h2>
-        <div className="row gap-s wrap">
-          {["10", "15", "20", "30", "45", "60"].map((m) => (
-            <button key={m} className={`chip ${minutes === m ? "on" : ""}`} onClick={() => setMinutes(m)}>
-              {m} dk
-            </button>
-          ))}
-          <DurationField value={minutes} onChange={setMinutes} unlimited={false} />
+        <div className="extra-row">
+          <MinuteStepper value={Number(minutes) || 0} onChange={(v) => setMinutes(String(v))} onEnter={give} label="Verilecek dakika" />
+          <div className="chips">
+            {[10, 15, 30, 60].map((m) => (
+              <button key={m} type="button" className={`chip-btn ${Number(minutes) === m ? "on" : ""}`} onClick={() => setMinutes(String(m))}>
+                {m < 60 ? `${m} dk` : `${m / 60} sa`}
+              </button>
+            ))}
+          </div>
         </div>
-        <label className="field">
-          <span>Ne zaman</span>
-          <select value={when} onChange={(e) => setWhen(e.target.value as When)}>
-            <option value="now">Hemen kullansın</option>
-            <option value="vault">Süre kasası</option>
-            <option value="child">Süre cüzdanı</option>
-            <option value="custom">Özel</option>
-          </select>
-        </label>
-        {when === "custom" && <label className="field">
-          <span>Özel kullanım</span>
-          <select value={customWhen} onChange={(e) => setCustomWhen(e.target.value as CustomWhen)}>
-            <option value="today">Bugün (bölüme / gün boyu)</option>
-            <option value="from">Belirli saatten itibaren</option>
-            <option value="tomorrow">Yarın</option>
-            <option value="date">Belirli bir gün</option>
-          </select>
-        </label>}
-        {when === "now" && <p className="muted small">{nowHint}</p>}
+        <div className="extra-group">
+          <span className="pop-label">NE ZAMAN</span>
+          <div className="chips">
+            {([["now", "Hemen"], ["vault", "Kasaya"], ["child", "Cüzdana"], ["custom", "Özel"]] as const).map(([v, l]) => (
+              <button key={v} type="button" className={`chip-btn ${when === v ? "on" : ""}`} onClick={() => setWhen(v)}>
+                {l}
+              </button>
+            ))}
+          </div>
+          {when === "custom" && (
+            <div className="chips">
+              {([["today", "Bugün"], ["from", "Saatten itibaren"], ["tomorrow", "Yarın"], ["date", "Belirli gün"]] as const).map(([v, l]) => (
+                <button key={v} type="button" className={`chip-btn ${customWhen === v ? "on" : ""}`} onClick={() => setCustomWhen(v)}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          )}
+          <p className="muted small">
+            {when === "now" ? nowHint : when === "vault" ? "Kasada bekler; istediğinde buradan “Şimdi ver” ile açarsın." : when === "child" ? "Çocuk bu süreyi kendisi açabilir; yalnızca izin verilen saatlerde kullanılır." : null}
+          </p>
+        </div>
         {when === "custom" && customWhen === "from" && (
           <>
             <div className="row gap-s wrap" style={{ alignItems: "center" }}>
@@ -780,7 +772,7 @@ function TimeTab({ childId }: { childId: string }) {
               <TimeField value={start} onChange={(v) => setStart(v)} label="Başlangıç" />
               <span className="small">'den itibaren</span>
             </div>
-            <label className="field">
+            <label className="field compact">
               <span>Ne zamana kadar kullanabilir <Info>O saat gelince süre çocuğun kalan süresine eklenir. Bitiş saatine kadar kullanmazsa düşer; kapalı saatlere denk gelirse o aralıkta telefon bu süre kadar açılır.</Info></span>
               <select value={endMode} onChange={(e) => setEndMode(e.target.value as typeof endMode)}>
                 <option value="open">Açık saatler bitene kadar</option>
@@ -792,13 +784,13 @@ function TimeTab({ childId }: { childId: string }) {
           </>
         )}
         {when === "custom" && customWhen === "date" && (
-          <div className="field">
+          <div className="field compact">
             <span>Gün</span>
             <DateField value={date} onChange={(v) => setDate(v)} />
           </div>
         )}
         {when === "custom" && (customWhen === "today" || customWhen === "tomorrow" || customWhen === "date") && (
-          <label className="field">
+          <label className="field compact">
             <span>Nereye eklensin</span>
             <select value={target} onChange={(e) => setTarget(e.target.value)}>
               {customWhen === "today" && <option value="current">Şu anki bölüm{cur ? ` (${cur.name})` : " (şu an bölüm yok → gün boyu)"}</option>}
@@ -812,44 +804,37 @@ function TimeTab({ childId }: { childId: string }) {
           </label>
         )}
         {when === "child" && (
-          <div className="field">
+          <div className="field compact">
             <span>Son kullanma (isteğe bağlı)</span>
             <DateField clearable value={expires} onChange={(v) => setExpires(v)} placeholder="Son kullanma yok" />
           </div>
         )}
-        <label className="field">
-          <span>Not</span>
-          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="İyi davrandın" />
-        </label>
+        <input className="compact-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Not (isteğe bağlı) · ör. İyi davrandın" aria-label="Not" />
         {err && <p className="error">{err}</p>}
         {msg && <p className="ok">{msg}</p>}
-        <button className="btn primary" onClick={give}>
-          Süre ver
-        </button>
-        <button
-          className="btn ghost"
-          onClick={async () => {
-            const m = Number(minutes);
-            if (!m) return;
-            try {
-              await sendCommand(childId, "adjust_minutes", { minutes: -m });
-              setMsg(`Bugünden ${minutesText(m)} düşülüyor`);
-            } catch (e) {
-              setErr(errorText(e));
-            }
-          }}
-        >
-          Bugünden {minutes} dk düş
-        </button>
-        <label className="field">
-          <span>Ana sayfadaki +15 / +30 nereye gitsin</span>
-          <select value={child.extra_default} onChange={(e) => saveDefault(e.target.value as ExtraTarget)}>
-            <option value="now">Hemen kullansın</option>
-            <option value="current">O anki bölüme</option>
-            <option value="pool">Gün boyu</option>
-            <option value="wallet">Cüzdana</option>
-          </select>
-        </label>
+        <div className="extra-actions">
+          <button
+            type="button"
+            className="pill-btn ghost"
+            disabled={!Number(minutes)}
+            onClick={async () => {
+              const m = Number(minutes);
+              if (!m) return;
+              try {
+                await sendCommand(childId, "adjust_minutes", { minutes: -m });
+                setMsg(`Bugünden ${minutesText(m)} düşülüyor`);
+              } catch (e) {
+                setErr(errorText(e));
+              }
+            }}
+          >
+            − {minutes} dk düş
+          </button>
+          <span className="grow" />
+          <button type="button" className="pill-btn primary" disabled={!Number(minutes)} onClick={give}>
+            {minutes} dk ver
+          </button>
+        </div>
       </div>
 
       <div className="card">

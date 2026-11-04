@@ -1834,3 +1834,51 @@ summary.section-collapse-head { list-style: none; cursor: pointer; }
 /* Bölüm başlığı olarak kullanılan aç/kapa tuşları aynı ölçüde */
 .section-toggle { font-size: 16px; font-weight: 650; }
 .btn.wide { border-radius: 14px; }
+
+/* Ekstra süre kartı: ana ekran kartıyla aynı küçük, yuvarlak öğeler */
+.extra-card { gap: 14px; }
+.extra-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.extra-group { display: flex; flex-direction: column; gap: 8px; }
+.extra-group > p:empty { display: none; }
+.extra-actions { display: flex; align-items: center; gap: 8px; }
+.extra-actions .grow { flex: 1 1 auto; }
+.give-box.stepper { height: 36px; border-radius: 999px; }
+.give-box.stepper button { width: 32px; height: 34px; font-size: 17px; }
+.give-box.stepper input { width: 34px; min-height: 0; height: 30px; font-size: 15px; padding: 0; border: 0; background: transparent; text-align: right; }
+.give-box.stepper .give-unit { margin-right: 4px; white-space: nowrap; }
+.field.compact { gap: 4px; }
+.field.compact select, .extra-card select, .compact-input {
+  min-height: 36px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  font-size: 14px;
+}
+.extra-card select { width: auto; max-width: 100%; }
+.extra-card .field.compact select { width: 100%; }
+/* Saat/dakika kutusu: tarayıcının okları yok, tek kapsül */
+.duration-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 6px 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+}
+.duration-field .mini {
+  width: 34px;
+  min-height: 0;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: right;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.duration-field > span { font-size: 12px; color: var(--muted); }
+.duration-field .chip-btn { height: 26px; padding: 0 10px; margin-left: 4px; }
+input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"] { -moz-appearance: textfield; appearance: textfield; }

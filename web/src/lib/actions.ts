@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 import { currentSectionFor, hm, mins, nowBerlin, profileIdOn, sectionContains, timedPossible } from "./sections";
-import type { Child, Section, SectionRule } from "./types";
+import type { Child, DeviceStatus, Section, SectionRule } from "./types";
 import { todayISO } from "./util";
 
 export async function sendCommand(childId: string, type: string, payload: Record<string, unknown> = {}, untilAt: string | null = null) {
@@ -45,6 +45,15 @@ export async function grantMinutes(
 }
 
 type FamLike = { sections: Section[]; sectionRules: SectionRule[]; children?: Child[] };
+/** Kapalı / sınırlı saatte verilen sürenin davranışı (Kurallar → Kapalıyken verilen süre). */
+export type ClosedMode = { mode: "clock" | "usage" | "within"; withinMinutes: number | null; withinFactor: number | null };
+export function closedModeOf(child?: Child): ClosedMode {
+  return {
+    mode: child?.closed_grant_mode ?? "usage",
+    withinMinutes: child?.closed_grant_within_minutes ?? null,
+    withinFactor: child?.closed_grant_within_factor ?? null,
+  };
+}
 export type GrantPatch = { valid_on: string | null; section_id: string | null; vault: boolean; window_start: string | null; window_end: string | null };
 
 /**
@@ -55,19 +64,19 @@ export async function nowPatch(
   childId: string,
   minutes: number,
   fam: FamLike,
-  opts: { closed?: boolean } = {}
+  opts: { closed?: boolean; override?: ClosedMode } = {}
 ): Promise<{ patch: GrantPatch; text: string }> {
   const sec = await currentSectionFor(childId, fam.sections);
   if (!opts.closed && sec && timedPossible(sec, fam.sectionRules)) {
     return { patch: { valid_on: todayISO(), section_id: sec.id, vault: false, window_start: null, window_end: null }, text: `${sec.name} süresine eklendi` };
   }
   // Kapalı / sınırlı saatte: çocuğun ayarına göre aralık (Kurallar → Kapalıyken verilen süre)
-  const child = fam.children?.find((c) => c.id === childId);
-  const mode = child?.closed_grant_mode ?? "usage";
+  const cm = opts.override ?? closedModeOf(fam.children?.find((c) => c.id === childId));
+  const mode = cm.mode;
   const { minute } = nowBerlin();
   let end: number;
   if (mode === "clock") end = minute + minutes;
-  else if (mode === "within") end = minute + (child?.closed_grant_within_factor ? minutes * child.closed_grant_within_factor : child?.closed_grant_within_minutes ?? 120);
+  else if (mode === "within") end = minute + (cm.withinFactor ? minutes * cm.withinFactor : cm.withinMinutes ?? 120);
   else {
     // Kullandıkça düşer: bir sonraki açık saatler başlayınca ya da gece yarısı biter
     const pid = await profileIdOn(childId, todayISO());
@@ -82,6 +91,30 @@ export async function nowPatch(
   const text =
     mode === "clock" ? `şu andan ${hm(end)}'e kadar açık` : mode === "within" ? `kullandıkça düşer · ${hm(end)}'e kadar kullanmalı` : `kullandıkça düşer · ${hm(end)}'e kadar geçerli`;
   return { patch: { valid_on: todayISO(), section_id: null, vault: false, window_start: hm(minute), window_end: hm(end) }, text };
+}
+
+/**
+ * "Hemen" süre ver (ana ekran ve çocuk sayfası aynı yolu kullanır):
+ * kilitliyse süre kalan süreye eklenir; sınırlı / kapalı / bitmiş durumdaysa ayara göre telefon açılır;
+ * açık saatteyse o anki bölüme eklenir.
+ */
+export async function giveNow(
+  childId: string,
+  minutes: number,
+  fam: FamLike,
+  st: DeviceStatus | undefined,
+  opts: { override?: ClosedMode; note?: string; kiosk?: boolean; limited?: boolean } = {}
+): Promise<string> {
+  const kiosk = opts.kiosk ?? !!st?.lock_reason?.startsWith("🔒");
+  const limited = opts.limited ?? (!kiosk && !!st?.locked);
+  if (kiosk) {
+    await grantMinutes(childId, minutes, { note: opts.note });
+    return "kalan süreye eklendi · kilit kalkınca kullanır";
+  }
+  const closed = !!st && !limited && st.remaining_minutes === 0;
+  const { patch, text } = await nowPatch(childId, minutes, fam, { closed: limited || closed, override: opts.override });
+  await insertGrant(childId, minutes, patch, opts.note);
+  return text;
 }
 
 /**

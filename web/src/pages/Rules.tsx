@@ -1,4 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
+import { ClosedModePicker } from "../components/ClosedModePicker";
+import { closedModeOf, type ClosedMode } from "../lib/actions";
 import { useFamily } from "../lib/family";
 import { supabase, errorText } from "../lib/supabase";
 import { daysText, hhmm, minutesText } from "../lib/util";
@@ -210,53 +212,22 @@ export default function Rules() {
 function ClosedGrantSetting({ child }: { child: Child }) {
   const fam = useFamily();
   const [err, setErr] = useState("");
-  const mode = child.closed_grant_mode ?? "usage";
-  const within = child.closed_grant_within_factor ? `x${child.closed_grant_within_factor}` : String(child.closed_grant_within_minutes ?? 120);
-  async function save(v: Record<string, unknown>) {
+  async function save(v: ClosedMode) {
     setErr("");
-    const { error } = await supabase.from("children").update(v).eq("id", child.id);
+    const { error } = await supabase
+      .from("children")
+      .update({ closed_grant_mode: v.mode, closed_grant_within_minutes: v.mode === "within" ? v.withinMinutes : child.closed_grant_within_minutes ?? null, closed_grant_within_factor: v.mode === "within" ? v.withinFactor : child.closed_grant_within_factor ?? null })
+      .eq("id", child.id);
     if (error) setErr(errorText(error));
     fam.reload();
   }
-  const opt = (k: "clock" | "usage" | "within", title: string, hint: string, extra?: React.ReactNode) => (
-    <label className={`choice ${mode === k ? "on" : ""}`}>
-      <input type="radio" name={`cg-${child.id}`} checked={mode === k} onChange={() => save({ closed_grant_mode: k })} />
-      <span className="grow">
-        <b>{title}</b>
-        <span className="muted small">{hint}</span>
-        {extra}
-      </span>
-    </label>
-  );
   return (
-    <div className="stack-s">
-      <b>
+    <div className="closed-mode-row">
+      <b className="closed-mode-name">
         <span className="dot" style={{ background: child.color, marginTop: 0 }} /> {child.name}
       </b>
+      <ClosedModePicker value={closedModeOf(child)} onChange={save} />
       {err && <p className="error">{err}</p>}
-      {opt("clock", "Saat gibi aksın", "15 dk verince telefon 15 dakikalığına açılır, kullanılmasa da sonunda kapanır.")}
-      {opt("usage", "Süre bitene kadar açık kalsın", "Süre kullandıkça düşer. Kullanılmayan süre açık saatler başlayınca ya da gece yarısı biter.")}
-      {opt(
-        "within",
-        "Belirli süre içinde kullansın",
-        "Süre kullandıkça düşer ama sadece bu süre içinde kullanılabilir.",
-        mode === "within" ? (
-          <select
-            value={within}
-            onChange={(e) => {
-              const v = e.target.value;
-              save(v.startsWith("x") ? { closed_grant_within_factor: Number(v.slice(1)), closed_grant_within_minutes: null } : { closed_grant_within_minutes: Number(v), closed_grant_within_factor: null });
-            }}
-            aria-label="Kullanma süresi"
-          >
-            <option value="60">1 saat içinde</option>
-            <option value="120">2 saat içinde</option>
-            <option value="180">3 saat içinde</option>
-            <option value="x2">Verilen sürenin 2 katı içinde</option>
-            <option value="x4">Verilen sürenin 4 katı içinde</option>
-          </select>
-        ) : null
-      )}
     </div>
   );
 }

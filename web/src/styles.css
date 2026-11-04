@@ -1883,3 +1883,16 @@ summary.section-collapse-head { list-style: none; cursor: pointer; }
 input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .pill-btn.minus { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); background: color-mix(in srgb, var(--bad) 10%, transparent); }
+
+/* Kapalıyken verilen süre seçici */
+.closed-mode { display: flex; flex-direction: column; gap: 8px; }
+.closed-mode-row { display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
+.closed-mode-name { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.chip-btn.with-info { display: inline-flex; align-items: center; gap: 2px; padding: 0 6px 0 0; }
+.chip-btn.with-info > button { height: 100%; padding: 0 4px 0 12px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.chip-btn.with-info .info-btn { transform: scale(0.85); }
+.chip-btn.with-info.on .info-btn { color: #fff; border-color: rgba(255,255,255,0.7); }
+.compact-select { min-height: 34px; height: 34px; padding: 0 12px; border-radius: 999px; font-size: 13px; width: auto; align-self: flex-start; }
+.sub-collapse { border-top: 1px solid var(--line); padding-top: 4px; }
+.sub-collapse > .stack-s { padding-top: 6px; }
+.sub-collapse-head .text-strong { color: var(--text); font-weight: 600; }

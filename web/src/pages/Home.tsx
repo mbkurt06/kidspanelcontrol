@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { supabase, errorText } from "../lib/supabase";
-import { grantMinutes, insertGrant, nowPatch, seedDefaults, sendCommand } from "../lib/actions";
+import { giveNow, seedDefaults, sendCommand } from "../lib/actions";
 import { kioskOf, lockNow, unlockNow, untilFrom } from "./Lock";
 import { currentSectionFor, hm, mins, nowBerlin, timedPossible } from "../lib/sections";
 import { TimeField } from "../components/DateTime";
@@ -179,14 +179,8 @@ function ChildCard({ child }: { child: Child }) {
     run(
       "give",
       async () => {
-        if (kiosk) {
-          // Kilitliyken kilit açılmaz: süre kalan süreye eklenir, kilit kalkınca kullanır
-          await grantMinutes(child.id, m, {});
-          return "kalan süreye eklendi · kilit kalkınca kullanır";
-        }
-        const { patch, text } = await nowPatch(child.id, m, fam, { closed: limited || closed || finished });
-        await insertGrant(child.id, m, patch);
-        return text;
+        // Kilitliyse kalan süreye eklenir; sınırlı / kapalı / bitmişse Kurallar'daki ayara göre açılır
+        return giveNow(child.id, m, fam, st, { kiosk, limited: limited || closed || finished });
       },
       (r) => `+${minutesText(m)} · ${r}`
     );

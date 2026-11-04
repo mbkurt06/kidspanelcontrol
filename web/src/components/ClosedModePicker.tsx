@@ -1,0 +1,56 @@
+import type { ClosedMode } from "../lib/actions";
+import { Info } from "./Info";
+
+const OPTS: { k: ClosedMode["mode"]; title: string; hint: string }[] = [
+  { k: "clock", title: "Saat gibi aksın", hint: "15 dk verince telefon 15 dakikalığına açılır, kullanılmasa da sonunda kapanır." },
+  { k: "usage", title: "Süre bitene kadar", hint: "Süre kullandıkça düşer. Kullanılmayan süre açık saatler başlayınca ya da gece yarısı biter." },
+  { k: "within", title: "Belirli süre içinde", hint: "Süre kullandıkça düşer ama sadece seçilen süre içinde kullanılabilir. Ör. 30 dk ver → 2 saat içinde kullanmalı." },
+];
+
+export function closedModeLabel(v: ClosedMode) {
+  const o = OPTS.find((x) => x.k === v.mode)!;
+  if (v.mode !== "within") return o.title;
+  return `${o.title} · ${v.withinFactor ? `${v.withinFactor} katı` : `${(v.withinMinutes ?? 120) / 60} sa`}`;
+}
+
+export function sameClosedMode(a: ClosedMode, b: ClosedMode) {
+  if (a.mode !== b.mode) return false;
+  if (a.mode !== "within") return true;
+  return (a.withinFactor ?? null) === (b.withinFactor ?? null) && (a.withinFactor ? true : (a.withinMinutes ?? 120) === (b.withinMinutes ?? 120));
+}
+
+/** Kapalı / sınırlı saatte verilen sürenin davranışı: küçük çipler, açıklamalar (i) içinde. */
+export function ClosedModePicker({ value, onChange }: { value: ClosedMode; onChange: (v: ClosedMode) => void }) {
+  const within = value.withinFactor ? `x${value.withinFactor}` : String(value.withinMinutes ?? 120);
+  return (
+    <div className="closed-mode">
+      <div className="chips">
+        {OPTS.map((o) => (
+          <span key={o.k} className={`chip-btn with-info ${value.mode === o.k ? "on" : ""}`}>
+            <button type="button" onClick={() => onChange({ ...value, mode: o.k })}>
+              {o.title}
+            </button>
+            <Info>{o.hint}</Info>
+          </span>
+        ))}
+      </div>
+      {value.mode === "within" && (
+        <select
+          className="compact-select"
+          value={within}
+          aria-label="Kullanma süresi"
+          onChange={(e) => {
+            const v = e.target.value;
+            onChange(v.startsWith("x") ? { mode: "within", withinFactor: Number(v.slice(1)), withinMinutes: null } : { mode: "within", withinMinutes: Number(v), withinFactor: null });
+          }}
+        >
+          <option value="60">1 saat içinde</option>
+          <option value="120">2 saat içinde</option>
+          <option value="180">3 saat içinde</option>
+          <option value="x2">Verilen sürenin 2 katı içinde</option>
+          <option value="x4">Verilen sürenin 4 katı içinde</option>
+        </select>
+      )}
+    </div>
+  );
+}

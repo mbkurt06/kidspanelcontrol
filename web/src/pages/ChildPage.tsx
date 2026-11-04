@@ -3,7 +3,8 @@ import { DateField, TimeField } from "../components/DateTime";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
-import { fromPatch, grantMinutes, insertGrant, nowPatch, sendCommand, type GrantPatch } from "../lib/actions";
+import { closedModeOf, fromPatch, giveNow, grantMinutes, insertGrant, nowPatch, sendCommand, type ClosedMode, type GrantPatch } from "../lib/actions";
+import { ClosedModePicker, closedModeLabel, sameClosedMode } from "../components/ClosedModePicker";
 import { dateText, dateTimeText, hhmm, minutesText, relTime, todayISO } from "../lib/util";
 import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type DayOverride, type Device, type Section, type TimeGrant } from "../lib/types";
 import { Icon } from "../components/Icon";
@@ -600,6 +601,10 @@ function TimeTab({ childId }: { childId: string }) {
   const [until, setUntil] = useState("19:00");
   const [expires, setExpires] = useState("");
   const [note, setNote] = useState("");
+  // Kapalı / sınırlı saatte bu verişin davranışı; varsayılan Kurallar'daki ayar
+  const defMode = closedModeOf(child);
+  const [cmode, setCmode] = useState<ClosedMode>(defMode);
+  useEffect(() => setCmode(closedModeOf(child)), [child.id, child.closed_grant_mode, child.closed_grant_within_minutes, child.closed_grant_within_factor]); // eslint-disable-line react-hooks/exhaustive-deps
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [cur, setCur] = useState<Section | null>(null);
@@ -639,8 +644,7 @@ function TimeTab({ childId }: { childId: string }) {
     try {
       const detail = when === "custom" ? customWhen : null;
       if (when === "now") {
-        const { patch, text } = await nowPatch(childId, m, fam);
-        await insertGrant(childId, m, patch, note);
+        const text = await giveNow(childId, m, fam, fam.statuses[childId], { override: cmode, note: note || undefined });
         setMsg(`${minutesText(m)} verildi · ${text}`);
       } else if (detail === "from") {
         const day = fromDay === "today" ? today : todayISO("Europe/Berlin", 1);
@@ -662,6 +666,17 @@ function TimeTab({ childId }: { childId: string }) {
     } catch (e) {
       setErr(errorText(e));
     }
+  }
+
+  async function saveDefaultMode() {
+    const v = cmode;
+    const { error } = await supabase
+      .from("children")
+      .update({ closed_grant_mode: v.mode, ...(v.mode === "within" ? { closed_grant_within_minutes: v.withinMinutes, closed_grant_within_factor: v.withinFactor } : {}) })
+      .eq("id", childId);
+    if (error) return setErr(errorText(error));
+    setMsg(`Varsayılan: ${closedModeLabel(v)}`);
+    fam.reload();
   }
 
   async function retarget(g: TimeGrant, v: string) {
@@ -687,9 +702,19 @@ function TimeTab({ childId }: { childId: string }) {
     fam.reload();
   }
 
-  const nowHint = curOpen
-    ? `Şu an ${cur!.name} bölümü açık: süre bu bölüme eklenir, kalan süre hemen artar.`
-    : `Şu an telefon kapalı saatlerde: şu andan itibaren ${minutes || "?"} dk açılır, sonra yine kapanır.`;
+  const stNow = fam.statuses[childId];
+  const kioskNow = !!stNow?.lock_reason?.startsWith("🔒");
+  const limitedNow = !kioskNow && (!!stNow?.locked || (!!stNow && stNow.remaining_minutes === 0));
+  const mText = minutes || "?";
+  const nowHint = kioskNow
+    ? `Telefon kilitli: ${mText} dk kalan süreye eklenir, kilit kalkınca kullanır.`
+    : curOpen && !limitedNow
+      ? `Şu an ${cur!.name} bölümü açık: süre bu bölüme eklenir, kalan süre hemen artar.`
+      : cmode.mode === "clock"
+        ? `Telefon şimdi ${mText} dakikalığına açılır, kullanılmasa da sonunda kapanır.`
+        : cmode.mode === "within"
+          ? `Telefon şimdi açılır; ${mText} dk kullandıkça düşer, ${cmode.withinFactor ? `${cmode.withinFactor} katı süre` : `${(cmode.withinMinutes ?? 120) / 60} saat`} içinde kullanmalı.`
+          : `Telefon şimdi açılır; ${mText} dk kullandıkça düşer, bitince kapanır.`;
 
   const grantRow = (g: TimeGrant, kind: "wallet" | "vault") => (
     <div className="app-row wrap" key={g.id}>
@@ -756,6 +781,26 @@ function TimeTab({ childId }: { childId: string }) {
                 </button>
               ))}
             </div>
+          )}
+          {when === "now" && (
+            <details className="sub-collapse">
+              <summary className="sub-collapse-head">
+                <span>Kapalı / sınırlıyken: <b className="text-strong">{closedModeLabel(cmode)}</b>{sameClosedMode(cmode, defMode) ? " · varsayılan" : ""}</span>
+                <span className="collapse-arrow" aria-hidden="true" />
+              </summary>
+              <div className="stack-s">
+                <ClosedModePicker value={cmode} onChange={setCmode} />
+                <div className="row gap-s">
+                  <span className="muted tiny grow">Seçtiğin ayar bu veriş için geçerli. Varsayılan: {closedModeLabel(defMode)}</span>
+                  {!sameClosedMode(cmode, defMode) && (
+                    <>
+                      <button type="button" className="chip-btn" onClick={() => setCmode(defMode)}>Geri al</button>
+                      <button type="button" className="chip-btn" onClick={saveDefaultMode}>Varsayılan yap</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </details>
           )}
           <p className="muted small">
             {when === "now" ? nowHint : when === "vault" ? "Kasada bekler; istediğinde buradan “Şimdi ver” ile açarsın." : when === "child" ? "Çocuk bu süreyi kendisi açabilir; yalnızca izin verilen saatlerde kullanılır." : null}

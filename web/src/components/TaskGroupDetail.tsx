@@ -216,6 +216,7 @@ export default function TaskGroupDetail(p: Props) {
                   <b>{t.title}</b>
                   <span className="muted tiny">{settingsText(t)}</span>
                 </Link>
+                {g.recurrence !== "once" && <span className="repeat-badge" title={`Tekrarlı · ${repeatText(g)}`}>↻</span>}
                 <span className="reward-chip">{t.reward_minutes ? `${t.reward_minutes > 0 ? "+" : ""}${t.reward_minutes} dk` : "ödülsüz"}</span>
                 <button className={`chip-btn small-chip ${t.mandatory ? "mandatory" : ""}`} onClick={() => toggleMandatory(t)} aria-pressed={t.mandatory} title="Zorunlu yap / kaldır">
                   {t.mandatory ? "Zorunlu" : "Seçmeli"}

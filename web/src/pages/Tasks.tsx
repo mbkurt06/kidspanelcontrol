@@ -117,6 +117,17 @@ export default function Tasks() {
   }, [history, groups, taskById]);
   const shownGroups = groups.filter((g) => forChild(g.child_ids));
   const selected = groups.find((g) => g.id === selectedId) ?? null;
+  const badges = (t?: Task) => {
+    if (!t) return null;
+    const g = t.group_id ? groups.find((x) => x.id === t.group_id) : null;
+    const repeat = g ? g.recurrence !== "once" : t.recurrence === "days";
+    return (
+      <>
+        {repeat && <span className="repeat-badge" title={g ? `Tekrarlı · ${repeatText(g)}` : "Tekrarlı görev"} aria-label="Tekrarlı">↻</span>}
+        <span className="reward-chip">{t.reward_minutes ? `${t.reward_minutes > 0 ? "+" : ""}${t.reward_minutes} dk` : "—"}</span>
+      </>
+    );
+  };
 
   const select = (id: string | null, tab?: string) => {
     const next = new URLSearchParams(params);
@@ -231,7 +242,7 @@ export default function Tasks() {
                           {t.recurrence === "days" ? (t.days.length === 7 ? "Her gün" : "Tekrarlı") : t.due_date ? agendaDateText(t.due_date) : "Tek sefer"} · {t.child_ids.map(childName).join(", ")}{t.active ? "" : " · kapalı"}
                         </span>
                       </Link>
-                      <span className="reward-chip">{t.reward_minutes ? `${t.reward_minutes > 0 ? "+" : ""}${t.reward_minutes} dk` : "—"}</span>
+                      {badges(t)}
                       {groups.length > 0 && (
                         <div className="pop-anchor">
                           <button className="chip-btn small-chip accent-text" onClick={() => setAddFor(addFor === t.id ? null : t.id)}>Gruba ekle</button>
@@ -290,17 +301,18 @@ export default function Tasks() {
                         const row = (r: TaskRun, sub = false) => {
                           const t = taskById[r.task_id];
                           return (
-                            <div className={`app-row ${sub ? "hist-sub" : ""}`} key={r.id}>
+                            <Link to={t ? `/tasks/${t.id}` : "/tasks"} className={`app-row ${sub ? "hist-sub" : ""}`} key={r.id}>
                               <div className="grow">
                                 <b>{t?.title}</b>
                                 <div className="muted tiny">
                                   {t ? dateTimeText(t.created_at) : ""}{t?.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}
                                 </div>
                               </div>
+                              {badges(t)}
                               <span className={`pill ${r.status === "approved" ? "" : r.status === "submitted" ? "accent" : r.status === "rejected" ? "warn" : "quiet"}`}>
                                 {STATUS_LABEL[r.status]}
                               </span>
-                            </div>
+                            </Link>
                           );
                         };
                         const out: JSX.Element[] = [];
@@ -319,8 +331,8 @@ export default function Tasks() {
                               <button className="app-row hist-group-head" onClick={() => setOpenHist(open ? null : key)} aria-expanded={open}>
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
                                 <div className="grow">
-                                  <b>{g.name}</b>
-                                  <div className="muted tiny">{rs.length} görev · {pr.approved}/{pr.need} tamam{pr.submitted ? ` · ${pr.submitted} onay bekliyor` : ""}</div>
+                                  <b>{g.name} {g.recurrence !== "once" && <span className="repeat-badge" title={`Tekrarlı · ${repeatText(g)}`}>↻</span>}</b>
+                                  <div className="muted tiny">{rs.length} görev · {pr.approved}/{pr.need} tamam · toplam {pr.all} dk{pr.submitted ? ` · ${pr.submitted} onay bekliyor` : ""}</div>
                                 </div>
                                 <span className={`pill ${pr.status === "met" ? "" : pr.submitted ? "accent" : pr.status === "failed" ? "warn" : "quiet"}`}>
                                   {pr.status === "met" ? "Tamam" : pr.status === "failed" ? "Olmadı" : pr.submitted ? "Onay bekliyor" : "Devam ediyor"}
@@ -394,6 +406,7 @@ export default function Tasks() {
                           <b>{t?.title ?? "Görev"}</b>
                           <div className="muted tiny">{childName(r.child_id)} · {r.day} · {STATUS_LABEL[r.status]}{t?.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}</div>
                         </div>
+                        {badges(t)}
                         <Icon name="chevron" size={18} />
                       </Link>
                     );
@@ -406,7 +419,7 @@ export default function Tasks() {
                       <button className="app-row hist-group-head" onClick={() => setOpenHist(open ? null : row.key)} aria-expanded={open}>
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
                         <div className="grow">
-                          <b>{row.group.name}</b>
+                          <b>{row.group.name} {row.group.recurrence !== "once" && <span className="repeat-badge" title={`Tekrarlı · ${repeatText(row.group)}`}>↻</span>}</b>
                           <div className="muted tiny">{childName(row.child)} · {row.day} · {pr.approved}/{pr.need} görev{gr?.status === "met" ? " · koşul sağlandı" : gr?.status === "failed" ? " · koşul sağlanmadı" : ""}</div>
                         </div>
                         <span className={`collapse-arrow${open ? " open" : ""}`} aria-hidden="true" />
@@ -417,8 +430,9 @@ export default function Tasks() {
                           <Link to={t ? `/tasks/${t.id}` : "/tasks"} className="app-row hist-sub" key={r.id}>
                             <div className="grow">
                               <b>{t?.title ?? "Görev"}</b>
-                              <div className="muted tiny">{STATUS_LABEL[r.status]}{r.granted_minutes ? ` · ${r.granted_minutes} dk` : ""}</div>
+                              <div className="muted tiny">{STATUS_LABEL[r.status]}{r.granted_minutes ? ` · ${r.granted_minutes} dk verildi` : ""}</div>
                             </div>
+                            {badges(t)}
                             <Icon name="chevron" size={18} />
                           </Link>
                         );

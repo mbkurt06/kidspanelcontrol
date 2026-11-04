@@ -188,12 +188,9 @@ export default function Tasks() {
       </div>
 
       <div className="card">
-        <div className="row between">
-          <button className="section-title row gap-xs templates-head" type="button" onClick={() => setTemplatesOpen((v) => !v)} aria-expanded={templatesOpen}>
-            <span className={`collapse-arrow${templatesOpen ? " open" : ""}`} aria-hidden="true" />
-            <span>Şablonlar</span>
-            <Info>Sık verilen görevler. Bir şablonu açınca ayarları hazır yeni görev formu açılır.</Info>
-          </button>
+        <div className="section-collapse-head collapse-title" role="button" tabIndex={0} onClick={() => setTemplatesOpen((v) => !v)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setTemplatesOpen((v) => !v); } }} aria-expanded={templatesOpen}>
+          <span>Şablonlar <Info>Sık verilen görevler. Bir şablonu açınca ayarları hazır yeni görev formu açılır.</Info></span>
+          <span className={`collapse-arrow${templatesOpen ? " open" : ""}`} aria-hidden="true" />
         </div>
         {templatesOpen && templates.map((t) => (
           <div className="app-row" key={t.id}>

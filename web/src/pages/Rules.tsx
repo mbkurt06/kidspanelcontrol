@@ -88,7 +88,7 @@ export default function Rules() {
         </Link>
       </details>
 
-      <details className="card section-collapse-card" open>
+      <details className="card section-collapse-card">
         <summary className="section-collapse-head"><span>Uygulama kullanım kuralları <Info>Uygulamanın ne kadar açık kalacağını ve günlük süreden düşüp düşmeyeceğini tanımlar.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <div className="stack">
           <div className="row between"><span className="muted small">Uygulamaların süre ve izin kuralları</span><button className="btn small" onClick={newAppRule}><Icon name="plus" size={16} /> Yeni</button></div>

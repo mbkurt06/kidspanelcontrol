@@ -815,7 +815,7 @@ function TimeTab({ childId }: { childId: string }) {
         <div className="extra-actions">
           <button
             type="button"
-            className="pill-btn ghost"
+            className="pill-btn minus"
             disabled={!Number(minutes)}
             onClick={async () => {
               const m = Number(minutes);
@@ -828,7 +828,7 @@ function TimeTab({ childId }: { childId: string }) {
               }
             }}
           >
-            − {minutes} dk düş
+            {minutes} dk düş
           </button>
           <span className="grow" />
           <button type="button" className="pill-btn primary" disabled={!Number(minutes)} onClick={give}>

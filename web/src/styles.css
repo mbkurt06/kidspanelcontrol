@@ -1641,3 +1641,178 @@ select:focus {
   color: var(--warn);
   border-color: color-mix(in srgb, var(--warn) 60%, transparent);
 }
+
+/* Modern çocuk kartı */
+.child-card {
+  gap: 12px;
+  padding: 16px;
+}
+.child-main h2 {
+  font-size: 17px;
+  margin: 0;
+}
+.child-main .grow {
+  gap: 3px;
+}
+.child-main .state-line {
+  font-size: 13px;
+}
+.child-main .muted.small {
+  font-size: 12px;
+}
+.ring-state b {
+  font-size: 14px;
+}
+.ring-state small {
+  font-size: 10px;
+}
+.ring-state svg {
+  width: 18px;
+  height: 18px;
+}
+.card-divider {
+  height: 1px;
+  background: var(--line);
+  opacity: 0.7;
+}
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.card-actions .grow {
+  flex: 1 1 0;
+}
+.pill-btn {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--surface-2, var(--line));
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pill-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.pill-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.pill-btn.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--muted);
+}
+.pill-btn.on {
+  border-color: var(--accent);
+}
+.pill-btn.lock-on {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 55%, transparent);
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+}
+.pill-btn.limit-on {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 55%, transparent);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+}
+.icon-pill {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  flex: none;
+}
+.give-box {
+  height: 36px;
+  border-radius: 999px;
+}
+.give-box button {
+  width: 30px;
+  height: 34px;
+  font-size: 17px;
+}
+.give-box input {
+  width: 30px;
+  min-height: 0;
+  height: 30px;
+  font-size: 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.give-unit {
+  font-size: 11px;
+  margin-right: 2px;
+}
+.lock-wrap {
+  position: relative;
+}
+.pop-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.lock-pop {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 8px);
+  z-index: 41;
+  width: min(330px, calc(100vw - 48px));
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+.pop-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip-btn {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+.chip-btn.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+.pop-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

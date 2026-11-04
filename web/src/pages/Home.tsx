@@ -226,7 +226,7 @@ function ChildCard({ child }: { child: Child }) {
   return (
     <div className="card child-card">
       <Link to={`/child/${child.id}`} className="child-main">
-        <Ring value={open && !unlimited ? st!.remaining_minutes : kiosk || limited || closed ? 1 : 0} max={open && !unlimited ? st!.allowance_minutes || 1 : 1} color={ringColor} size={92}>
+        <Ring value={open && !unlimited ? st!.remaining_minutes : kiosk || limited || closed ? 1 : 0} max={open && !unlimited ? st!.allowance_minutes || 1 : 1} color={ringColor} size={66}>
           {ringInner}
         </Ring>
         <div className="grow">
@@ -261,21 +261,68 @@ function ChildCard({ child }: { child: Child }) {
         </div>
       </Link>
 
+      <div className="card-divider" />
       <div className="card-actions">
-        <button
-          className={`btn grow ${lockOpen ? "on" : ""} ${kiosk ? "lock-on" : limited ? "limit-on" : ""}`}
-          disabled={!!busy}
-          onClick={() => {
-            if (kiosk || limited) {
-              setLockOpen(false);
-              setPending({ kind: "open", at: Date.now() });
-              run("unlock", () => unlockNow(child.id), "");
-            } else setLockOpen(!lockOpen);
-          }}
-          aria-expanded={kiosk || limited ? undefined : lockOpen}
-        >
-          <Icon name={kiosk || limited ? "unlock" : "lock"} size={18} /> {kiosk || limited ? "Kilidi kaldır" : "Kilitle…"}
-        </button>
+        <div className="lock-wrap">
+          <button
+            className={`pill-btn ${lockOpen ? "on" : ""} ${kiosk ? "lock-on" : limited ? "limit-on" : ""}`}
+            disabled={!!busy}
+            onClick={() => {
+              if (kiosk || limited) {
+                setLockOpen(false);
+                setPending({ kind: "open", at: Date.now() });
+                run("unlock", () => unlockNow(child.id), "");
+              } else setLockOpen(!lockOpen);
+            }}
+            aria-expanded={kiosk || limited ? undefined : lockOpen}
+          >
+            <Icon name={kiosk || limited ? "unlock" : "lock"} size={15} /> {kiosk || limited ? "Kilidi kaldır" : "Kilitle"}
+          </button>
+          {lockOpen && (
+            <>
+              <div className="pop-backdrop" onClick={() => setLockOpen(false)} />
+              <div className="lock-pop" role="dialog" aria-label="Kilit">
+                <span className="pop-label">NE OLSUN</span>
+                <div className="chips">
+                  {[
+                    { id: "kiosk", name: "Kilitle" },
+                    { id: "limit", name: "Sınırla" },
+                    ...fam.modes.map((m) => ({ id: m.id, name: m.name.replace(/ zamanı$/i, "") })),
+                  ].map((o) => (
+                    <button key={o.id} className={`chip-btn ${lockKind === o.id ? "on" : ""}`} onClick={() => setLockKind(o.id)}>
+                      {o.name}
+                    </button>
+                  ))}
+                </div>
+                <span className="pop-label">NE KADAR</span>
+                <div className="chips">
+                  {[
+                    ["none", lockKind === "kiosk" || lockKind === "limit" ? "Kaldırana kadar" : "Programa dönene kadar"],
+                    ["15", "15 dk"],
+                    ["30", "30 dk"],
+                    ["60", "1 sa"],
+                    ["120", "2 sa"],
+                    ["until", "Saate kadar…"],
+                  ].map(([k, l]) => (
+                    <button key={k} className={`chip-btn ${lockDur === k ? "on" : ""}`} onClick={() => setLockDur(k)}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+                {lockDur === "until" && <TimeField value={lockUntil} onChange={setLockUntil} label="Bitiş saati" />}
+                <div className="pop-actions">
+                  <button className="pill-btn ghost" onClick={() => setLockOpen(false)}>
+                    Vazgeç
+                  </button>
+                  <button className="pill-btn primary" disabled={!!busy} onClick={applyLock}>
+                    {lockKind === "kiosk" ? "Kilitle" : lockKind === "limit" ? "Sınırla" : "Uygula"}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+        <span className="grow" />
         <div className="give-box">
           <button type="button" aria-label="1 dk azalt" disabled={give === 0} {...holdDown}>
             −
@@ -305,52 +352,13 @@ function ChildCard({ child }: { child: Child }) {
             +
           </button>
         </div>
-        <button className="btn primary give-btn" disabled={!!busy || give === 0} onClick={giveTime}>
+        <button className="pill-btn primary" disabled={!!busy || give === 0} onClick={giveTime}>
           Ver
         </button>
+        <Link to={`/messages/${child.id}`} className="icon-pill" aria-label={`${child.name}'e mesaj yaz`} title="Mesaj yaz">
+          <Icon name="chat" size={16} />
+        </Link>
       </div>
-
-      {lockOpen && (
-        <div className="lock-panel">
-
-          <div className="field">
-            <span>Ne olsun</span>
-            <select value={lockKind} onChange={(e) => setLockKind(e.target.value)}>
-              <option value="kiosk">🔒 Kilitle — ekranda sadece Orbit</option>
-              <option value="limit">🌙 Sınırla — sadece temel uygulamalar</option>
-              {fam.modes.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <span>Ne kadar</span>
-            <select value={lockDur} onChange={(e) => setLockDur(e.target.value)}>
-              <option value="none">{lockKind === "kiosk" || lockKind === "limit" ? "Kilidi kaldırana kadar" : "Programa dönene kadar"}</option>
-              <option value="15">15 dk</option>
-              <option value="30">30 dk</option>
-              <option value="60">1 saat</option>
-              <option value="120">2 saat</option>
-              <option value="until">Belirli saate kadar…</option>
-            </select>
-          </div>
-          {lockDur === "until" && <TimeField value={lockUntil} onChange={setLockUntil} label="Bitiş saati" />}
-          <div className="row gap-s">
-            <button className="btn primary grow" disabled={!!busy} onClick={applyLock}>
-              {lockKind === "kiosk" ? "Kilitle" : lockKind === "limit" ? "Sınırla" : "Uygula"}
-            </button>
-            <button className="btn ghost" onClick={() => setLockOpen(false)}>
-              Vazgeç
-            </button>
-          </div>
-        </div>
-      )}
-
-      <Link to={`/messages/${child.id}`} className="btn ghost small">
-        <Icon name="chat" size={16} /> {child.name}'e mesaj yaz
-      </Link>
       {st && staleMin > 15 && (
         <p className="small warn-text">⚠ Telefon {staleMin >= 60 ? `${Math.floor(staleMin / 60)} saattir` : `${staleMin} dakikadır`} bağlanmadı</p>
       )}

@@ -9,6 +9,7 @@ import { DateField, TimeField } from "./DateTime";
 import { MinuteStepper } from "./MinuteStepper";
 import { Info } from "./Info";
 import { Icon } from "./Icon";
+import { UseModePicker } from "./UseModePicker";
 
 type Props = {
   group: TaskGroup;
@@ -151,7 +152,7 @@ export default function TaskGroupDetail(p: Props) {
             const pr = groupProgress(g, p.tasks, p.runs, p.groupRuns, c.id);
             const need = pr.need;
             const pct = need ? Math.min(100, Math.round((pr.approved / need) * 100)) : 0;
-            const unlocked = g.reward_mode === "all" ? pr.all : pr.held;
+            const unlocked = g.reward_mode === "all" ? pr.all : pr.earned;
             const left = Math.max(0, need - pr.approved);
             const next =
               pr.status === "met" ? `Koşul sağlandı · ${minutesText(unlocked)} açıldı`
@@ -167,8 +168,8 @@ export default function TaskGroupDetail(p: Props) {
                   <b>{minutesText(pr.all)}</b>
                 </div>
                 <div className="stat-tile">
-                  <span className="muted tiny">Kazanılan {pr.status === "met" ? "" : "(kilitli)"}</span>
-                  <b className={pr.status === "met" ? "good-text" : "warn-text"}>{minutesText(pr.held)}</b>
+                  <span className="muted tiny">Kazanılan{pr.held ? ` · ${minutesText(pr.held)} bekliyor` : ""}</span>
+                  <b className={pr.held ? "warn-text" : "good-text"}>{minutesText(pr.earned)}</b>
                 </div>
                 <div className="stat-tile">
                   <span className="muted tiny">Koşul · {g.min_count == null ? "hepsi" : `en az ${g.min_count}`}{list.some((t) => t.mandatory) ? " + zorunlu" : ""}</span>
@@ -351,6 +352,9 @@ function GroupSettings({ group, tasks, onSaved, onRemove }: { group: TaskGroup; 
       reward_validity: f.reward_validity,
       fail_mode: f.fail_mode,
       penalty_minutes: f.fail_mode === "penalty" ? f.penalty_minutes ?? 15 : null,
+      mandatory_release: f.mandatory_release ?? "each",
+      use_mode: f.use_mode ?? "usage",
+      use_within_minutes: f.use_mode === "within" ? f.use_within_minutes ?? 120 : null,
     };
     const { error } = await supabase.from("task_groups").update(row).eq("id", group.id);
     if (!error && f.child_ids.length) await supabase.from("tasks").update({ child_ids: f.child_ids }).eq("group_id", group.id);
@@ -441,7 +445,14 @@ function GroupSettings({ group, tasks, onSaved, onRemove }: { group: TaskGroup; 
       <section className="card extra-card">
         <b className="card-title">Ödül</b>
         <div className="extra-group">
-          <span className="pop-label">KOŞUL SAĞLANINCA AÇILAN <Info>Koşul sağlanana kadar kazanılan süre kilitli bekler.</Info></span>
+          <span className="pop-label">ZORUNLU GÖREVLERİN SÜRESİ <Info>Her biri hemen: zorunlu görev onaylanınca kendi süresi hemen açılır ve o süre boyunca kısıtlama kalkar; süre bitince yapılmamış zorunlu görev varsa kısıtlama geri gelir. Koşul sağlanınca: en az görev sayısı ve bütün zorunlular onaylanınca yapılanların toplamı birlikte açılır. Seçmeli görevlerin süresi her iki durumda da zorunlular bitene kadar bekler.</Info></span>
+          <div className="chips">
+            {chip((f.mandatory_release ?? "each") === "each", "Her biri onaylanınca hemen", () => set("mandatory_release", "each"))}
+            {chip(f.mandatory_release === "all", "Koşul sağlanınca birlikte", () => set("mandatory_release", "all"))}
+          </div>
+        </div>
+        <div className="extra-group">
+          <span className="pop-label">KOŞUL SAĞLANINCA AÇILAN <Info>Yaptığı görevlerin süresi ya da koşul sağlanınca grubun tamamı (yapmadığı seçmelilerin süresi de dahil).</Info></span>
           <div className="chips">
             {chip(f.reward_mode === "done", "Yaptığı görevlerin süresi", () => set("reward_mode", "done"))}
             {chip(f.reward_mode === "all", `Grubun tamamı · ${tasks.reduce((a, t) => a + Math.max(0, t.reward_minutes ?? 0), 0)} dk`, () => set("reward_mode", "all"))}
@@ -455,6 +466,14 @@ function GroupSettings({ group, tasks, onSaved, onRemove }: { group: TaskGroup; 
             {chip(f.reward_validity === "vault", "Kasaya", () => set("reward_validity", "vault"))}
           </div>
         </div>
+        {f.reward_validity === "today" && (
+          <UseModePicker
+            mode={f.use_mode ?? "usage"}
+            within={String(f.use_within_minutes ?? 120)}
+            onMode={(m) => set("use_mode", m)}
+            onWithin={(v) => set("use_within_minutes", Number(v))}
+          />
+        )}
         <div className="extra-group">
           <span className="pop-label">KOŞUL SAĞLANMAZSA <Info>Son saatte (ya da gün sonunda) koşul sağlanmadıysa uygulanır. Kasadaki süreyi istediğinde “Şimdi ver” ile açarsın.</Info></span>
           <div className="extra-row">

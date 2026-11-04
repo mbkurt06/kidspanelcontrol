@@ -67,7 +67,7 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
   const reload = useCallback(async () => {
     supabase.rpc("touch_parent_device").then(() => {});
     const [fam, ch, pr, mo, sl, st, ev, ap, gr, gm, se, sr, gl, um, fp, ac, ts, tr, ar] = await Promise.all([
-      supabase.from("families").select("id,lock_button,lock_button_minutes,pin_unlock_minutes,parent_pin_hash,task_before_photo_min,task_before_photo_max,task_after_photo_min,task_after_photo_max,proof_retention_days,task_defaults").limit(1).maybeSingle(),
+      supabase.from("families").select("id,lock_button,lock_button_minutes,pin_unlock_minutes,parent_pin_hash,task_before_photo_min,task_before_photo_max,task_after_photo_min,task_after_photo_max,proof_retention_days,task_defaults,open_start,open_end").limit(1).maybeSingle(),
       supabase.from("children").select("*").order("sort_order").order("created_at"),
       supabase.from("rule_profiles").select("*").order("created_at"),
       supabase.from("modes").select("*").order("priority", { ascending: false }),

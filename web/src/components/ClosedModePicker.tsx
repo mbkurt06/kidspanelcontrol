@@ -2,9 +2,10 @@ import type { ClosedMode } from "../lib/actions";
 import { Info } from "./Info";
 
 const OPTS: { k: ClosedMode["mode"]; title: string; hint: string }[] = [
-  { k: "clock", title: "Saat gibi aksın", hint: "15 dk verince telefon 15 dakikalığına açılır, kullanılmasa da sonunda kapanır." },
-  { k: "usage", title: "Süre bitene kadar", hint: "Süre kullandıkça düşer. Kullanılmayan süre açık saatler başlayınca ya da gece yarısı biter." },
-  { k: "within", title: "Belirli süre içinde", hint: "Süre kullandıkça düşer ama sadece seçilen süre içinde kullanılabilir. Ör. 30 dk ver → 2 saat içinde kullanmalı." },
+  { k: "clock", title: "Saat gibi aksın", hint: "Hangi saat olursa olsun telefon hemen bu kadar dakikalığına açılır, kullanmasa da süre akar. Kullanmadığı dakikalar kasaya gider." },
+  { k: "usage", title: "Süre bitene kadar", hint: "Telefon hemen açılır, kullandıkça düşer; süre bitene kadar telefon kapalı duruma geçmez. Kapalı saatler bitince (ör. sabah 08:00) kalan kasaya gider." },
+  { k: "within", title: "Belirli süre içinde", hint: "Telefon hemen açılır, kullandıkça düşer ama seçilen süre içinde kullanılmalı. Süre dolunca kalan kasaya gider." },
+  { k: "open", title: "Açık saatlerde kullan", hint: "Sadece açık saatlerde (08:00–21:00) kullanılır, kullandıkça düşer. Açık saatler bitince kalan kasaya gider; kapalı saatte verilirse doğrudan kasaya gider." },
 ];
 
 export function closedModeLabel(v: ClosedMode) {

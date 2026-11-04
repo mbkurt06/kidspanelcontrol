@@ -5,6 +5,7 @@ import { errorText, localDevice, supabase } from "../lib/supabase";
 import { relTime } from "../lib/util";
 import type { Device, ParentDevice } from "../lib/types";
 import { Info } from "../components/Info";
+import { TimeField } from "../components/DateTime";
 import { currentPushTypes, currentSubscription, disablePush, enablePush, isIOS, isStandalone, PUSH_EVENT_TYPES, pushSupported, updatePushTypes } from "../lib/push";
 import { biometricEnabled, biometricSupported, disableBiometric, registerBiometric } from "../lib/biometric";
 
@@ -112,6 +113,7 @@ export default function Settings() {
       {err && <p className="error">{err}</p>}
       {msg && <p className="ok">{msg}</p>}
 
+      <OpenHoursCard />
       <ThemeCard />
       <BiometricCard />
 
@@ -494,6 +496,44 @@ function ProofCard() {
         <option value={7}>7 gün saklansın</option>
         <option value={30}>30 gün saklansın</option>
       </select>
+    </div>
+  );
+}
+
+/** Açık saatler: görevler ve görevden kazanılan süre bu aralıkta (her gün) */
+function OpenHoursCard() {
+  const fam = useFamily();
+  const f = fam.family;
+  const [a, setA] = useState("08:00");
+  const [b, setB] = useState("21:00");
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    if (!f) return;
+    setA(f.open_start?.slice(0, 5) ?? "08:00");
+    setB(f.open_end?.slice(0, 5) ?? "21:00");
+  }, [f]);
+  async function save() {
+    setErr("");
+    setMsg("");
+    if (a >= b) return setErr("Bitiş başlangıçtan sonra olmalı.");
+    const { error } = await supabase.from("families").update({ open_start: a, open_end: b }).eq("id", fam.familyId);
+    if (error) return setErr(errorText(error));
+    setMsg("Kaydedildi.");
+    await fam.reload();
+  }
+  if (!f) return null;
+  return (
+    <div className="card">
+      <h2>Açık saatler <Info>Her gün geçerli. Görevler sadece bu aralıkta görünür ve yapılır; zorunlu görev kısıtlaması bu aralıkta uygulanır. Görevden kazanılan süre bu aralığın sonunu geçmez, kalanı kasaya gider. Saati olmayan görev ve gruplar bu aralığı kullanır.</Info></h2>
+      <div className="extra-row">
+        <TimeField value={a} onChange={setA} label="Başlangıç" />
+        <span className="muted">–</span>
+        <TimeField value={b} onChange={setB} label="Bitiş" />
+        <button className="pill-btn primary" onClick={save}>Kaydet</button>
+      </div>
+      {err && <p className="error">{err}</p>}
+      {msg && <p className="ok">{msg}</p>}
     </div>
   );
 }

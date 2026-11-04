@@ -4,12 +4,13 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { todayISO } from "../lib/util";
-import { PROOF_LABEL, VALIDITY_LABEL, type AgendaItem, type ProofType, type RewardValidity, type Task, type TaskDefaults, type TaskGroup, type TaskPhoneRestriction } from "../lib/types";
+import { PROOF_LABEL, VALIDITY_LABEL, type AgendaItem, type ProofType, type RestrictedApp, type RewardValidity, type Task, type TaskDefaults, type TaskGroup, type TaskPhoneRestriction, type UseMode } from "../lib/types";
 import { repeatText } from "../lib/groups";
 import { DayPicker } from "../components/Windows";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
+import { UseModePicker } from "../components/UseModePicker";
 
 type Form = {
   title: string;
@@ -46,6 +47,10 @@ type Form = {
   srec_min_minutes: string;
   allowed_packages: string[];
   allowed_mode: "keep" | "focus";
+  restriction_mode_id: string;
+  restricted_allowed: RestrictedApp[];
+  use_mode: UseMode;
+  use_within_minutes: string;
   record_camera: "back" | "front" | "choose";
   record_pause: "none" | "limit" | "child";
   record_pause_max: string;
@@ -78,6 +83,10 @@ function defaultsOf(f: Form): TaskDefaults {
     screen_record_min_minutes: f.srec_on && f.srec_min_minutes ? Number(f.srec_min_minutes) : null,
     allowed_packages: f.allowed_packages,
     allowed_mode: f.allowed_mode,
+    restriction_mode_id: f.restriction_mode_id || null,
+    restricted_allowed: f.restricted_allowed,
+    use_mode: f.use_mode,
+    use_within_minutes: f.use_mode === "within" ? Number(f.use_within_minutes) || 120 : null,
     record_camera: f.record_camera,
     record_pause: f.record_pause,
     record_pause_max: f.record_pause === "limit" ? Number(f.record_pause_max) || 10 : null,
@@ -113,6 +122,10 @@ function applyDefaults(f: Form, d: TaskDefaults | null | undefined, allChildren:
     srec_min_minutes: d.screen_record_min_minutes == null ? "" : String(d.screen_record_min_minutes),
     allowed_packages: d.allowed_packages ?? f.allowed_packages,
     allowed_mode: d.allowed_mode ?? f.allowed_mode,
+    restriction_mode_id: d.restriction_mode_id ?? f.restriction_mode_id,
+    restricted_allowed: d.restricted_allowed ?? f.restricted_allowed,
+    use_mode: d.use_mode ?? f.use_mode,
+    use_within_minutes: d.use_within_minutes == null ? f.use_within_minutes : String(d.use_within_minutes),
     record_camera: d.record_camera ?? f.record_camera,
     record_pause: d.record_pause ?? f.record_pause,
     record_pause_max: String(d.record_pause_max ?? f.record_pause_max),
@@ -156,7 +169,11 @@ const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; 
   srec_minutes: "30",
   srec_min_minutes: "",
   allowed_packages: [],
-  allowed_mode: "keep",
+  allowed_mode: "focus",
+  restriction_mode_id: "",
+  restricted_allowed: [],
+  use_mode: "usage",
+  use_within_minutes: "120",
   record_camera: "back",
   record_pause: "child",
   record_pause_max: "10",
@@ -166,7 +183,7 @@ const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; 
   mandatory: false,
 });
 
-type RecFields = { screen_record_minutes?: number | null; screen_record_min_minutes?: number | null; allowed_packages?: string[] | null; allowed_mode?: "keep" | "focus" | null; screenshot_min?: number | null; screenshot_max?: number | null; record_minutes?: number | null; record_min_minutes?: number | null; record_camera?: Form["record_camera"]; record_pause?: Form["record_pause"]; record_pause_max?: number | null };
+type RecFields = { screen_record_minutes?: number | null; screen_record_min_minutes?: number | null; allowed_packages?: string[] | null; allowed_mode?: "keep" | "focus" | null; restriction_mode_id?: string | null; restricted_allowed?: RestrictedApp[] | null; use_mode?: UseMode | null; use_within_minutes?: number | null; screenshot_min?: number | null; screenshot_max?: number | null; record_minutes?: number | null; record_min_minutes?: number | null; record_camera?: Form["record_camera"]; record_pause?: Form["record_pause"]; record_pause_max?: number | null };
 const recForm = (t: RecFields) => ({
   record_on: t.record_minutes != null,
   record_minutes: t.record_minutes?.toString() ?? "60",
@@ -178,7 +195,11 @@ const recForm = (t: RecFields) => ({
   srec_minutes: t.screen_record_minutes?.toString() ?? "30",
   srec_min_minutes: t.screen_record_min_minutes?.toString() ?? "",
   allowed_packages: t.allowed_packages ?? [],
-  allowed_mode: t.allowed_mode ?? "keep",
+  allowed_mode: t.allowed_mode ?? "focus",
+  restriction_mode_id: t.restriction_mode_id ?? "",
+  restricted_allowed: t.restricted_allowed ?? [],
+  use_mode: t.use_mode ?? "usage",
+  use_within_minutes: String(t.use_within_minutes ?? 120),
   record_camera: t.record_camera ?? "back",
   record_pause: t.record_pause ?? "child",
   record_pause_max: t.record_pause_max?.toString() ?? "10",
@@ -382,7 +403,11 @@ export default function TaskEdit() {
       screen_record_minutes: f.srec_on ? Math.min(240, Math.max(1, Number(f.srec_minutes) || 30)) : null,
       screen_record_min_minutes: f.srec_on && f.srec_min_minutes ? Math.min(Math.max(1, Number(f.srec_minutes) || 30), Math.max(1, Number(f.srec_min_minutes))) : null,
       allowed_packages: f.allowed_packages,
-      allowed_mode: f.allowed_mode,
+      allowed_mode: "focus",
+      restriction_mode_id: f.phone_restriction === "mode" ? f.restriction_mode_id || null : null,
+      restricted_allowed: f.phone_restriction === "none" ? [] : f.restricted_allowed,
+      use_mode: f.use_mode,
+      use_within_minutes: f.use_mode === "within" ? Math.max(1, Number(f.use_within_minutes) || 120) : null,
       record_camera: f.record_camera,
       record_pause: f.record_pause,
       record_pause_max: f.record_pause === "limit" ? Math.max(1, Number(f.record_pause_max) || 10) : null,
@@ -424,6 +449,11 @@ export default function TaskEdit() {
         screen_record_min_minutes: row.screen_record_min_minutes,
         allowed_packages: row.allowed_packages,
         allowed_mode: row.allowed_mode,
+        phone_restriction: row.phone_restriction,
+        restriction_mode_id: row.restriction_mode_id,
+        restricted_allowed: row.restricted_allowed,
+        use_mode: row.use_mode,
+        use_within_minutes: row.use_within_minutes,
         record_camera: row.record_camera,
         record_pause: row.record_pause,
         record_pause_max: row.record_pause_max,
@@ -693,15 +723,39 @@ export default function TaskEdit() {
       </div>
 
       <div className="card">
-        <h2>Kısıtlamalar <Info>Görev onaylanana kadar geçerlidir. “Değiştirme” hiçbir kısıtı kaldırmaz: telefon o an hangi kuraldaysa (serbest, Sınırla, Kilitle) öyle kalır.</Info></h2>
-        <label className="field">
-          <span>Telefon (görev bitene kadar)</span>
-          <select value={f.phone_restriction} onChange={(e) => set("phone_restriction", e.target.value as TaskPhoneRestriction)}>
-            <option value="none">Değiştirme — o anki kural geçerli</option>
-            <option value="limit">Sınırla — sadece temel uygulamalar</option>
-            <option value="kiosk">Kilitle — sadece Orbit</option>
-          </select>
-        </label>
+        <h2>Kısıtlamalar <Info>Görevin saat aralığında (varsayılan 08:00–21:00) ve görev onaylanana kadar geçerlidir. Aralık dışında görevin kısıtlaması uygulanmaz; telefon o saatin kuralıyla çalışır. Ebeveynin verdiği ekstra süre sürerken kısıtlama kalkar.</Info></h2>
+        {f.group_id && !f.mandatory ? (
+          <p className="muted small">Seçmeli görev telefonu kısıtlamaz. Kısıtlama sadece zorunlu görevlerde seçilir.</p>
+        ) : (
+          <label className="field">
+            <span>Yapılmazsa</span>
+            <select
+              value={f.phone_restriction === "mode" ? `mode:${f.restriction_mode_id}` : f.phone_restriction}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v.startsWith("mode:")) setF((x) => ({ ...x, phone_restriction: "mode", restriction_mode_id: v.slice(5) }));
+                else setF((x) => ({ ...x, phone_restriction: v as TaskPhoneRestriction, restriction_mode_id: "" }));
+              }}
+            >
+              <option value="none">Telefonu kısıtlama — sadece ödülleri beklet</option>
+              <option value="kiosk">🔒 Kilitle — sadece Orbit</option>
+              <option value="limit">🌙 Sınırla — sadece her zaman açık uygulamalar</option>
+              {fam.modes.map((m) => <option key={m.id} value={`mode:${m.id}`}>{m.icon} {m.name}</option>)}
+            </select>
+            <span className="muted tiny">
+              {f.phone_restriction === "none"
+                ? f.group_id ? "Telefon normal kurallarıyla çalışır; bu görev yapılmadan gruptan kazanılan ekstra süreler kullanılamaz." : "Telefon normal kurallarıyla çalışır, sadece ödül verilir."
+                : "Görev yapılıp onaylanana kadar telefon bu durumda kalır. Onay beklerken de sürer. Birden fazla zorunlu görev varsa en sıkı olanı geçerli olur (Kilitle > Sınırla > diğer)."}
+            </span>
+          </label>
+        )}
+        {f.phone_restriction !== "none" && !(f.group_id && !f.mandatory) && (
+          <RestrictedApps
+            apps={apps.filter((a) => f.child_ids.includes(a.child_id))}
+            value={f.restricted_allowed}
+            onChange={(v) => set("restricted_allowed", v)}
+          />
+        )}
         <label className="field">
           <span>Orbit menüsü</span>
           <select value={f.orbit_focus_profile_id} onChange={(e) => set("orbit_focus_profile_id", e.target.value)}>
@@ -710,6 +764,10 @@ export default function TaskEdit() {
           </select>
         </label>
         {!fam.focusProfiles.length && <p className="muted tiny">Orbit menü kısıtı için önce Kurallar → Odak profilleri bölümünden profil oluştur.</p>}
+      </div>
+
+      <div className="card">
+        <h2>Görev uygulaması <Info>Görevin yapıldığı uygulama (ör. Anton, Duolingo). Sadece çocuk telefonda “Göreve başla”ya bastığında ya da ekran kaydı sürerken açılır; duraklatınca ya da bitirince kapanır. Bu sırada başka uygulamaya geçemez ve süresinden düşmez. Görev dışında da kullanılsın istersen Kurallar'dan ya da “Kısıtlıyken izinli uygulamalar”dan izin ver.</Info></h2>
         <AllowedApps
           apps={apps.filter((a) => f.child_ids.includes(a.child_id))}
           value={f.allowed_packages}
@@ -717,21 +775,6 @@ export default function TaskEdit() {
           onQuery={setAppQuery}
           onChange={(v) => set("allowed_packages", v)}
         />
-        {f.allowed_packages.length > 0 && (
-          <div className="field">
-            <span>Görevi yaparken</span>
-            <div className="chips">
-              <button type="button" className={`chip-btn ${f.allowed_mode === "keep" ? "on" : ""}`} onClick={() => set("allowed_mode", "keep")}>O anki durumu koru</button>
-              <button type="button" className={`chip-btn ${f.allowed_mode === "focus" ? "on" : ""}`} onClick={() => set("allowed_mode", "focus")}>Sadece izinli uygulamalar</button>
-            </div>
-            <span className="muted tiny">
-              {f.allowed_mode === "keep"
-                ? "Kısıtlı zamanda (Sınırla / Kilitle) izinli uygulamalar açılır; serbest zamanda diğer uygulamalara dokunulmaz."
-                : "Çocuk telefonda “Göreve başla”ya basınca, duraklatana ya da bitirene kadar sadece izinli uygulamalar açık kalır; bu süre günlük süresinden düşmez."}
-              {f.srec_on ? " Ekran kaydı sürerken her durumda sadece izinli uygulamalar açıktır, kayıt süresi günlük süreden düşmez; duraklatınca diğer uygulamalar açılır ve normal sayılır." : ""}
-            </span>
-          </div>
-        )}
       </div>
 
       <div className="card">
@@ -769,6 +812,10 @@ export default function TaskEdit() {
             <small className="muted">Onaylarken ya da sonra çocuğun Süre sekmesinden değiştirebilirsin.</small>
           </label>
         )}
+        {f.reward_validity === "today" && Number(f.reward_minutes) > 0 && !f.group_id && (
+          <UseModePicker mode={f.use_mode} within={f.use_within_minutes} onMode={(m) => set("use_mode", m)} onWithin={(v) => set("use_within_minutes", v)} />
+        )}
+        {f.group_id && Number(f.reward_minutes) > 0 && <p className="muted tiny">Gruptaki görevin süresi grubun ayarlarına göre (ne zaman açılacağı ve nasıl kullanılacağı) verilir.</p>}
         {f.reward_validity === "wallet" && (
           <label className="field">
             <span>Kaç gün içinde kullanılmalı (boş = süresiz)</span>
@@ -883,3 +930,40 @@ function AllowedApps({ apps, value, query, onQuery, onChange }: {
     </div>
   );
 }
+
+/** Kısıtlıyken izinli uygulamalar: isteğe bağlı günlük dakika sınırı */
+function RestrictedApps({ apps, value, onChange }: { apps: Array<{ package: string; label: string }>; value: RestrictedApp[]; onChange: (v: RestrictedApp[]) => void }) {
+  const [q, setQ] = useState("");
+  const byPkg = new Map<string, string>();
+  apps.forEach((a) => byPkg.set(a.package, a.label || a.package));
+  const ql = q.trim().toLocaleLowerCase("tr");
+  const chosen = new Set(value.map((v) => v.package));
+  const list = [...byPkg.entries()].filter(([p]) => !chosen.has(p)).filter(([p, l]) => !ql || l.toLocaleLowerCase("tr").includes(ql) || p.includes(ql)).slice(0, ql ? 30 : 10);
+  return (
+    <div className="field">
+      <span>
+        Kısıtlıyken izinli uygulamalar{" "}
+        <Info>Görev yapılmadığı sürece de açık kalır (ör. sözlük, WhatsApp). İstersen günlük dakika sınırı koy; bu süre ayrıdır, kasaya gitmez ve ertesi güne devretmez.</Info>
+      </span>
+      {value.map((v) => (
+        <div className="extra-row" key={v.package}>
+          <span className="grow">{byPkg.get(v.package) ?? v.package}</span>
+          <select value={v.minutes == null ? "" : String(v.minutes)} onChange={(e) => onChange(value.map((x) => (x.package === v.package ? { ...x, minutes: e.target.value ? Number(e.target.value) : null } : x)))}>
+            <option value="">Sınırsız</option>
+            {[5, 10, 15, 20, 30, 45, 60, 90, 120].map((m) => <option key={m} value={m}>Günde {m} dk</option>)}
+          </select>
+          <button type="button" className="icon-pill" aria-label="Kaldır" onClick={() => onChange(value.filter((x) => x.package !== v.package))}>×</button>
+        </div>
+      ))}
+      <input placeholder="Uygulama ara" value={q} onChange={(e) => setQ(e.target.value)} />
+      {list.length > 0 && (
+        <div className="chips">
+          {list.map(([p, l]) => (
+            <button key={p} type="button" className="chip-btn" onClick={() => onChange([...value, { package: p, minutes: null }])}>+ {l}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+

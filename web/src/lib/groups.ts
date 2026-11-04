@@ -38,6 +38,7 @@ export type GroupProgress = {
   need: number;
   mandatoryLeft: number;
   held: number;
+  earned: number;
   all: number;
   status: "open" | "met" | "failed";
   submitted: number;
@@ -50,11 +51,14 @@ export function groupProgress(g: TaskGroup, tasks: Task[], runs: TaskRun[], grou
   const total = list.length;
   const approved = list.filter((r) => r.status === "approved").length;
   const mandatoryLeft = list.filter((r) => byId[r.task_id]?.mandatory && r.status !== "approved").length;
-  const held = list.filter((r) => r.status === "approved").reduce((a, r) => a + Math.max(0, r.granted_minutes ?? byId[r.task_id]?.reward_minutes ?? 0), 0);
+  const mins = (r: TaskRun) => Math.max(0, r.granted_minutes ?? byId[r.task_id]?.reward_minutes ?? 0);
+  // Kazanılan: onaylanan görevlerin süresi; bekleyen: henüz açılmamış (verilmemiş) kısmı
+  const earned = list.filter((r) => r.status === "approved").reduce((a, r) => a + mins(r), 0);
+  const held = list.filter((r) => r.status === "approved" && !r.grant_id).reduce((a, r) => a + mins(r), 0);
   const all = tasks.filter((t) => t.group_id === g.id && t.active).reduce((a, t) => a + Math.max(0, t.reward_minutes ?? 0), 0);
   const need = g.min_count == null ? total : Math.min(g.min_count, total);
   const gr = groupRuns.find((x) => x.group_id === g.id && x.child_id === childId && x.day === day);
-  return { total, approved, need, mandatoryLeft, held, all, status: gr?.status ?? "open", submitted: list.filter((r) => r.status === "submitted").length };
+  return { total, approved, need, mandatoryLeft, held, earned, all, status: gr?.status ?? "open", submitted: list.filter((r) => r.status === "submitted").length };
 }
 
 export function groupTasks(g: TaskGroup, tasks: Task[]): Task[] {

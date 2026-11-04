@@ -46,7 +46,7 @@ export async function grantMinutes(
 
 type FamLike = { sections: Section[]; sectionRules: SectionRule[]; children?: Child[] };
 /** Kapalı / sınırlı saatte verilen sürenin davranışı (Kurallar → Kapalıyken verilen süre). */
-export type ClosedMode = { mode: "clock" | "usage" | "within"; withinMinutes: number | null; withinFactor: number | null };
+export type ClosedMode = { mode: "clock" | "usage" | "within" | "open"; withinMinutes: number | null; withinFactor: number | null };
 export function closedModeOf(child?: Child): ClosedMode {
   return {
     mode: child?.closed_grant_mode ?? "usage",
@@ -102,19 +102,20 @@ export async function giveNow(
   childId: string,
   minutes: number,
   fam: FamLike,
-  st: DeviceStatus | undefined,
+  _st: DeviceStatus | undefined,
   opts: { override?: ClosedMode; note?: string; kiosk?: boolean; limited?: boolean } = {}
 ): Promise<string> {
-  const kiosk = opts.kiosk ?? !!st?.lock_reason?.startsWith("🔒");
-  const limited = opts.limited ?? (!kiosk && !!st?.locked);
-  if (kiosk) {
-    await grantMinutes(childId, minutes, { note: opts.note });
-    return "kalan süreye eklendi · kilit kalkınca kullanır";
-  }
-  const closed = !!st && !limited && st.remaining_minutes === 0;
-  const { patch, text } = await nowPatch(childId, minutes, fam, { closed: limited || closed, override: opts.override });
-  await insertGrant(childId, minutes, patch, opts.note);
-  return text;
+  // Elle verilen süre: saat, kısıtlama ve gece kuralına bakmadan seçilen moda göre (sunucu hesaplar)
+  const cm = opts.override ?? closedModeOf(fam.children?.find((c) => c.id === childId));
+  const within = cm.mode === "within" ? (cm.withinFactor ? minutes * cm.withinFactor : cm.withinMinutes ?? 120) : null;
+  const { error } = await supabase.rpc("parent_give_time", { p_child: childId, p_minutes: minutes, p_mode: cm.mode, p_within: within, p_note: opts.note ?? null });
+  if (error) throw error;
+  const { minute } = nowBerlin();
+  const end = (m: number) => hm(Math.min(m, 1439));
+  if (cm.mode === "clock") return `şu andan ${end(minute + minutes)}'e kadar açık · kullanılmayan kasaya`;
+  if (cm.mode === "within") return `kullandıkça düşer · ${end(minute + (within ?? 120))}'e kadar kullanmalı`;
+  if (cm.mode === "open") return minute >= 8 * 60 && minute < 21 * 60 ? "açık saatlerde kullanılır · 21:00'de kalan kasaya" : "kapalı saat · süre kasaya eklendi";
+  return "kullandıkça düşer · bitene kadar telefon açık";
 }
 
 /**

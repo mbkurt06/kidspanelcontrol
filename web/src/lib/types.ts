@@ -103,6 +103,8 @@ export type FamilySettings = {
   task_after_photo_max: number;
   proof_retention_days: number;
   task_defaults?: TaskDefaults | null;
+  open_start?: string;
+  open_end?: string;
 };
 
 /** Yeni görevde hazır gelen ayarlar (ad, tarih, saat hariç). */
@@ -127,6 +129,10 @@ export type TaskDefaults = Partial<{
   screen_record_min_minutes: number | null;
   allowed_packages: string[];
   allowed_mode: "keep" | "focus";
+  restriction_mode_id: string | null;
+  restricted_allowed: RestrictedApp[];
+  use_mode: UseMode;
+  use_within_minutes: number | null;
   record_camera: "back" | "front" | "choose";
   record_pause: "none" | "limit" | "child";
   record_pause_max: number | null;
@@ -152,6 +158,9 @@ export type TaskGroup = {
   reward_validity: "today" | "wallet" | "vault";
   fail_mode: "vault" | "burn" | "penalty";
   penalty_minutes: number | null;
+  mandatory_release: "each" | "all";
+  use_mode: UseMode;
+  use_within_minutes: number | null;
   defaults: TaskDefaults | null;
   sort: number;
   created_at: string;
@@ -346,7 +355,9 @@ export const WEEKDAYS_LONG = ["Pazartesi", "Salı", "Çarşamba", "Perşembe", "
 
 export type ProofType = "none" | "photo" | "video" | "photo_or_video";
 export type RewardValidity = "today" | "tomorrow" | "date" | "wallet" | "vault";
-export type TaskPhoneRestriction = "none" | "limit" | "kiosk";
+export type TaskPhoneRestriction = "none" | "limit" | "kiosk" | "mode";
+export type UseMode = "clock" | "usage" | "within";
+export type RestrictedApp = { package: string; minutes: number | null };
 
 export type TaskTemplate = {
   id: string;
@@ -372,6 +383,10 @@ export type TaskTemplate = {
   screen_record_min_minutes?: number | null;
   allowed_packages?: string[] | null;
   allowed_mode?: "keep" | "focus" | null;
+  restriction_mode_id?: string | null;
+  restricted_allowed?: RestrictedApp[] | null;
+  use_mode?: UseMode | null;
+  use_within_minutes?: number | null;
   record_camera?: "back" | "front" | "choose";
   record_pause?: "none" | "limit" | "child";
   record_pause_max?: number | null;
@@ -411,6 +426,7 @@ export type TaskRun = {
   reject_note: string | null;
   attempts: number;
   granted_minutes: number | null;
+  grant_id?: string | null;
   reward_text: string | null;
   reward_delivered_at: string | null;
 };

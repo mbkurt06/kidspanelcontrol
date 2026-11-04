@@ -45,6 +45,8 @@ export function MinuteStepper({
   max = 600,
   step = 1,
   label = "Dakika",
+  unit = "dk",
+  min = 0,
 }: {
   value: number;
   onChange: (v: number) => void;
@@ -52,15 +54,17 @@ export function MinuteStepper({
   max?: number;
   step?: number;
   label?: string;
+  unit?: string;
+  min?: number;
 }) {
   const [text, setText] = useState<string | null>(null);
-  const set = (v: number) => onChange(Math.max(0, Math.min(max, v)));
+  const set = (v: number) => onChange(Math.max(min, Math.min(max, v)));
   const up = useHold(() => set(value + step));
   const down = useHold(() => set(value - step));
-  const hint = value >= 60 ? `${Math.floor(value / 60)} sa${value % 60 ? ` ${value % 60} dk` : ""}` : null;
+  const hint = unit === "dk" && value >= 60 ? `${Math.floor(value / 60)} sa${value % 60 ? ` ${value % 60} dk` : ""}` : null;
   return (
     <div className="give-box stepper">
-      <button type="button" aria-label={`${step} dk azalt`} disabled={value === 0} {...down}>
+      <button type="button" aria-label={`${step} ${unit} azalt`} disabled={value <= min} {...down}>
         −
       </button>
       <input
@@ -83,8 +87,8 @@ export function MinuteStepper({
           if (e.key === "ArrowDown") { e.preventDefault(); setText(null); set(value - step); }
         }}
       />
-      <span className="give-unit">dk{hint ? ` · ${hint}` : ""}</span>
-      <button type="button" aria-label={`${step} dk artır`} {...up}>
+      <span className="give-unit">{unit}{hint ? ` · ${hint}` : ""}</span>
+      <button type="button" aria-label={`${step} ${unit} artır`} disabled={value >= max} {...up}>
         +
       </button>
     </div>

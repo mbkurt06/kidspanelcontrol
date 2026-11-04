@@ -1889,3 +1889,32 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .pop-label { display: inline-flex; align-items: center; gap: 4px; }
 .pop-label .info-popover, .sub-collapse .info-popover { font-size: 13px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--text); }
 .pop-label .info-btn { transform: scale(0.8); }
+
+/* ===== Ortak standart (tüm panel) =====
+   Kontroller: 36–40 px yükseklik; seçim düğmeleri kapsül; giriş kutuları 12 px köşe;
+   etiketler 13 px soluk; bölüm başlığı 18 px, kart başlığı 16 px. */
+input:not([type="checkbox"]):not([type="radio"]):not(.tf-num):not(.mini),
+select {
+  min-height: 40px;
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-size: 15px;
+}
+textarea { border-radius: 12px; font-size: 15px; }
+.give-box input, .give-box.stepper input { min-height: 0 !important; padding: 0 !important; border-radius: 6px !important; }
+.compact-input, .compact-select, .extra-card select { min-height: 36px !important; height: 36px; border-radius: 999px !important; font-size: 14px !important; }
+.chip {
+  height: 32px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.chip.small { height: 28px; padding: 0 10px; font-size: 12px; }
+.chip.on { font-weight: 600; }
+.sheet { gap: 14px; }
+.sheet h2 { font-size: 18px; font-weight: 700; }
+.extra-group .pop-label + .chips, .extra-group .pop-label + .extra-row { margin-top: -2px; }

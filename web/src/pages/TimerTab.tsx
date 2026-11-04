@@ -17,6 +17,7 @@ import {
 } from "../lib/types";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
+import { MinuteStepper } from "../components/MinuteStepper";
 
 const DAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 const STATUS: Record<TimerSession["status"], string> = { running: "çalışıyor", paused: "molada", done: "tamamlandı", stopped: "erken bitti", cancelled: "iptal" };
@@ -121,7 +122,6 @@ function StartTimer({ childId }: { childId: string }) {
   const [title, setTitle] = useState("");
   const [hours, setHours] = useState(0);
   const [minutePart, setMinutePart] = useState(30);
-  const [durationOpen, setDurationOpen] = useState(false);
   const [focus, setFocus] = useState<string>("");
   const [allowStop, setAllowStop] = useState<AllowStop>(d.allow_stop);
   const [pauseMode, setPauseMode] = useState<PauseMode>(d.pause_mode);
@@ -179,81 +179,87 @@ function StartTimer({ childId }: { childId: string }) {
     <div className="sheet-backdrop" onClick={() => setOpen(false)}>
     <div className="sheet compact-sheet" onClick={(e) => e.stopPropagation()}>
       <div className="row between"><h2>Sayaç başlat</h2><button className="icon-btn" onClick={() => setOpen(false)} aria-label="Kapat">×</button></div>
-      <div className="row gap-s wrap">
-        {fam.activities.map((a) => (
-          <button key={a.id} className={`chip ${activity === a.id ? "on" : ""}`} onClick={() => setActivity(a.id)}>
-            {a.icon} {a.name}
-          </button>
-        ))}
-        <button className={`chip ${activity === "other" ? "on" : ""}`} onClick={() => setActivity("other")}>
-          ✍️ Diğer
-        </button>
-      </div>
-      {activity === "other" && <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ne çalışacak?" />}
-      <button className="chip on" onClick={() => setDurationOpen(true)}>
-        {hours === 0 && minutePart === 0 ? "⏱ Kronometre" : `${hours ? `${hours} sa ` : ""}${minutePart} dk`}
-      </button>
-      {durationOpen && <div className="sheet-backdrop" onClick={() => setDurationOpen(false)}><div className="sheet compact-sheet" onClick={(e) => e.stopPropagation()}>
-        <h2>Süre seç</h2>
-        <div className="date-wheel">
-          <select size={5} value={hours} onChange={(e) => setHours(Number(e.target.value))}>{Array.from({ length: 25 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")} sa</option>)}</select>
-          <select size={5} value={minutePart} onChange={(e) => setMinutePart(Number(e.target.value))}>{Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")} dk</option>)}</select>
-        </div>
-        <button className="btn primary wide" onClick={() => setDurationOpen(false)}>Tamam</button>
-      </div></div>}
-      <label className="field">
-        <span>Odak profili</span>
-        <select value={focus} onChange={(e) => setFocus(e.target.value)}>
-          <option value="">Serbest (kısıtlama yok)</option>
-          {fam.focusProfiles.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.icon} {f.name}
-            </option>
+      <div className="extra-group">
+        <span className="pop-label">NE ÇALIŞACAK</span>
+        <div className="chips">
+          {fam.activities.map((a) => (
+            <button key={a.id} type="button" className={`chip-btn ${activity === a.id ? "on" : ""}`} onClick={() => setActivity(a.id)}>
+              {a.icon} {a.name}
+            </button>
           ))}
-        </select>
-      </label>
-      <div className="grid2">
-        <label className="field">
-          <span>Erken bitirme</span>
-          <select value={allowStop} onChange={(e) => setAllowStop(e.target.value as AllowStop)}>
-            <option value="no">İzin yok</option>
-            <option value="yes">İzinli</option>
-            <option value="notify">İzinli, bana bildir</option>
-          </select>
-        </label>
-        <label className="field">
-          <span>Odak değiştirme</span>
-          <select value={focusChange} onChange={(e) => setFocusChange(e.target.value as FocusChange)}>
-            <option value="no">İzin yok</option>
-            <option value="stricter">Sadece daha sıkıya</option>
-            <option value="free">Serbest</option>
-          </select>
-        </label>
-        <label className="field">
-          <span>Mola</span>
-          <select value={pauseMode} onChange={(e) => setPauseMode(e.target.value as PauseMode)}>
-            <option value="none">Yok</option>
-            <option value="limit">Sınırlı</option>
-            <option value="child">Çocuk karar versin</option>
-          </select>
-        </label>
-        {pauseMode === "limit" && (
-          <label className="field">
-            <span>Mola en fazla (dk)</span>
-            <input type="number" min={1} value={pauseMax} onChange={(e) => setPauseMax(e.target.value)} />
-          </label>
-        )}
+          <button type="button" className={`chip-btn ${activity === "other" ? "on" : ""}`} onClick={() => setActivity("other")}>
+            ✍️ Diğer
+          </button>
+        </div>
+        {activity === "other" && <input className="compact-input" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ne çalışacak?" />}
       </div>
+      <div className="extra-group">
+        <span className="pop-label">
+          SÜRE <Info>İkisi de 0 olursa süre sınırı olmayan kronometre başlar.</Info>
+        </span>
+        <div className="extra-row">
+          <MinuteStepper value={hours} onChange={setHours} max={12} unit="sa" label="Saat" />
+          <MinuteStepper value={minutePart} onChange={setMinutePart} max={59} label="Dakika" />
+          {hours === 0 && minutePart === 0 && <span className="muted small">⏱ Kronometre</span>}
+        </div>
+      </div>
+      <div className="extra-group">
+        <span className="pop-label">ODAK PROFİLİ</span>
+        <div className="chips">
+          <button type="button" className={`chip-btn ${focus === "" ? "on" : ""}`} onClick={() => setFocus("")}>
+            Serbest
+          </button>
+          {fam.focusProfiles.map((f) => (
+            <button key={f.id} type="button" className={`chip-btn ${focus === f.id ? "on" : ""}`} onClick={() => setFocus(f.id)}>
+              {f.icon} {f.name}
+            </button>
+          ))}
+        </div>
+      </div>
+        <div className="extra-group">
+          <span className="pop-label">ERKEN BİTİRME</span>
+          <div className="chips">
+            {([["no", "İzin yok"], ["yes", "İzinli"], ["notify", "İzinli, bana bildir"]] as const).map(([v, l]) => (
+              <button key={v} type="button" className={`chip-btn ${allowStop === v ? "on" : ""}`} onClick={() => setAllowStop(v as AllowStop)}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="extra-group">
+          <span className="pop-label">ODAK DEĞİŞTİRME</span>
+          <div className="chips">
+            {([["no", "İzin yok"], ["stricter", "Sadece daha sıkıya"], ["free", "Serbest"]] as const).map(([v, l]) => (
+              <button key={v} type="button" className={`chip-btn ${focusChange === v ? "on" : ""}`} onClick={() => setFocusChange(v as FocusChange)}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="extra-group">
+          <span className="pop-label">MOLA</span>
+          <div className="extra-row">
+            <div className="chips">
+              {([["none", "Yok"], ["limit", "Sınırlı"], ["child", "Çocuk karar versin"]] as const).map(([v, l]) => (
+                <button key={v} type="button" className={`chip-btn ${pauseMode === v ? "on" : ""}`} onClick={() => setPauseMode(v as PauseMode)}>
+                  {l}
+                </button>
+              ))}
+            </div>
+            {pauseMode === "limit" && <MinuteStepper value={Number(pauseMax) || 5} onChange={(v) => setPauseMax(String(v))} min={1} max={60} label="Mola en fazla" />}
+          </div>
+        </div>
       {err && <p className="error">{err}</p>}
-      <div className="row gap-s wrap">
-        <button className="btn primary" onClick={start}>
-          Başlat
+      <div className="extra-actions">
+        <button type="button" className="pill-btn ghost" onClick={saveDefaults}>
+          Varsayılan yap
         </button>
-        <button className="btn ghost" onClick={() => setOpen(false)}>
+        <span className="grow" />
+        <button type="button" className="pill-btn" onClick={() => setOpen(false)}>
           Vazgeç
         </button>
-        <button className="btn ghost small" onClick={saveDefaults}>
-          Bu izinleri varsayılan yap
+        <button type="button" className="pill-btn primary" onClick={start}>
+          Başlat
         </button>
       </div>
       {msg && <p className="ok small">{msg}</p>}

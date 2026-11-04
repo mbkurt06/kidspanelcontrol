@@ -278,26 +278,57 @@ export default function Tasks() {
                         <span className="dot" style={{ background: c.color, marginTop: 0 }} />
                         <b>{c.name}</b>
                         <span className="muted small">
-                          {list.filter((r) => r.status === "approved").length}/{list.filter((r) => r.status !== "claimed").length} tamam
+                          {list.filter((r) => r.status === "approved").length}/{list.filter((r) => r.status !== "claimed").length} görev tamam
                         </span>
                       </div>
-                      {list.map((r) => {
-                        const t = taskById[r.task_id];
-                        const g = groups.find((x) => x.id === t?.group_id);
-                        return (
-                          <div className="app-row" key={r.id}>
-                            <div className="grow">
-                              <b>{t?.title}</b>
-                              <div className="muted tiny">
-                                {g ? `${g.name} · ` : ""}{t ? dateTimeText(t.created_at) : ""}{t?.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}
+                      {(() => {
+                        const row = (r: TaskRun, sub = false) => {
+                          const t = taskById[r.task_id];
+                          return (
+                            <div className={`app-row ${sub ? "hist-sub" : ""}`} key={r.id}>
+                              <div className="grow">
+                                <b>{t?.title}</b>
+                                <div className="muted tiny">
+                                  {t ? dateTimeText(t.created_at) : ""}{t?.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}
+                                </div>
                               </div>
+                              <span className={`pill ${r.status === "approved" ? "" : r.status === "submitted" ? "accent" : r.status === "rejected" ? "warn" : "quiet"}`}>
+                                {STATUS_LABEL[r.status]}
+                              </span>
                             </div>
-                            <span className={`pill ${r.status === "approved" ? "" : r.status === "submitted" ? "accent" : r.status === "rejected" ? "warn" : "quiet"}`}>
-                              {STATUS_LABEL[r.status]}
-                            </span>
-                          </div>
-                        );
-                      })}
+                          );
+                        };
+                        const out: JSX.Element[] = [];
+                        const done = new Set<string>();
+                        for (const r of list) {
+                          const g = groups.find((x) => x.id === taskById[r.task_id]?.group_id);
+                          if (!g) { out.push(row(r)); continue; }
+                          if (done.has(g.id)) continue;
+                          done.add(g.id);
+                          const rs = list.filter((x) => taskById[x.task_id]?.group_id === g.id);
+                          const pr = groupProgress(g, tasks, runs, groupRuns, c.id);
+                          const key = `t|${g.id}|${c.id}`;
+                          const open = openHist === key;
+                          out.push(
+                            <div key={key} className="hist-group">
+                              <button className="app-row hist-group-head" onClick={() => setOpenHist(open ? null : key)} aria-expanded={open}>
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+                                <div className="grow">
+                                  <b>{g.name}</b>
+                                  <div className="muted tiny">{rs.length} görev · {pr.approved}/{pr.need} tamam{pr.submitted ? ` · ${pr.submitted} onay bekliyor` : ""}</div>
+                                </div>
+                                <span className={`pill ${pr.status === "met" ? "" : pr.submitted ? "accent" : pr.status === "failed" ? "warn" : "quiet"}`}>
+                                  {pr.status === "met" ? "Tamam" : pr.status === "failed" ? "Olmadı" : pr.submitted ? "Onay bekliyor" : "Devam ediyor"}
+                                </span>
+                                <span className={`collapse-arrow${open ? " open" : ""}`} aria-hidden="true" />
+                              </button>
+                              {open && rs.map((r) => row(r, true))}
+                              {open && <button className="pill-btn ghost" style={{ marginLeft: 22 }} onClick={() => select(g.id)}>Gruba git</button>}
+                            </div>
+                          );
+                        }
+                        return out;
+                      })()}
                     </div>
                   );
                 })}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabase";
 import type { TaskProof, TaskRecording } from "../lib/types";
+import { mediaUrls } from "../lib/media";
 
 type Seg = TaskProof & { url?: string; startMs: number; endMs: number };
 
@@ -39,7 +40,8 @@ export function RecordingList({ runId }: { runId: string }) {
       setRecs(list);
       const ps = (p ?? []) as TaskProof[];
       if (!ps.length) return setSegs([]);
-      const { data: signed } = await supabase.storage.from("orbit-proofs").createSignedUrls(ps.map((x) => x.path), 3600 * 3);
+      const urls = await mediaUrls(ps.map((x) => x.path), 3600 * 3);
+      const signed = urls.map((u) => ({ signedUrl: u }));
       setSegs(
         ps.map((x, i) => ({
           ...x,
@@ -65,7 +67,9 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
   const video = useRef<HTMLVideoElement>(null);
   const [open, setOpen] = useState(last);
   const [idx, setIdx] = useState(0);
-  const [speed, setSpeed] = useState(20);
+  // Gerçek zamanlı video (yeni kayıtlar) ya da zaman atlamalı (eski kayıtlar)
+  const realtime = (rec.video_fps || 40) === (rec.capture_fps || 2);
+  const [speed, setSpeed] = useState(realtime ? 10 : 20);
   const [playing, setPlaying] = useState(false);
   const [nowMs, setNowMs] = useState<number | null>(null);
   const seekTo = useRef<number | null>(null);
@@ -79,15 +83,31 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
     return { start, end, len: Math.max(1, end - start) };
   }, [rec, segs]);
 
+  // Tarayıcılar videoyu en fazla 2–16 kat hızlı oynatır; daha hızlısı için oynatırken ileri atlanır
+  const want = speed / ratio;
+  const applyRate = (v: HTMLVideoElement) => {
+    try { v.playbackRate = Math.min(want, 2); } catch { v.playbackRate = 1; }
+  };
   useEffect(() => {
     const v = video.current;
-    if (v) v.playbackRate = speed / ratio;
+    if (v) applyRate(v);
   }, [speed, ratio, idx]);
+  useEffect(() => {
+    if (!playing || want <= 2) return;
+    const step = (want - Math.min(want, 2)) * 0.25;
+    const t = setInterval(() => {
+      const v = video.current;
+      if (!v || v.paused || v.seeking) return;
+      if (v.duration && v.currentTime + step >= v.duration - 0.2) { v.currentTime = v.duration; return; }
+      v.currentTime += step;
+    }, 250);
+    return () => clearInterval(t);
+  }, [playing, want, idx]);
 
   function onLoaded() {
     const v = video.current;
     if (!v) return;
-    v.playbackRate = speed / ratio;
+    applyRate(v);
     if (seekTo.current != null) {
       v.currentTime = seekTo.current;
       seekTo.current = null;
@@ -109,7 +129,7 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
     const v = video.current;
     if (!v) return;
     if (v.paused) {
-      v.playbackRate = speed / ratio;
+      applyRate(v);
       v.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
     } else {
       v.pause();
@@ -156,7 +176,7 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
                 <video
                   ref={video}
                   src={seg?.url}
-                  muted
+                  muted={!(realtime && speed === 1)}
                   playsInline
                   preload="auto"
                   onLoadedMetadata={onLoaded}
@@ -191,7 +211,7 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
               <div className="row gap-xs wrap" style={{ alignItems: "center" }}>
                 <span className="muted tiny">{clock(span.start)}</span>
                 <span className="grow" />
-                {SPEEDS.map((x) => (
+                {(realtime ? [1, 2, 5, 10, 20, 40] : SPEEDS).map((x) => (
                   <button key={x} className={`chip small ${speed === x ? "on" : ""}`} onClick={() => setSpeed(x)}>
                     {x}x
                   </button>

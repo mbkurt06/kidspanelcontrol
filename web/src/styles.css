@@ -2054,3 +2054,5 @@ button.app-row { width: 100%; text-align: left; background: none; border: 0; col
 .ra-chip:hover .ra-x, .ra-chip:focus-visible .ra-x { opacity: 1; }
 .ra-chip:hover { background: var(--bad); border-color: var(--bad); }
 .ra-unl { margin: 0; }
+.guide-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2); padding: 2px 6px; border-radius: 6px; }

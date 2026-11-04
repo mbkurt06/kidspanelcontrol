@@ -23,6 +23,7 @@ import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
 import { RecordingList } from "../components/RecordingPlayer";
 import { STARTER_TEMPLATES } from "../lib/templates";
+import { mediaUrls } from "../lib/media";
 
 // --- Görev zaman aralığı: başlangıç (oluşturulma ya da ileri tarih) → bitiş ---
 const BERLIN = "Europe/Berlin";
@@ -578,8 +579,8 @@ function ReviewCard({ run, task, group, childName, color, onDone }: { run: TaskR
       setNotes((nt ?? []) as { attempt: number; note: string | null }[]);
       const list = (data ?? []) as TaskProof[];
       if (!list.length) return setProofs([]);
-      const { data: signed } = await supabase.storage.from("orbit-proofs").createSignedUrls(list.map((p) => p.path), 600);
-      setProofs(list.map((p, i) => ({ ...p, url: signed?.[i]?.signedUrl ?? undefined })));
+      const urls = await mediaUrls(list.map((p) => p.path), 600);
+      setProofs(list.map((p, i) => ({ ...p, url: urls[i] })));
     })();
   }, [run.id, run.attempts]);
 
@@ -609,7 +610,8 @@ function ReviewCard({ run, task, group, childName, color, onDone }: { run: TaskR
     if (approve) await supabase.from("time_grants").update({ vault: validity === "vault" }).eq("task_run_id", run.id);
     // Kanıtlar karar verilince hemen silinir (sunucu da 15 dk'da bir kontrol eder).
     const paths = (data ?? []) as string[];
-    if (paths.length) await supabase.storage.from("orbit-proofs").remove(paths);
+    const stPaths = paths.filter((p) => !p.includes("/od:"));
+    if (stPaths.length) await supabase.storage.from("orbit-proofs").remove(stPaths);
     setBusy(false);
     onDone();
   }

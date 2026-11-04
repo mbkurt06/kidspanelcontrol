@@ -6,6 +6,8 @@ import { relTime } from "../lib/util";
 import type { Device, ParentDevice } from "../lib/types";
 import { Info } from "../components/Info";
 import { TimeField } from "../components/DateTime";
+import { MinuteStepper } from "../components/MinuteStepper";
+import type { CloudStatus } from "../lib/media";
 import { currentPushTypes, currentSubscription, disablePush, enablePush, isIOS, isStandalone, PUSH_EVENT_TYPES, pushSupported, updatePushTypes } from "../lib/push";
 import { biometricEnabled, biometricSupported, disableBiometric, registerBiometric } from "../lib/biometric";
 
@@ -113,6 +115,7 @@ export default function Settings() {
       {err && <p className="error">{err}</p>}
       {msg && <p className="ok">{msg}</p>}
 
+      <OneDriveCard />
       <OpenHoursCard />
       <ThemeCard />
       <BiometricCard />
@@ -496,6 +499,127 @@ function ProofCard() {
         <option value={7}>7 gün saklansın</option>
         <option value={30}>30 gün saklansın</option>
       </select>
+    </div>
+  );
+}
+
+const OD_REDIRECT = "https://pwxbrkbljcknstjbccwu.supabase.co/functions/v1/orbit-onedrive";
+
+/** Kanıt dosyaları (fotoğraf, ekran görüntüsü, kamera ve ekran kaydı) ebeveynin OneDrive'ına */
+function OneDriveCard() {
+  const fam = useFamily();
+  const [st, setSt] = useState<CloudStatus | null>(null);
+  const [cid, setCid] = useState("");
+  const [secret, setSecret] = useState("");
+  const [edit, setEdit] = useState(false);
+  const [guide, setGuide] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const load = useCallback(async () => {
+    const { data } = await supabase.rpc("parent_cloud_status");
+    setSt(data as CloudStatus);
+  }, []);
+  useEffect(() => {
+    load();
+    const q = new URLSearchParams(window.location.search);
+    const r = q.get("onedrive");
+    if (r === "ok") setMsg("OneDrive bağlandı. Yeni kanıtlar artık OneDrive > Uygulamalar > Orbit klasörüne kaydedilir.");
+    else if (r === "error") setErr(`OneDrive bağlanamadı: ${q.get("reason") ?? "bilinmeyen hata"}`);
+    if (r) window.history.replaceState(null, "", window.location.pathname);
+  }, [load]);
+  async function call(body: Record<string, unknown>) {
+    const { data, error } = await supabase.functions.invoke("orbit-onedrive", { body });
+    if (error) {
+      let m = error.message;
+      try { m = (await (error as { context?: Response }).context?.json())?.error ?? m; } catch { /* */ }
+      throw new Error(m);
+    }
+    return data as Record<string, unknown>;
+  }
+  async function saveKeys() {
+    setErr(""); setMsg(""); setBusy(true);
+    try {
+      await call({ action: "setup", client_id: cid, client_secret: secret });
+      setSecret(""); setEdit(false);
+      await load();
+      setMsg("Anahtarlar kaydedildi. Şimdi “OneDrive'ı bağla”ya bas.");
+    } catch (e) { setErr(e instanceof Error && e.message === "bad_credentials" ? "Uygulama kimliği ya da gizli anahtar hatalı görünüyor." : errorText(e)); }
+    setBusy(false);
+  }
+  async function connect() {
+    setErr(""); setBusy(true);
+    try {
+      const d = await call({ action: "start", return_to: `${window.location.origin}/settings` });
+      window.location.href = String(d.url);
+    } catch (e) { setErr(errorText(e)); setBusy(false); }
+  }
+  async function disconnect() {
+    if (!confirm("OneDrive bağlantısı kesilsin mi? Yeni kanıtlar yine Orbit'in kendi deposuna kaydedilir.")) return;
+    setBusy(true);
+    try { await call({ action: "disconnect" }); await load(); } catch (e) { setErr(errorText(e)); }
+    setBusy(false);
+  }
+  async function setDays(d: number) {
+    await supabase.from("families").update({ cloud_retention_days: d }).eq("id", fam.familyId);
+    await load();
+  }
+  if (!st) return null;
+  return (
+    <div className="card">
+      <h2>
+        OneDrive <Info>Fotoğraflar, ekran görüntüleri, kamera ve ekran kayıtları OneDrive'ında “Uygulamalar &gt; Orbit &gt; çocuk adı &gt; tarih” klasörüne kaydedilir. Orbit sadece bu klasörü görür; diğer dosyalarına erişemez. Bağlı değilken kanıtlar Orbit'in kendi deposuna kaydedilir.</Info>
+      </h2>
+      {st.connected ? (
+        <div className="stack-s">
+          <div className="row gap-s"><span className="pill good">Bağlı</span><b>{st.account ?? "OneDrive"}</b></div>
+          <span className="muted small">Klasör: OneDrive › Uygulamalar › Orbit</span>
+          <div className="extra-row">
+            <span className="muted small">Kayıtlar kaç gün saklansın</span>
+            <MinuteStepper value={st.retention_days} onChange={setDays} min={1} max={45} unit="gün" label="Saklama günü" />
+          </div>
+          <div className="row gap-s">
+            <button className="pill-btn" onClick={connect} disabled={busy}>Yeniden bağlan</button>
+            <button className="pill-btn ghost" onClick={disconnect} disabled={busy}>Bağlantıyı kes</button>
+          </div>
+        </div>
+      ) : (
+        <div className="stack-s">
+          {st.configured && !edit ? (
+            <>
+              <span className="muted small">Anahtarlar kayıtlı. Microsoft hesabınla giriş yapıp izin ver.</span>
+              <div className="row gap-s">
+                <button className="pill-btn primary" onClick={connect} disabled={busy}>OneDrive'ı bağla</button>
+                <button className="pill-btn ghost" onClick={() => setEdit(true)}>Anahtarları değiştir</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <label className="field"><span>Uygulama (istemci) kimliği</span><input value={cid} onChange={(e) => setCid(e.target.value)} placeholder="00000000-0000-0000-0000-000000000000" /></label>
+              <label className="field"><span>Gizli anahtar (değer)</span><input type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Azure'da oluşturduğun gizli anahtarın değeri" /></label>
+              <div className="row gap-s">
+                <button className="pill-btn primary" onClick={saveKeys} disabled={busy || !cid || !secret}>Kaydet</button>
+                {st.configured && <button className="pill-btn ghost" onClick={() => setEdit(false)}>Vazgeç</button>}
+              </div>
+            </>
+          )}
+          <button className="section-toggle" aria-expanded={guide} onClick={() => setGuide((x) => !x)}>
+            Nasıl kurulur (5 dk) <span className={`collapse-arrow${guide ? " open" : ""}`} aria-hidden="true" />
+          </button>
+          {guide && (
+            <ol className="small guide-list">
+              <li><a href="https://portal.azure.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade" target="_blank" rel="noreferrer">Azure portalında “Uygulama kayıtları”</a> sayfasını aç, OneDrive'daki Microsoft hesabınla giriş yap.</li>
+              <li><b>Yeni kayıt</b>: Ad <b>Orbit</b>. Hesap türü: <b>Yalnızca kişisel Microsoft hesapları</b>.</li>
+              <li>Yeniden yönlendirme URI'si: platform <b>Web</b>, adres:<br /><code className="copy" onClick={() => navigator.clipboard?.writeText(OD_REDIRECT)}>{OD_REDIRECT}</code> <span className="muted tiny">(dokununca kopyalanır)</span></li>
+              <li><b>Kaydet</b>'e bas. Açılan sayfadaki <b>Uygulama (istemci) kimliği</b>'ni yukarıdaki ilk kutuya yapıştır.</li>
+              <li>Soldan <b>Sertifikalar ve gizli diziler</b> → <b>Yeni istemci gizli dizisi</b> → süre 24 ay → Ekle. Çıkan <b>Değer</b>'i (Kimlik değil) ikinci kutuya yapıştır.</li>
+              <li><b>Kaydet</b>, sonra <b>OneDrive'ı bağla</b>. Microsoft'un sorduğu izni onayla.</li>
+            </ol>
+          )}
+        </div>
+      )}
+      {err && <p className="error">{err}</p>}
+      {msg && <p className="ok">{msg}</p>}
     </div>
   );
 }

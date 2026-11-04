@@ -23,12 +23,28 @@ Deno.serve(async (req) => {
     .limit(500);
   if (error) return new Response(error.message, { status: 500 });
   if (!rows?.length) return Response.json({ deleted: 0 });
-  const { error: delErr } = await admin.storage.from("orbit-proofs").remove(rows.map((r) => r.path));
-  if (delErr) return new Response(delErr.message, { status: 500 });
+  // OneDrive'daki kanıtlar ("…/od:<id>") orbit-onedrive ile, diğerleri Storage'dan silinir
+  const od = rows.filter((r) => r.path.includes("/od:"));
+  const st = rows.filter((r) => !r.path.includes("/od:"));
+  const doneIds: string[] = [];
+  if (st.length) {
+    const { error: delErr } = await admin.storage.from("orbit-proofs").remove(st.map((r) => r.path));
+    if (delErr) return new Response(delErr.message, { status: 500 });
+    doneIds.push(...st.map((r) => r.id));
+  }
+  if (od.length) {
+    const res = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/orbit-onedrive`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-orbit-hook": (c as Record<string, string>).orbit_hook_secret, Authorization: `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}` },
+      body: JSON.stringify({ action: "delete", paths: od.map((r) => r.path) }),
+    });
+    if (res.ok) {
+      const { deleted } = await res.json();
+      const set = new Set<string>(deleted ?? []);
+      doneIds.push(...od.filter((r) => set.has(r.path)).map((r) => r.id));
+    }
+  }
   const now = new Date().toISOString();
-  await admin
-    .from("task_proofs")
-    .update({ file_deleted_at: now, removed_at: now })
-    .in("id", rows.map((r) => r.id));
-  return Response.json({ deleted: rows.length });
+  if (doneIds.length) await admin.from("task_proofs").update({ file_deleted_at: now, removed_at: now }).in("id", doneIds);
+  return Response.json({ deleted: doneIds.length });
 });

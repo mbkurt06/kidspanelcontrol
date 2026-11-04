@@ -38,6 +38,9 @@ type Form = {
   record_on: boolean;
   record_minutes: string;
   record_min_minutes: string;
+  shot_on: boolean;
+  shot_min: string;
+  shot_max: string;
   record_camera: "back" | "front" | "choose";
   record_pause: "none" | "limit" | "child";
   record_pause_max: string;
@@ -64,6 +67,8 @@ function defaultsOf(f: Form): TaskDefaults {
     reward_expires_days: f.reward_expires_days ? Number(f.reward_expires_days) : null,
     record_minutes: f.record_on ? Number(f.record_minutes) || 60 : null,
     record_min_minutes: f.record_on && f.record_min_minutes ? Number(f.record_min_minutes) : null,
+    screenshot_min: f.shot_on ? Number(f.shot_min) || 1 : null,
+    screenshot_max: f.shot_on ? Number(f.shot_max) || 1 : null,
     record_camera: f.record_camera,
     record_pause: f.record_pause,
     record_pause_max: f.record_pause === "limit" ? Number(f.record_pause_max) || 10 : null,
@@ -91,6 +96,9 @@ function applyDefaults(f: Form, d: TaskDefaults | null | undefined, allChildren:
     record_on: d.record_minutes != null,
     record_minutes: String(d.record_minutes ?? f.record_minutes),
     record_min_minutes: d.record_min_minutes == null ? "" : String(d.record_min_minutes),
+    shot_on: d.screenshot_min != null,
+    shot_min: String(d.screenshot_min ?? 1),
+    shot_max: String(d.screenshot_max ?? 3),
     record_camera: d.record_camera ?? f.record_camera,
     record_pause: d.record_pause ?? f.record_pause,
     record_pause_max: String(d.record_pause_max ?? f.record_pause_max),
@@ -127,6 +135,9 @@ const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; 
   record_on: false,
   record_minutes: "60",
   record_min_minutes: "",
+  shot_on: false,
+  shot_min: "1",
+  shot_max: "3",
   record_camera: "back",
   record_pause: "child",
   record_pause_max: "10",
@@ -136,11 +147,14 @@ const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; 
   mandatory: false,
 });
 
-type RecFields = { record_minutes?: number | null; record_min_minutes?: number | null; record_camera?: Form["record_camera"]; record_pause?: Form["record_pause"]; record_pause_max?: number | null };
+type RecFields = { screenshot_min?: number | null; screenshot_max?: number | null; record_minutes?: number | null; record_min_minutes?: number | null; record_camera?: Form["record_camera"]; record_pause?: Form["record_pause"]; record_pause_max?: number | null };
 const recForm = (t: RecFields) => ({
   record_on: t.record_minutes != null,
   record_minutes: t.record_minutes?.toString() ?? "60",
   record_min_minutes: t.record_min_minutes?.toString() ?? "",
+  shot_on: t.screenshot_min != null,
+  shot_min: String(t.screenshot_min ?? 1),
+  shot_max: String(t.screenshot_max ?? t.screenshot_min ?? 3),
   record_camera: t.record_camera ?? "back",
   record_pause: t.record_pause ?? "child",
   record_pause_max: t.record_pause_max?.toString() ?? "10",
@@ -329,6 +343,8 @@ export default function TaskEdit() {
       group_id: f.group_id || null,
       active: f.active,
       record_minutes: f.record_on ? Math.min(240, Math.max(1, Number(f.record_minutes) || 60)) : null,
+      screenshot_min: f.shot_on ? Math.max(1, Math.min(10, Number(f.shot_min) || 1)) : null,
+      screenshot_max: f.shot_on ? Math.max(Number(f.shot_min) || 1, Math.min(10, Number(f.shot_max) || 1)) : null,
       record_min_minutes: f.record_on && f.record_min_minutes ? Math.min(Math.max(1, Number(f.record_minutes) || 60), Math.max(1, Number(f.record_min_minutes))) : null,
       record_camera: f.record_camera,
       record_pause: f.record_pause,
@@ -365,6 +381,8 @@ export default function TaskEdit() {
         mandatory: false,
         record_minutes: row.record_minutes,
         record_min_minutes: row.record_min_minutes,
+        screenshot_min: row.screenshot_min,
+        screenshot_max: row.screenshot_max,
         record_camera: row.record_camera,
         record_pause: row.record_pause,
         record_pause_max: row.record_pause_max,
@@ -513,20 +531,34 @@ export default function TaskEdit() {
       <div className="card">
         <h2>Kanıt <Info>Çocuk yalnızca Orbit kamerasıyla kanıt gönderir (fotoğraf ve/veya kamera kaydı); onay veya redden sonra dosya silinir. Kayıt galeriden seçilemez.</Info></h2>
         <div className="row gap-xs wrap">
-          <button className={`chip small ${f.proof === "none" && !f.record_on ? "on" : ""}`} onClick={() => setF((x) => ({ ...x, proof: "none", before_after: false, record_on: false }))}>
+          <button className={`chip small ${f.proof === "none" && !f.record_on && !f.shot_on ? "on" : ""}`} onClick={() => setF((x) => ({ ...x, proof: "none", before_after: false, record_on: false, shot_on: false }))}>
             Kanıt yok
           </button>
-          <button className={`chip small ${f.proof === "photo" && !f.before_after ? "on" : ""}`} onClick={() => { set("proof", "photo"); set("before_after", false); }}>
+          <button className={`chip small ${f.proof === "photo" && !f.before_after ? "on" : ""}`} onClick={() => setF((x) => (x.proof === "photo" && !x.before_after ? { ...x, proof: "none" } : { ...x, proof: "photo", before_after: false }))}>
             Tamamlanınca fotoğraf
           </button>
-          <button className={`chip small ${f.proof === "photo" && f.before_after ? "on" : ""}`} onClick={() => { set("proof", "photo"); set("before_after", true); }}>
+          <button className={`chip small ${f.proof === "photo" && f.before_after ? "on" : ""}`} onClick={() => setF((x) => (x.proof === "photo" && x.before_after ? { ...x, proof: "none", before_after: false } : { ...x, proof: "photo", before_after: true }))}>
             Başlangıç + tamamlanınca fotoğraf
           </button>
           <button className={`chip small ${f.record_on ? "on" : ""}`} aria-pressed={f.record_on} onClick={() => set("record_on", !f.record_on)}>
             {f.record_on ? "✓ " : ""}📹 Kamera kaydı
           </button>
+          <button className={`chip small ${f.shot_on ? "on" : ""}`} aria-pressed={f.shot_on} onClick={() => set("shot_on", !f.shot_on)}>
+            {f.shot_on ? "✓ " : ""}📱 Ekran görüntüsü
+          </button>
           {f.proof !== "none" && f.proof !== "photo" && <span className="pill quiet">{PROOF_LABEL[f.proof]}</span>}
         </div>
+        {f.shot_on && (
+          <div className="extra-group">
+            <span className="pop-label">EKRAN GÖRÜNTÜSÜ <Info>Çocuk telefonda ekran görüntüsü alıp (ör. Duolingo sonucu) Orbit'ten ekler. En az kadar eklemeden görevi gönderemez, en fazladan çok ekleyemez.</Info></span>
+            <div className="extra-row">
+              <span className="muted small">En az</span>
+              <MinuteStepper value={Number(f.shot_min) || 1} onChange={(v) => setF((x) => ({ ...x, shot_min: String(v), shot_max: Number(x.shot_max) < v ? String(v) : x.shot_max }))} min={1} max={10} unit="adet" label="En az ekran görüntüsü" />
+              <span className="muted small">En fazla</span>
+              <MinuteStepper value={Number(f.shot_max) || 1} onChange={(v) => setF((x) => ({ ...x, shot_max: String(v), shot_min: Number(x.shot_min) > v ? String(v) : x.shot_min }))} min={1} max={10} unit="adet" label="En fazla ekran görüntüsü" />
+            </div>
+          </div>
+        )}
         {f.record_on && <span className="muted tiny">Görev boyunca Orbit kamerası kayıt alır; kayıt sana gelir, izleyip onaylarsın. Fotoğrafla birlikte de seçilebilir.</span>}
         {f.record_on && (
           <>

@@ -87,7 +87,29 @@ export default function Tasks() {
     const to = historyView === "range" ? rangeTo : today;
     return r.day >= from && r.day <= to;
   });
-  const singles = tasks.filter((t) => !t.group_id && forChild(t.child_ids));
+  // Tek görevler: tekrarlılar ve henüz bitmemiş / bugüne ait tek seferlikler. Bitmiş eski görevler geçmişte görünür.
+  const singles = tasks.filter((t) => {
+    if (t.group_id || !forChild(t.child_ids)) return false;
+    if (t.recurrence === "days") return true;
+    const rs = runs.filter((r) => r.task_id === t.id);
+    if (!rs.length) return true;
+    return rs.some((r) => ["open", "started", "submitted", "rejected"].includes(r.status) || r.day === today);
+  });
+  const [openHist, setOpenHist] = useState<string | null>(null);
+  // Geçmiş: gruptaki görevler grup adıyla tek satır
+  const historyRows = useMemo(() => {
+    const out: Array<{ key: string; kind: "task"; run: TaskRun } | { key: string; kind: "group"; group: TaskGroup; child: string; day: string; runs: TaskRun[] }> = [];
+    const seen = new Map<string, number>();
+    for (const r of history) {
+      const g = groups.find((x) => x.id === taskById[r.task_id]?.group_id);
+      if (!g) { out.push({ key: r.id, kind: "task", run: r }); continue; }
+      const k = `${g.id}|${r.child_id}|${r.day}`;
+      const i = seen.get(k);
+      if (i == null) { seen.set(k, out.length); out.push({ key: k, kind: "group", group: g, child: r.child_id, day: r.day, runs: [r] }); }
+      else (out[i] as { runs: TaskRun[] }).runs.push(r);
+    }
+    return out;
+  }, [history, groups, taskById]);
   const shownGroups = groups.filter((g) => forChild(g.child_ids));
   const selected = groups.find((g) => g.id === selectedId) ?? null;
 
@@ -326,16 +348,46 @@ export default function Tasks() {
                   </div>
                 )}
                 {!history.length && <p className="muted small">Bu görünümde görev yok.</p>}
-                {history.map((r) => {
-                  const t = taskById[r.task_id];
+                {historyRows.map((row) => {
+                  if (row.kind === "task") {
+                    const r = row.run;
+                    const t = taskById[r.task_id];
+                    return (
+                      <Link to={t ? `/tasks/${t.id}` : "/tasks"} className="app-row" key={row.key}>
+                        <div className="grow">
+                          <b>{t?.title ?? "Görev"}</b>
+                          <div className="muted tiny">{childName(r.child_id)} · {r.day} · {STATUS_LABEL[r.status]}{t?.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}</div>
+                        </div>
+                        <Icon name="chevron" size={18} />
+                      </Link>
+                    );
+                  }
+                  const gr = groupRuns.find((x) => x.group_id === row.group.id && x.child_id === row.child && x.day === row.day);
+                  const pr = groupProgress(row.group, tasks, runs, groupRuns, row.child, row.day);
+                  const open = openHist === row.key;
                   return (
-                    <Link to={t ? `/tasks/${t.id}` : "/tasks"} className="app-row" key={r.id}>
-                      <div className="grow">
-                        <b>{t?.title ?? "Görev"}</b>
-                        <div className="muted tiny">{childName(r.child_id)} · {r.day} · {STATUS_LABEL[r.status]}{t?.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}</div>
-                      </div>
-                      <Icon name="chevron" size={18} />
-                    </Link>
+                    <div key={row.key} className="hist-group">
+                      <button className="app-row hist-group-head" onClick={() => setOpenHist(open ? null : row.key)} aria-expanded={open}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+                        <div className="grow">
+                          <b>{row.group.name}</b>
+                          <div className="muted tiny">{childName(row.child)} · {row.day} · {pr.approved}/{pr.need} görev{gr?.status === "met" ? " · koşul sağlandı" : gr?.status === "failed" ? " · koşul sağlanmadı" : ""}</div>
+                        </div>
+                        <span className={`collapse-arrow${open ? " open" : ""}`} aria-hidden="true" />
+                      </button>
+                      {open && row.runs.map((r) => {
+                        const t = taskById[r.task_id];
+                        return (
+                          <Link to={t ? `/tasks/${t.id}` : "/tasks"} className="app-row hist-sub" key={r.id}>
+                            <div className="grow">
+                              <b>{t?.title ?? "Görev"}</b>
+                              <div className="muted tiny">{STATUS_LABEL[r.status]}{r.granted_minutes ? ` · ${r.granted_minutes} dk` : ""}</div>
+                            </div>
+                            <Icon name="chevron" size={18} />
+                          </Link>
+                        );
+                      })}
+                    </div>
                   );
                 })}
               </div>
@@ -486,7 +538,7 @@ function ReviewCard({ run, task, group, childName, color, onDone }: { run: TaskR
             const n = notes.find((x) => x.attempt === a);
             return (
               <div key={a} className={`proof-attempt ${last ? "current" : ""}`}>
-                {proofs.filter((p) => p.stage !== "before" && p.attempt === a).map((p) => proofFig(p, last ? (attempts.length > 1 ? `${a + 1}. deneme · şimdi` : "Sonrası") : `${a + 1}. deneme`))}
+                {proofs.filter((p) => p.stage !== "before" && p.attempt === a).map((p) => proofFig(p, p.stage === "screenshot" ? "Ekran görüntüsü" : last ? (attempts.length > 1 ? `${a + 1}. deneme · şimdi` : "Sonrası") : `${a + 1}. deneme`))}
                 {!last && <p className="small warn-text">↩ {n?.note ? `Reddedildi: ${n.note}` : "Reddedildi"}</p>}
               </div>
             );

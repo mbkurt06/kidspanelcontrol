@@ -121,6 +121,8 @@ export type TaskDefaults = Partial<{
   reward_expires_days: number | null;
   record_minutes: number | null;
   record_min_minutes: number | null;
+  screenshot_min: number | null;
+  screenshot_max: number | null;
   record_camera: "back" | "front" | "choose";
   record_pause: "none" | "limit" | "child";
   record_pause_max: number | null;
@@ -360,6 +362,8 @@ export type TaskTemplate = {
   mandatory: boolean;
   record_minutes?: number | null;
   record_min_minutes?: number | null;
+  screenshot_min?: number | null;
+  screenshot_max?: number | null;
   record_camera?: "back" | "front" | "choose";
   record_pause?: "none" | "limit" | "child";
   record_pause_max?: number | null;
@@ -406,7 +410,7 @@ export type TaskRun = {
 export type TaskProof = {
   id: string;
   run_id: string;
-  stage: "before" | "after" | "single" | "record";
+  stage: "before" | "after" | "single" | "record" | "screenshot";
   media: "photo" | "video" | "timelapse";
   path: string;
   attempt: number;

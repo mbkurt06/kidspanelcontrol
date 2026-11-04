@@ -503,9 +503,9 @@ export default function TaskEdit() {
       </div>}
 
       <div className="card">
-        <h2>Kanıt <Info>Çocuk yalnızca Orbit kamerasıyla kanıt gönderir; onay veya redden sonra dosya silinir.</Info></h2>
+        <h2>Kanıt <Info>Çocuk yalnızca Orbit kamerasıyla kanıt gönderir (fotoğraf ve/veya kamera kaydı); onay veya redden sonra dosya silinir. Kayıt galeriden seçilemez.</Info></h2>
         <div className="row gap-xs wrap">
-          <button className={`chip small ${f.proof === "none" ? "on" : ""}`} onClick={() => { set("proof", "none"); set("before_after", false); }}>
+          <button className={`chip small ${f.proof === "none" && !f.record_on ? "on" : ""}`} onClick={() => setF((x) => ({ ...x, proof: "none", before_after: false, record_on: false }))}>
             Kanıt yok
           </button>
           <button className={`chip small ${f.proof === "photo" && !f.before_after ? "on" : ""}`} onClick={() => { set("proof", "photo"); set("before_after", false); }}>
@@ -514,8 +514,48 @@ export default function TaskEdit() {
           <button className={`chip small ${f.proof === "photo" && f.before_after ? "on" : ""}`} onClick={() => { set("proof", "photo"); set("before_after", true); }}>
             Başlangıç + tamamlanınca fotoğraf
           </button>
+          <button className={`chip small ${f.record_on ? "on" : ""}`} aria-pressed={f.record_on} onClick={() => set("record_on", !f.record_on)}>
+            {f.record_on ? "✓ " : ""}📹 Kamera kaydı
+          </button>
           {f.proof !== "none" && f.proof !== "photo" && <span className="pill quiet">{PROOF_LABEL[f.proof]}</span>}
         </div>
+        {f.record_on && <span className="muted tiny">Görev boyunca Orbit kamerası kayıt alır; kayıt sana gelir, izleyip onaylarsın. Fotoğrafla birlikte de seçilebilir.</span>}
+        {f.record_on && (
+          <>
+            <div className="row gap-s wrap" style={{ alignItems: "center" }}>
+              {["30", "45", "60", "90", "120"].map((m) => (
+                <button key={m} className={`chip small ${f.record_minutes === m ? "on" : ""}`} onClick={() => set("record_minutes", m)}>
+                  {m} dk
+                </button>
+              ))}
+              <input className="mini" type="number" min={1} max={240} value={f.record_minutes} onChange={(e) => set("record_minutes", e.target.value)} aria-label="Kayıt süresi" />
+            </div>
+            <label className="field">
+              <span>Kamera</span>
+              <select value={f.record_camera} onChange={(e) => set("record_camera", e.target.value as Form["record_camera"])}>
+                <option value="back">Arka kamera (oda / masa)</option>
+                <option value="front">Ön kamera (çocuğu görür)</option>
+                <option value="choose">Çocuk seçsin</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Mola</span>
+              <select value={f.record_pause} onChange={(e) => set("record_pause", e.target.value as Form["record_pause"])}>
+                <option value="none">Mola yok</option>
+                <option value="limit">Sınırlı mola</option>
+                <option value="child">Serbest: istediği zaman mola verip devam etsin</option>
+              </select>
+            </label>
+            {f.record_pause === "limit" && (
+              <div className="row gap-s" style={{ alignItems: "center" }}>
+                <span className="small">Toplam en fazla</span>
+                <input className="mini" type="number" min={1} value={f.record_pause_max} onChange={(e) => set("record_pause_max", e.target.value)} aria-label="Mola dakika" />
+                <span className="small">dk (dolunca kayıt kendiliğinden devam eder)</span>
+              </div>
+            )}
+          </>
+        )}
+
         {f.proof !== "none" && f.proof !== "photo" && <p className="muted tiny"><Info>Bu eski görev video kanıtı kullanıyor; değiştirmek için yukarıdaki fotoğraf seçeneğini seçebilirsin.</Info></p>}
         {f.proof === "photo" && (
           <>
@@ -554,49 +594,6 @@ export default function TaskEdit() {
           </select>
         </label>
         {!fam.focusProfiles.length && <p className="muted tiny">Orbit menü kısıtı için önce Kurallar → Odak profilleri bölümünden profil oluştur.</p>}
-      </div>
-
-      <div className="card">
-        <h2>📹 Kamera kaydı <Info>Kayıt görev boyunca telefondaki Orbit kamerasından alınır; galeri kullanılmaz.</Info></h2>
-        <label className="check">
-          <input type="checkbox" checked={f.record_on} onChange={(e) => set("record_on", e.target.checked)} />
-          Görev süresince kamerayla kayıt yapsın
-        </label>
-        {f.record_on && (
-          <>
-            <div className="row gap-s wrap" style={{ alignItems: "center" }}>
-              {["30", "45", "60", "90", "120"].map((m) => (
-                <button key={m} className={`chip small ${f.record_minutes === m ? "on" : ""}`} onClick={() => set("record_minutes", m)}>
-                  {m} dk
-                </button>
-              ))}
-              <input className="mini" type="number" min={1} max={240} value={f.record_minutes} onChange={(e) => set("record_minutes", e.target.value)} aria-label="Kayıt süresi" />
-            </div>
-            <label className="field">
-              <span>Kamera</span>
-              <select value={f.record_camera} onChange={(e) => set("record_camera", e.target.value as Form["record_camera"])}>
-                <option value="back">Arka kamera (oda / masa)</option>
-                <option value="front">Ön kamera (çocuğu görür)</option>
-                <option value="choose">Çocuk seçsin</option>
-              </select>
-            </label>
-            <label className="field">
-              <span>Mola</span>
-              <select value={f.record_pause} onChange={(e) => set("record_pause", e.target.value as Form["record_pause"])}>
-                <option value="none">Mola yok</option>
-                <option value="limit">Sınırlı mola</option>
-                <option value="child">Serbest: istediği zaman mola verip devam etsin</option>
-              </select>
-            </label>
-            {f.record_pause === "limit" && (
-              <div className="row gap-s" style={{ alignItems: "center" }}>
-                <span className="small">Toplam en fazla</span>
-                <input className="mini" type="number" min={1} value={f.record_pause_max} onChange={(e) => set("record_pause_max", e.target.value)} aria-label="Mola dakika" />
-                <span className="small">dk (dolunca kayıt kendiliğinden devam eder)</span>
-              </div>
-            )}
-          </>
-        )}
       </div>
 
       <div className="card">

@@ -70,7 +70,7 @@ function AgendaForm({ defaultChildren, allChildren, onClose, onSaved }: { defaul
     <div className="row gap-xs wrap">{allChildren.map((c) => <button key={c.id} className={`chip small ${children.includes(c.id) ? "on" : ""}`} onClick={() => setChildren((v) => v.includes(c.id) ? v.filter((id) => id !== c.id) : [...v, c.id])}>{c.name}</button>)}</div>
     <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Başlık" />
     <DateField value={date} onChange={setDate} />
-    <button className="icon-btn disclosure" onClick={() => setExtra((v) => !v)} aria-label="Ek alanlar">⌄</button>
+    <button className="icon-btn disclosure" onClick={() => setExtra((v) => !v)} aria-label="Ek alanlar"><span className={`collapse-arrow${extra ? " open" : ""}`} aria-hidden="true" /></button>
     {extra && <div className="stack-s"><TimeField clearable value={time} onChange={setTime} label="Saat" /><input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Açıklama" /></div>}
     {error && <p className="error small">{error}</p>}
     <button className="btn primary" disabled={busy} onClick={save}>{busy ? "Ekleniyor…" : "Ekle"}</button>

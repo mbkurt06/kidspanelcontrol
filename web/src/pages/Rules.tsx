@@ -64,12 +64,12 @@ export default function Rules() {
       {err && <p className="error">{err}</p>}
 
       <details className="card section-collapse-card">
-        <summary className="section-collapse-head"><span>🔒 Kilit <Info>Eski kilit kuralları korunur; yeni kullanım profilleri bunların yerine geçebilir.</Info></span><span className="collapse-arrow">⌄</span></summary>
+        <summary className="section-collapse-head"><span>🔒 Kilit <Info>Eski kilit kuralları korunur; yeni kullanım profilleri bunların yerine geçebilir.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <Lock inline />
       </details>
 
       <details className="card section-collapse-card">
-        <summary className="section-collapse-head"><span>⏳ Kapalıyken verilen süre <Info>Kapalı ya da sınırlı saatte ana ekrandan süre verince telefonun nasıl açılacağı. Açık saatlerde verilen süre her zaman kalan süreye eklenir.</Info></span><span className="collapse-arrow">⌄</span></summary>
+        <summary className="section-collapse-head"><span>⏳ Kapalıyken verilen süre <Info>Kapalı ya da sınırlı saatte ana ekrandan süre verince telefonun nasıl açılacağı. Açık saatlerde verilen süre her zaman kalan süreye eklenir.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <div className="stack">
           {fam.children.map((c) => (
             <ClosedGrantSetting key={c.id} child={c} />
@@ -78,7 +78,7 @@ export default function Rules() {
       </details>
 
       <details className="card section-collapse-card">
-        <summary className="section-collapse-head"><span>Uygulama grupları</span><span className="collapse-arrow">⌄</span></summary>
+        <summary className="section-collapse-head"><span>Uygulama grupları</span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <Link to="/rules/groups" className="link-card inner-link">
           <div className="row wrap gap-s">
             {fam.groups.map((g) => <span className="pill" key={g.id} style={{ borderColor: g.color }}>{g.name} · {Object.values(fam.members).filter((x) => x === g.id).length}</span>)}
@@ -89,7 +89,7 @@ export default function Rules() {
       </details>
 
       <details className="card section-collapse-card" open>
-        <summary className="section-collapse-head"><span>Uygulama kullanım kuralları <Info>Uygulamanın ne kadar açık kalacağını ve günlük süreden düşüp düşmeyeceğini tanımlar.</Info></span><span className="collapse-arrow">⌄</span></summary>
+        <summary className="section-collapse-head"><span>Uygulama kullanım kuralları <Info>Uygulamanın ne kadar açık kalacağını ve günlük süreden düşüp düşmeyeceğini tanımlar.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <div className="stack">
           <div className="row between"><span className="muted small">Uygulamaların süre ve izin kuralları</span><button className="btn small" onClick={newAppRule}><Icon name="plus" size={16} /> Yeni</button></div>
           {fam.appUsageRules.map((r) => <Link to={`/rules/app-rule/${r.id}`} className="card link-card" key={r.id}><div className="grow"><b>{r.name}</b><div className="muted small">{r.mode === "open" ? "Açık" : r.mode === "blocked" ? "Kapalı" : `${r.max_minutes == null ? "Sınırsız" : `${r.max_minutes} dk`} · ${r.counts_toward_daily ? "günlük süreden düşer" : "günlük süreden düşmez"}`}{r.start_time && r.end_time ? ` · ${r.start_time.slice(0, 5)}–${r.end_time.slice(0, 5)}` : ""}</div></div><Icon name="chevron" size={18} /></Link>)}
@@ -97,7 +97,7 @@ export default function Rules() {
       </details>
 
       <details className="card section-collapse-card">
-        <summary className="section-collapse-head"><span>Günlük program <Info>Hafta içi, hafta sonu ve özel günlerin hangi kullanım profiline bağlanacağını ve saatlerini tutar.</Info></span><span className="collapse-arrow">⌄</span></summary>
+        <summary className="section-collapse-head"><span>Günlük program <Info>Hafta içi, hafta sonu ve özel günlerin hangi kullanım profiline bağlanacağını ve saatlerini tutar.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <div className="stack">
           <div className="row between"><span className="muted small">Gün ve saat profilleri</span><button className="btn small" onClick={newProfile}><Icon name="plus" size={16} /> Yeni</button></div>
           {fam.profiles.map((p) => {
@@ -143,7 +143,7 @@ export default function Rules() {
       </details>
 
       <details className="card section-collapse-card">
-        <summary className="section-collapse-head"><span>Odak profilleri <Info>Sayaç çalışırken telefonda nelerin açık kalacağını belirler. Kuralların üstüne yalnızca ek kısıt koyar.</Info></span><span className="collapse-arrow">⌄</span></summary>
+        <summary className="section-collapse-head"><span>Odak profilleri <Info>Sayaç çalışırken telefonda nelerin açık kalacağını belirler. Kuralların üstüne yalnızca ek kısıt koyar.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <div className="stack">
           <div className="row between"><span className="muted small">Sayaç ve etkinlik profilleri</span><button className="btn small" onClick={newFocus}><Icon name="plus" size={16} /> Yeni</button></div>
           {fam.focusProfiles.map((f) => (
@@ -181,7 +181,7 @@ export default function Rules() {
       </details>
 
       <details className="card section-collapse-card">
-        <summary className="section-collapse-head"><span>Kullanım profilleri <Info>Uyku, ders, dinlenme ve serbest gibi profillerde kiosk, menü, uygulama ve süre davranışını belirler.</Info></span><span className="collapse-arrow">⌄</span></summary>
+        <summary className="section-collapse-head"><span>Kullanım profilleri <Info>Uyku, ders, dinlenme ve serbest gibi profillerde kiosk, menü, uygulama ve süre davranışını belirler.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <div className="stack">
           <div className="row between"><span className="muted small">Kiosk, uygulama ve süre profilleri</span><button className="btn small" onClick={newMode}><Icon name="plus" size={16} /> Yeni</button></div>
           {fam.modes.map((m) => (

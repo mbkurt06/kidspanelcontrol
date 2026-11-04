@@ -116,8 +116,8 @@ export default function Groups() {
           <div className="card" key={g.id}>
             <div className="row gap-s" style={{ alignItems: "center" }}>
               <span className="dot" style={{ background: g.color }} />
-              <button className="link grow" style={{ textAlign: "left" }} onClick={() => setOpen(isOpen ? null : g.id)}>
-                <span aria-hidden="true">{isOpen ? "⌃" : "⌄"}</span> <b>{g.name}</b> <span className="muted small">· {list.length} uygulama</span>
+              <button className="link grow collapse-btn" onClick={() => setOpen(isOpen ? null : g.id)}>
+                <b>{g.name}</b> <span className="muted small">· {list.length} uygulama</span><span className={`collapse-arrow${isOpen ? " open" : ""}`} aria-hidden="true" />
               </button>
               <button className="icon-btn" aria-label="Yeniden adlandır" onClick={() => rename(g.id, g.name)}>
                 ✎

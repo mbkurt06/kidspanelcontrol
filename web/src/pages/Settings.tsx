@@ -178,7 +178,7 @@ export default function Settings() {
             {pushOn && (
               <div className="stack gap-s">
                 <button className="section-toggle" aria-expanded={pushPrefsOpen} onClick={() => setPushPrefsOpen((v) => !v)}>
-                  Bildirim türleri <span aria-hidden>{pushPrefsOpen ? "⌃" : "⌄"}</span>
+                  Bildirim türleri <span className={`collapse-arrow${pushPrefsOpen ? " open" : ""}`} aria-hidden="true" />
                 </button>
                 {pushPrefsOpen && (
                   <div className="card soft">
@@ -537,7 +537,7 @@ function TaskPhotoDefaultsCard() {
     <div className="card">
       <div className="section-toggle-row">
         <button className="section-toggle" aria-expanded={open} onClick={() => setOpen((x) => !x)}>
-          Görev fotoğraf varsayılanları <span aria-hidden>{open ? "⌃" : "⌄"}</span>
+          Görev fotoğraf varsayılanları <span className={`collapse-arrow${open ? " open" : ""}`} aria-hidden="true" />
         </button>
         <Info>Yeni fotoğraflı görevlerde başlangıç ve tamamlanma aşamaları için uygulanır.</Info>
       </div>

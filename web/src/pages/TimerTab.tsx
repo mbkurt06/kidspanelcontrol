@@ -328,7 +328,7 @@ function Report({ childId }: { childId: string }) {
       ))}
       {rows.length > 0 && (
         <details>
-          <summary className="muted small">Tüm sayaçlar ({rows.length})</summary>
+          <summary className="sub-collapse-head"><span>Tüm sayaçlar ({rows.length})</span><span className="collapse-arrow" aria-hidden="true" /></summary>
           {rows.map((r) => (
             <div className="app-row" key={r.id}>
               <span>{r.icon ?? "⏱"}</span>
@@ -500,7 +500,7 @@ function AlarmsCard({ childId }: { childId: string }) {
       ))}
       {log.length > 0 && (
         <details>
-          <summary className="muted small">Son çalan alarmlar</summary>
+          <summary className="sub-collapse-head"><span>Son çalan alarmlar</span><span className="collapse-arrow" aria-hidden="true" /></summary>
           {log.map((l) => (
             <div className="muted small" key={l.id}>
               {new Date(l.fired_at).toLocaleString("tr-TR", { weekday: "short", hour: "2-digit", minute: "2-digit" })} · {l.title} ·{" "}

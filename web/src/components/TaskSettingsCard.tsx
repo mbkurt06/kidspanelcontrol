@@ -45,7 +45,7 @@ export default function TaskSettingsCard({ embedded = false }: { embedded?: bool
   if (embedded) return content;
   return (
     <section className="card">
-      <button className="row between wide plain" onClick={() => setOpen((x) => !x)}><h2>Görev ayarları</h2><span aria-hidden>{open ? "⌃" : "⌄"}</span></button>
+      <button className="row between wide plain" onClick={() => setOpen((x) => !x)}><h2>Görev ayarları</h2><span className={`collapse-arrow${open ? " open" : ""}`} aria-hidden="true" /></button>
       {open && content}
     </section>
   );

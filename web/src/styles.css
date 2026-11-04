@@ -61,12 +61,17 @@ h2 {
   letter-spacing: -0.01em;
 }
 h1 {
-  font-size: 26px;
+  font-size: 24px;
   font-weight: 700;
 }
 h2 {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 650;
+}
+h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
 }
 p {
   margin: 0;
@@ -235,7 +240,8 @@ a {
   margin-left: auto;
 }
 .section-title {
-  font-size: 20px;
+  font-size: 18px;
+  font-weight: 700;
 }
 
 .tabbar {
@@ -545,13 +551,13 @@ select:focus {
 .btn {
   font: inherit;
   font-weight: 600;
-  font-size: 15px;
+  font-size: 14px;
   color: var(--text);
   background: var(--surface-2);
   border: 1px solid var(--line);
-  border-radius: 12px;
-  min-height: 44px;
-  padding: 0 14px;
+  border-radius: 999px;
+  min-height: 40px;
+  padding: 0 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -573,10 +579,10 @@ select:focus {
   width: 100%;
 }
 .btn.small {
-  min-height: 34px;
+  min-height: 32px;
   font-size: 13px;
-  padding: 0 10px;
-  border-radius: 10px;
+  padding: 0 12px;
+  border-radius: 999px;
 }
 .danger-text {
   color: var(--bad) !important;
@@ -674,16 +680,24 @@ select:focus {
   font-weight: 700;
   cursor: pointer;
 }
-.section-toggle > span:last-child { margin-left: auto; font-size: 22px; }
+
 .section-toggle-row { display: flex; align-items: center; gap: 8px; }
 .section-toggle-row .section-toggle { flex: 1; }
 .section-collapse-card > summary { list-style: none; cursor: pointer; }
 .section-collapse-card > summary::-webkit-details-marker { display: none; }
-.section-collapse-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; font-size: 20px; line-height: 1.25; font-weight: 700; }
-.section-collapse-card[open] > .section-collapse-head > .collapse-arrow { transform: rotate(180deg); }
-.collapse-arrow { margin-left: auto; flex: 0 0 auto; font-size: 22px; transition: transform .15s ease; }
+.section-collapse-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; font-size: 18px; line-height: 1.25; font-weight: 700; }
+.section-collapse-card .section-collapse-card .section-collapse-head { font-size: 16px; font-weight: 650; }
+/* Tek tip açılır ok: aşağı bakan ince ok, açılınca yukarı döner */
+.collapse-arrow { margin-left: auto; flex: 0 0 auto; display: inline-block; width: 18px; height: 18px; position: relative; font-size: 0; color: var(--muted); transition: transform .18s ease; }
+.collapse-arrow::before { content: ""; position: absolute; left: 5px; top: 3px; width: 7px; height: 7px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); }
+details[open] > summary .collapse-arrow, .collapse-arrow.open { transform: rotate(180deg); }
+.icon-btn > .collapse-arrow { margin-left: 0; }
+.collapse-btn { display: flex; align-items: center; gap: 6px; text-align: left; }
+.sub-collapse-head { display: flex; align-items: center; gap: 8px; list-style: none; cursor: pointer; font-size: 14px; font-weight: 600; color: var(--muted); padding: 6px 0; }
+.sub-collapse-head::-webkit-details-marker, .section-collapse-head::-webkit-details-marker { display: none; }
+summary.section-collapse-head { list-style: none; cursor: pointer; }
 .collapse-title { border: 0; background: transparent; color: inherit; cursor: pointer; padding: 0; text-align: left; }
-.templates-head { font-size: 18px; font-weight: 600; }
+.templates-head { font-size: 18px; font-weight: 700; display: flex; align-items: center; gap: 8px; width: 100%; }
 .date-edit-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
 .date-edit-grid label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
 .date-edit-grid input { width: 100%; text-align: center; }
@@ -693,7 +707,7 @@ select:focus {
 .duration-field .mini { width: 54px; }
 .report-total { display: flex; align-items: baseline; gap: 10px; margin: 12px 0 4px; }
 .report-total b { font-size: 22px; }
-.disclosure { align-self: flex-end; width: 32px; height: 28px; font-size: 20px; }
+.disclosure { align-self: flex-end; width: 32px; height: 28px; display: inline-flex; align-items: center; justify-content: center; }
 .detail-line { color: var(--muted); font-size: 14px; }
 .chip {
   font: inherit;
@@ -1816,3 +1830,7 @@ select:focus {
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* Bölüm başlığı olarak kullanılan aç/kapa tuşları aynı ölçüde */
+.section-toggle { font-size: 16px; font-weight: 650; }
+.btn.wide { border-radius: 14px; }

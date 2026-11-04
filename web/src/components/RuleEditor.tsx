@@ -136,7 +136,7 @@ export function RuleCard({ r, kinds, open, onToggle, onErr }: { r: TimeRule; kin
             {r.active ? "" : " · kapalı"}
           </span>
         </span>
-        <Icon name="chevron" size={16} />
+        <span className={`collapse-arrow${open ? " open" : ""}`} aria-hidden="true" />
       </button>
       {open && (
         <div className="stack-s">

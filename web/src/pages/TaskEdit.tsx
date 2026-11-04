@@ -379,7 +379,7 @@ export default function TaskEdit() {
         {f.proof === "photo" && (
           <>
             <button className="section-toggle" aria-expanded={photoCountsOpen} onClick={() => setPhotoCountsOpen((v) => !v)}>
-              Fotoğraf sayıları <span aria-hidden>{photoCountsOpen ? "⌃" : "⌄"}</span>
+              Fotoğraf sayıları <span className={`collapse-arrow${photoCountsOpen ? " open" : ""}`} aria-hidden="true" />
             </button>
             {photoCountsOpen && (
               <>

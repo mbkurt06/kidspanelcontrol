@@ -335,7 +335,7 @@ function AppsTab({ childId }: { childId: string }) {
               <span className="dot" style={{ background: g.color }} /> {g.name} <span className="muted small">· {list.length}</span>
               <Info>Günlük sınır girilirse bu uygulama, kuralların izin verdiği toplam süreden ayrıca bu dakika kadar kullanılır.</Info>
               </span>
-              <span aria-hidden="true">{openGroups[g.id] ?? false ? "⌃" : "⌄"}</span>
+              <span className={`collapse-arrow${openGroups[g.id] ? " open" : ""}`} aria-hidden="true" />
             </div>
             {(openGroups[g.id] ?? false) && list.map((a) => (
               <div className="app-setting-row" key={a.package}>
@@ -450,7 +450,7 @@ function ProgramTab({ childId }: { childId: string }) {
     <div className="stack">
       {err && <p className="error">{err}</p>}
       <details className="card section-collapse-card">
-        <summary className="section-collapse-head"><span>Haftalık program <Info>Her gün için bir gün tipi seç. Gün tiplerini Kurallar sekmesinden düzenleyebilirsin.</Info></span><span>⌄</span></summary>
+        <summary className="section-collapse-head"><span>Haftalık program <Info>Her gün için bir gün tipi seç. Gün tiplerini Kurallar sekmesinden düzenleyebilirsin.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         {WEEKDAYS_LONG.map((d, i) => (
           <div className="app-row" key={d}>
             <span className="grow">{d}</span>
@@ -467,7 +467,7 @@ function ProgramTab({ childId }: { childId: string }) {
       </details>
 
       <details className="card section-collapse-card">
-        <summary className="section-collapse-head"><span>Durumu şimdi başlat <Info>Bir durumu programa bağlı kalmadan geçici olarak başlatır.</Info></span><span>⌄</span></summary>
+        <summary className="section-collapse-head"><span>Durumu şimdi başlat <Info>Bir durumu programa bağlı kalmadan geçici olarak başlatır.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <div className="row gap-s wrap">
           <select value={modeId} onChange={(e) => setModeId(e.target.value)} className="grow">
             <option value="">Durum seç</option>
@@ -507,7 +507,7 @@ function ProgramTab({ childId }: { childId: string }) {
       </details>
 
       <details className="card section-collapse-card">
-        <summary className="section-collapse-head"><span>Gün istisnaları <Info>Tek bir gün için farklı profil veya günlük süre belirler.</Info></span><span>⌄</span></summary>
+        <summary className="section-collapse-head"><span>Gün istisnaları <Info>Tek bir gün için farklı profil veya günlük süre belirler.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         {overrides.map((o) => (
           <div className="app-row" key={o.id}>
             <div className="grow">
@@ -576,7 +576,7 @@ function DurationField({ value, onChange, unlimited = true }: { value: string; o
     <span>sa</span>
     <input className="mini" type="number" min={0} max={59} value={value === "" ? "" : minutes} onChange={(e) => set(hours, Number(e.target.value) || 0)} aria-label="Dakika" />
     <span>dk</span>
-    <button type="button" className="icon-btn" aria-label="Süreyi kaydırarak seç" onClick={() => setOpen(true)}>⌄</button>
+    <button type="button" className="icon-btn" aria-label="Süreyi kaydırarak seç" onClick={() => setOpen(true)}><span className="collapse-arrow" aria-hidden="true" /></button>
     {unlimited && <button type="button" className="icon-btn" aria-label="Sınırsız" onClick={() => onChange("")}>∞</button>}
     {open && <div className="sheet-backdrop" onClick={() => setOpen(false)}><div className="sheet" onClick={(e) => e.stopPropagation()}>
       <h2>Günlük sınır</h2>

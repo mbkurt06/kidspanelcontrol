@@ -78,7 +78,7 @@ export default function Lock({ embeddedChildId, inline = false }: { embeddedChil
       </section>
 
       <details className="card section-collapse-card">
-        <summary className="section-collapse-head"><span>Haftalık program <Info>Aynı saate iki kural denk gelirse güçlü olan geçerli: Kilitle → Sınırla → Serbest.</Info></span><span>⌄</span></summary>
+        <summary className="section-collapse-head"><span>Haftalık program <Info>Aynı saate iki kural denk gelirse güçlü olan geçerli: Kilitle → Sınırla → Serbest.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <div className="stack">
           <div className="row between">
             <span className="muted small">Kurallar</span>
@@ -105,12 +105,12 @@ export default function Lock({ embeddedChildId, inline = false }: { embeddedChil
       </details>
 
       <details className="card section-collapse-card">
-        <summary className="section-collapse-head"><span>Kilit ekranı</span><span>⌄</span></summary>
+        <summary className="section-collapse-head"><span>Kilit ekranı</span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <div className="stack">{shownChildren.map((c) => <KioskLook key={c.id} child={c} onErr={setErr} />)}</div>
       </details>
 
       {!inline && <details className="card section-collapse-card">
-        <summary className="section-collapse-head"><span>Ana sayfadaki kilit tuşu</span><span>⌄</span></summary>
+        <summary className="section-collapse-head"><span>Ana sayfadaki kilit tuşu</span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <LockButtonCard onErr={setErr} />
       </details>}
     </div>

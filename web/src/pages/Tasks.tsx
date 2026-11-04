@@ -190,7 +190,7 @@ export default function Tasks() {
       <div className="card">
         <div className="row between">
           <button className="section-title row gap-xs templates-head" type="button" onClick={() => setTemplatesOpen((v) => !v)} aria-expanded={templatesOpen}>
-            <span aria-hidden="true">{templatesOpen ? "⌃" : "⌄"}</span>
+            <span className={`collapse-arrow${templatesOpen ? " open" : ""}`} aria-hidden="true" />
             <span>Şablonlar</span>
             <Info>Sık verilen görevler. Bir şablonu açınca ayarları hazır yeni görev formu açılır.</Info>
           </button>

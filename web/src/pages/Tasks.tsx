@@ -100,7 +100,7 @@ export default function Tasks() {
 
   async function createGroup() {
     const kids = childFilter === "all" ? fam.children.map((c) => c.id) : [childFilter];
-    const { data, error } = await supabase.from("task_groups").insert({ ...newGroup(fam.familyId, kids), sort: groups.length }).select().single();
+    const { data, error } = await supabase.from("task_groups").insert({ ...newGroup(fam.familyId ?? "", kids), sort: groups.length }).select().single();
     if (error) return setErr(errorText(error));
     await load();
     select((data as TaskGroup).id, "settings");

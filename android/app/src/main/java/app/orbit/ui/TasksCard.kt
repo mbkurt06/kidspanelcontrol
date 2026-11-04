@@ -142,6 +142,8 @@ fun TasksCard(tasks: List<TaskItem>) {
             if (ok.isFailure) optimisticSubmitted = optimisticSubmitted - t.runId
             msg = if (ok.isSuccess) "\"${t.title}\" gönderildi, onay bekleniyor"
                 else if ("recording_missing" in (ok.exceptionOrNull()?.message ?: "")) "Önce kaydı tamamla"
+                else if ("recording_short" in (ok.exceptionOrNull()?.message ?: "")) "Kayıt en az süreden kısa"
+                else if ("locked" in (ok.exceptionOrNull()?.message ?: "")) "Bu görev henüz açılmadı"
                 else "Gönderilemedi: ${ok.exceptionOrNull()?.message ?: "internet?"}"
             Live.syncRequested = true
         }

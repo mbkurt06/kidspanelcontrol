@@ -9,6 +9,7 @@ import { repeatText } from "../lib/groups";
 import { DayPicker } from "../components/Windows";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
+import { MinuteStepper } from "../components/MinuteStepper";
 
 type Form = {
   title: string;
@@ -36,6 +37,7 @@ type Form = {
   active: boolean;
   record_on: boolean;
   record_minutes: string;
+  record_min_minutes: string;
   record_camera: "back" | "front" | "choose";
   record_pause: "none" | "limit" | "child";
   record_pause_max: string;
@@ -61,6 +63,7 @@ function defaultsOf(f: Form): TaskDefaults {
     reward_validity: f.reward_validity,
     reward_expires_days: f.reward_expires_days ? Number(f.reward_expires_days) : null,
     record_minutes: f.record_on ? Number(f.record_minutes) || 60 : null,
+    record_min_minutes: f.record_on && f.record_min_minutes ? Number(f.record_min_minutes) : null,
     record_camera: f.record_camera,
     record_pause: f.record_pause,
     record_pause_max: f.record_pause === "limit" ? Number(f.record_pause_max) || 10 : null,
@@ -87,6 +90,7 @@ function applyDefaults(f: Form, d: TaskDefaults | null | undefined, allChildren:
     reward_expires_days: d.reward_expires_days == null ? "" : String(d.reward_expires_days),
     record_on: d.record_minutes != null,
     record_minutes: String(d.record_minutes ?? f.record_minutes),
+    record_min_minutes: d.record_min_minutes == null ? "" : String(d.record_min_minutes),
     record_camera: d.record_camera ?? f.record_camera,
     record_pause: d.record_pause ?? f.record_pause,
     record_pause_max: String(d.record_pause_max ?? f.record_pause_max),
@@ -122,6 +126,7 @@ const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; 
   active: true,
   record_on: false,
   record_minutes: "60",
+  record_min_minutes: "",
   record_camera: "back",
   record_pause: "child",
   record_pause_max: "10",
@@ -131,10 +136,11 @@ const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; 
   mandatory: false,
 });
 
-type RecFields = { record_minutes?: number | null; record_camera?: Form["record_camera"]; record_pause?: Form["record_pause"]; record_pause_max?: number | null };
+type RecFields = { record_minutes?: number | null; record_min_minutes?: number | null; record_camera?: Form["record_camera"]; record_pause?: Form["record_pause"]; record_pause_max?: number | null };
 const recForm = (t: RecFields) => ({
   record_on: t.record_minutes != null,
   record_minutes: t.record_minutes?.toString() ?? "60",
+  record_min_minutes: t.record_min_minutes?.toString() ?? "",
   record_camera: t.record_camera ?? "back",
   record_pause: t.record_pause ?? "child",
   record_pause_max: t.record_pause_max?.toString() ?? "10",
@@ -323,6 +329,7 @@ export default function TaskEdit() {
       group_id: f.group_id || null,
       active: f.active,
       record_minutes: f.record_on ? Math.min(240, Math.max(1, Number(f.record_minutes) || 60)) : null,
+      record_min_minutes: f.record_on && f.record_min_minutes ? Math.min(Math.max(1, Number(f.record_minutes) || 60), Math.max(1, Number(f.record_min_minutes))) : null,
       record_camera: f.record_camera,
       record_pause: f.record_pause,
       record_pause_max: f.record_pause === "limit" ? Math.max(1, Number(f.record_pause_max) || 10) : null,
@@ -357,6 +364,7 @@ export default function TaskEdit() {
         reward_section_id: row.reward_section_id,
         mandatory: false,
         record_minutes: row.record_minutes,
+        record_min_minutes: row.record_min_minutes,
         record_camera: row.record_camera,
         record_pause: row.record_pause,
         record_pause_max: row.record_pause_max,
@@ -522,13 +530,24 @@ export default function TaskEdit() {
         {f.record_on && <span className="muted tiny">Görev boyunca Orbit kamerası kayıt alır; kayıt sana gelir, izleyip onaylarsın. Fotoğrafla birlikte de seçilebilir.</span>}
         {f.record_on && (
           <>
-            <div className="row gap-s wrap" style={{ alignItems: "center" }}>
-              {["30", "45", "60", "90", "120"].map((m) => (
-                <button key={m} className={`chip small ${f.record_minutes === m ? "on" : ""}`} onClick={() => set("record_minutes", m)}>
-                  {m} dk
-                </button>
-              ))}
-              <input className="mini" type="number" min={1} max={240} value={f.record_minutes} onChange={(e) => set("record_minutes", e.target.value)} aria-label="Kayıt süresi" />
+            <div className="extra-group">
+              <span className="pop-label">KAYIT SÜRESİ <Info>En az: çocuk bu süre dolmadan kaydı bitirip görevi gönderemez. En fazla: bu süre dolunca kayıt kendiliğinden biter. Ne kadar süreceğini bilmiyorsan aralık ver.</Info></span>
+              <div className="extra-row">
+                <div className="chips">
+                  <button type="button" className={`chip-btn ${!f.record_min_minutes ? "on" : ""}`} onClick={() => set("record_min_minutes", "")}>Sabit süre</button>
+                  <button type="button" className={`chip-btn ${f.record_min_minutes ? "on" : ""}`} onClick={() => set("record_min_minutes", String(Math.max(1, Math.min(20, (Number(f.record_minutes) || 60) - 1))))}>Aralık</button>
+                </div>
+              </div>
+              <div className="extra-row">
+                {f.record_min_minutes && (
+                  <>
+                    <span className="muted small">En az</span>
+                    <MinuteStepper value={Number(f.record_min_minutes) || 1} onChange={(v) => set("record_min_minutes", String(v))} min={1} max={Math.max(1, Number(f.record_minutes) || 60)} label="En az kayıt" />
+                  </>
+                )}
+                <span className="muted small">{f.record_min_minutes ? "En fazla" : "Süre"}</span>
+                <MinuteStepper value={Number(f.record_minutes) || 60} onChange={(v) => setF((x) => ({ ...x, record_minutes: String(v), record_min_minutes: x.record_min_minutes && Number(x.record_min_minutes) > v ? String(v) : x.record_min_minutes }))} min={1} max={240} label="En fazla kayıt" />
+              </div>
             </div>
             <label className="field">
               <span>Kamera</span>

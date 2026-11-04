@@ -29,6 +29,8 @@ data class TaskItem(
     val firstWins: Boolean,
     /** Kamera kaydı: süre (dk); null = kayıt yok */
     val recordMinutes: Int? = null,
+    /** En az kayıt süresi (dk); null = sabit süre */
+    val recordMinMinutes: Int? = null,
     /** back | front | choose */
     val recordCamera: String = "back",
     /** none | limit | child */
@@ -97,6 +99,7 @@ object Tasks {
             createdAt = o.s("created_at"),
             firstWins = o.optString("assign_mode") == "first",
             recordMinutes = if (o.isNull("record_minutes") || !o.has("record_minutes")) null else o.optInt("record_minutes"),
+            recordMinMinutes = if (o.isNull("record_min_minutes") || !o.has("record_min_minutes")) null else o.optInt("record_min_minutes"),
             recordCamera = o.optString("record_camera", "back"),
             recordPause = o.optString("record_pause", "child"),
             recordPauseMax = if (o.isNull("record_pause_max") || !o.has("record_pause_max")) null else o.optInt("record_pause_max"),

@@ -120,6 +120,7 @@ export type TaskDefaults = Partial<{
   reward_validity: RewardValidity;
   reward_expires_days: number | null;
   record_minutes: number | null;
+  record_min_minutes: number | null;
   record_camera: "back" | "front" | "choose";
   record_pause: "none" | "limit" | "child";
   record_pause_max: number | null;
@@ -358,6 +359,7 @@ export type TaskTemplate = {
   reward_expires_days: number | null;
   mandatory: boolean;
   record_minutes?: number | null;
+  record_min_minutes?: number | null;
   record_camera?: "back" | "front" | "choose";
   record_pause?: "none" | "limit" | "child";
   record_pause_max?: number | null;

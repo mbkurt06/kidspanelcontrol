@@ -104,7 +104,7 @@ class RecordActivity : ComponentActivity() {
         var msg by remember { mutableStateOf("") }
         Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Text("📹 ${t.title}", color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            Text("${t.recordMinutes} dakika kayıt", color = C.accent, fontSize = 18.sp)
+            Text(t.recordMinMinutes?.let { "En az $it, en fazla ${t.recordMinutes} dakika kayıt" } ?: "${t.recordMinutes} dakika kayıt", color = C.accent, fontSize = 18.sp)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Info("Telefonu sabit bir yere koy; kamera seni ve çalıştığın yeri görsün. Kayıt sırasında diğer uygulamalar kapalı olur.")
             }
@@ -216,7 +216,15 @@ class RecordActivity : ComponentActivity() {
                 ) { Text("Bitir") }
             }
         }
-        if (confirm) {
+        val minSec = remember(st.runId) { Tasks.current().firstOrNull { it.runId == st.runId }?.recordMinMinutes?.times(60) }
+        if (confirm && minSec != null && st.recordedSeconds < minSec) {
+            AlertDialog(
+                onDismissRequest = { confirm = false },
+                title = { Text("Biraz daha") },
+                text = { Text("Bu görev için en az ${minSec / 60} dakika kayıt gerekli. Şu an ${clock(st.recordedSeconds)}. ${clock(minSec - st.recordedSeconds)} sonra bitirebilirsin.") },
+                confirmButton = { TextButton(onClick = { confirm = false }) { Text("Devam") } },
+            )
+        } else if (confirm) {
             val early = st.recordedSeconds < st.plannedSeconds
             AlertDialog(
                 onDismissRequest = { confirm = false },

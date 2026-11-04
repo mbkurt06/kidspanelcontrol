@@ -38,6 +38,24 @@ data class TaskItem(
     val recId: String? = null,
     val recStatus: String? = null,
     val recSeconds: Int = 0,
+    val taskId: String = "",
+    /** Görev grubu (yoksa null) */
+    val groupId: String? = null,
+    val groupName: String? = null,
+    val sequential: Boolean = false,
+    /** Sıralı grupta önceki görev onaylanmadıysa true */
+    val locked: Boolean = false,
+    val groupApproved: Int = 0,
+    val groupNeed: Int = 0,
+    val groupTotal: Int = 0,
+    val groupHeld: Int = 0,
+    val groupAll: Int = 0,
+    val groupMandatoryLeft: Int = 0,
+    /** open | met | failed */
+    val groupStatus: String = "open",
+    val agendaItemId: String? = null,
+    /** Grubun başlangıç saati (HH:mm) */
+    val startTime: String? = null,
 ) {
     val hasBefore get() = beforeCount > 0
     val hasAfter get() = afterCount > 0
@@ -85,6 +103,20 @@ object Tasks {
             recId = o.optJSONObject("recording")?.optString("id"),
             recStatus = o.optJSONObject("recording")?.optString("status"),
             recSeconds = o.optJSONObject("recording")?.optInt("recorded_seconds") ?: 0,
+            taskId = o.optString("task_id"),
+            groupId = o.s("group_id"),
+            groupName = o.s("group_name"),
+            sequential = o.optBoolean("sequential"),
+            locked = o.optBoolean("locked"),
+            groupApproved = o.optJSONObject("group")?.optInt("approved") ?: 0,
+            groupNeed = o.optJSONObject("group")?.optInt("need") ?: 0,
+            groupTotal = o.optJSONObject("group")?.optInt("total") ?: 0,
+            groupHeld = o.optJSONObject("group")?.optInt("held_minutes") ?: 0,
+            groupAll = o.optJSONObject("group")?.optInt("all_minutes") ?: 0,
+            groupMandatoryLeft = o.optJSONObject("group")?.optInt("mandatory_left") ?: 0,
+            groupStatus = o.optJSONObject("group")?.optString("status", "open") ?: "open",
+            agendaItemId = o.s("agenda_item_id"),
+            startTime = o.s("start_time")?.take(5),
         )
     }
 

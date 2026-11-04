@@ -61,7 +61,7 @@ private fun compactDateText(value: String) = runCatching { LocalDate.parse(value
 private fun enteredText(value: String) = runCatching { Instant.parse(value).atZone(java.time.ZoneId.systemDefault()).toLocalDate().format(DAY) + " · " + Instant.parse(value).atZone(java.time.ZoneId.systemDefault()).toLocalTime().toString().take(5) }.getOrDefault(value.take(16))
 
 @Composable
-fun AgendaScreen() {
+fun AgendaScreen(onOpenTask: (String) -> Unit = {}) {
     val live by Live.state.collectAsState()
     val scope = rememberCoroutineScope()
     val writeLock = remember { Mutex() }
@@ -71,6 +71,7 @@ fun AgendaScreen() {
     var detail by remember { mutableStateOf<AgendaItem?>(null) }
     var items by remember(live.lastSync) { mutableStateOf(Agenda.current()) }
 
+    val tasksById = remember(live.lastSync) { app.orbit.data.Tasks.current().associateBy { it.taskId } }
     val openItems = items.filter { it.status != "done" }
     val doneItems = items.filter { it.status == "done" }
 
@@ -99,6 +100,10 @@ fun AgendaScreen() {
         ) {
             if (items.isEmpty()) Card { Muted("Ajandada kayıt yok.") }
             for (item in openItems) {
+                if (item.taskId != null) {
+                    TaskAgendaRow(item, tasksById[item.taskId]) { TaskFocus.taskId = item.taskId; onOpenTask(item.taskId) }
+                    continue
+                }
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).padding(8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -114,6 +119,10 @@ fun AgendaScreen() {
             if (doneItems.isNotEmpty()) {
                 Title("Tamamlananlar")
                 for (item in doneItems) {
+                    if (item.taskId != null) {
+                        TaskAgendaRow(item, tasksById[item.taskId]) { TaskFocus.taskId = item.taskId; onOpenTask(item.taskId) }
+                        continue
+                    }
                     Row(
                         Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).padding(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -245,4 +254,41 @@ private fun AgendaDetail(item: AgendaItem, onClose: () -> Unit, onDone: () -> Un
         dismissButton = { TextButton(onClick = onClose) { Text("Kapat") } },
         confirmButton = { TextButton(onClick = onDone) { Text(if (item.status == "done") "Açık yap" else "Tamamlandı") } },
     )
+}
+
+
+/** Göreve dönüşmüş ajanda girdisi: işaretlenmez; dokununca görevin ekranı açılır. */
+@Composable
+private fun TaskAgendaRow(item: AgendaItem, task: app.orbit.data.TaskItem?, onOpen: () -> Unit) {
+    val done = item.status == "done"
+    val waiting = task?.status == "submitted"
+    val reward = task?.rewardMinutes?.takeIf { it > 0 }
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (waiting) C.warn.copy(alpha = 0.10f) else C.surface).clickable { onOpen() }.padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(30.dp).clip(if (done) CircleShape else RoundedCornerShape(8.dp)).background(
+                when { done -> C.good; waiting -> C.warn.copy(alpha = 0.25f); else -> C.accent.copy(alpha = 0.22f) },
+            ),
+            contentAlignment = Alignment.Center,
+        ) { Text(if (done) "✓" else if (waiting) "⏳" else "📋", fontSize = 15.sp, color = if (done) C.bg else C.text) }
+        Column(Modifier.weight(1f).padding(start = 12.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(item.title, color = if (done) C.muted else C.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp,
+                textDecoration = if (done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null)
+            Muted(
+                when {
+                    done -> "Yapıldı${reward?.let { " · +$it dk eklendi" } ?: ""}"
+                    waiting -> "Onay bekleniyor"
+                    task?.status == "rejected" -> "Tekrar yap${task.rejectNote?.let { ": $it" } ?: ""}"
+                    else -> "Görev · ${dateText(item.dueDate)}"
+                },
+                12,
+            )
+        }
+        reward?.takeIf { !done }?.let {
+            Text("+$it dk", color = C.accent, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.clip(RoundedCornerShape(50)).background(C.accent.copy(alpha = 0.18f)).padding(horizontal = 10.dp, vertical = 4.dp))
+        }
+        if (!done) Text("›", color = C.muted, fontSize = 22.sp, modifier = Modifier.padding(start = 8.dp))
+    }
 }

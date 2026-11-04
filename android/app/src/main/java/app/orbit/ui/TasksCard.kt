@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -72,6 +73,54 @@ private fun mediaFor(proof: String) = when (proof) {
     "video" -> "video"
     "photo_or_video" -> "either"
     else -> "photo"
+}
+
+/** Ajandadan bir göreve gelince o görev öne çıkar. */
+object TaskFocus {
+    var taskId by mutableStateOf<String?>(null)
+}
+
+private fun lockText(t: TaskItem, all: List<TaskItem>): String {
+    val prev = all.filter { it.groupId == t.groupId }.takeWhile { it.runId != t.runId }.lastOrNull { it.status != "approved" && it.status != "claimed" }
+    val now = java.time.LocalTime.now().toString().take(5)
+    if (t.startTime != null && now < t.startTime) return "${t.startTime}'de açılır"
+    return when {
+        prev == null -> "Sırası gelince açılır"
+        prev.status == "submitted" -> "“${prev.title}” onaylanınca açılır"
+        else -> "Önce “${prev.title}”i bitir"
+    }
+}
+
+/** Grup başlığı: ilerleme ve bekleyen süre */
+@Composable
+private fun GroupHeader(t: TaskItem) {
+    val left = (t.groupNeed - t.groupApproved).coerceAtLeast(0)
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.surface2).padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(t.groupName ?: "Görev grubu", color = C.text, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f))
+            Text("${t.groupApproved}/${t.groupNeed}", color = if (t.groupStatus == "met") C.good else C.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+        }
+        androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(C.surface)) {
+            val frac = if (t.groupNeed > 0) (t.groupApproved.toFloat() / t.groupNeed).coerceIn(0f, 1f) else 0f
+            androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth(frac).height(6.dp).clip(RoundedCornerShape(3.dp)).background(C.good))
+        }
+        Text(
+            when (t.groupStatus) {
+                "met" -> "Tamamladın! Süren açıldı."
+                "failed" -> "Bu sefer olmadı. Kazandığın süre kasaya gitti."
+                else -> when {
+                    t.groupMandatoryLeft > 0 && left > 0 -> "Zorunlu görevleri yap · $left görev daha${if (t.groupHeld > 0) " · ${t.groupHeld} dk seni bekliyor" else ""}"
+                    left > 0 -> "$left görev daha${if (t.groupHeld > 0) " → ${t.groupHeld} dk açılır" else ""}"
+                    t.groupMandatoryLeft > 0 -> "Zorunlu görev bekleniyor"
+                    else -> "Onay bekleniyor"
+                }
+            },
+            color = if (t.groupStatus == "met") C.good else C.muted, fontSize = 13.sp,
+        )
+    }
 }
 
 /** Görevler: başla (öncesi kanıtı), tamamladım (sonrası/kanıt), gönder. */
@@ -149,15 +198,36 @@ fun TasksCard(tasks: List<TaskItem>) {
     Card {
         Title("Görevlerim")
         if (tasks.isEmpty()) Muted("Bugün görev yok.")
+        val focus = TaskFocus.taskId
+        var lastGroup: String? = null
         for (raw in tasks) {
             val t = if (raw.runId in optimisticSubmitted) raw.copy(status = "submitted") else raw
+            if (t.groupId != null && t.groupId != lastGroup) GroupHeader(t)
+            lastGroup = t.groupId
+            if (t.locked && t.open) {
+                Row(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("🔒", fontSize = 18.sp, modifier = Modifier.padding(end = 10.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(t.title, color = C.muted, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                        Muted(lockText(t, tasks), 12)
+                    }
+                    t.rewardMinutes?.takeIf { it > 0 }?.let { Text("+$it dk", color = C.muted, fontSize = 12.sp) }
+                }
+                continue
+            }
+            val focused = focus != null && focus == t.taskId
             Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface2).padding(12.dp),
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (focused) C.accent.copy(alpha = 0.18f) else C.surface2).padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(t.title, color = C.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                    if (t.mandatory && t.groupId != null) Text("Zorunlu", color = C.bad, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
+                if (t.agendaItemId != null) Muted("📋 Ajandandan", 12)
                 t.description?.let { Muted(it, 13) }
                 rewardText(t)?.let { Text("Ödül: $it", color = C.good, fontSize = 13.sp) }
                 val due = listOfNotNull(taskEntered(t.createdAt), taskDate(t.dueDate), t.dueTime?.let { it }).joinToString(" · ")

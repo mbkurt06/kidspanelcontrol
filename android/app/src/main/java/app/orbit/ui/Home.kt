@@ -217,7 +217,7 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
             if (screen == Screen.AGENDA || screen == Screen.ALARMS || screen == Screen.TIMER) {
                 Box(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                     when (screen) {
-                        Screen.AGENDA -> AgendaScreen()
+                        Screen.AGENDA -> AgendaScreen { if (visible(Screen.TASKS)) screen = Screen.TASKS }
                         Screen.ALARMS -> AlarmsScreen()
                         Screen.TIMER -> TimerScreen()
                         else -> Unit

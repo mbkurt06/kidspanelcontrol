@@ -15,6 +15,8 @@ data class AgendaItem(
     val amount: Double?,
     val currency: String,
     val status: String,
+    /** Ebeveyn bu girdiyi göreve dönüştürdüyse görevin id'si; çocuk işaretleyemez */
+    val taskId: String? = null,
 )
 
 object Agenda {
@@ -27,6 +29,7 @@ object Agenda {
             o.optString("due_time").takeIf { !o.isNull("due_time") && it.isNotBlank() },
             if (o.isNull("amount") || !o.has("amount")) null else o.optDouble("amount"),
             o.optString("currency", "EUR"), o.optString("status", "open"),
+            o.optString("task_id").takeIf { !o.isNull("task_id") && it.isNotBlank() },
         )
     }
 

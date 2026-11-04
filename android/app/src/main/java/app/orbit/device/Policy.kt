@@ -83,11 +83,12 @@ object Policy {
      * Tam kilit (kiosk): Orbit ekrana kilitlenebilir; ana ekran tuşu ve yeniden başlatma sonrası da Orbit açılır.
      * Telefonun kendi kilit ekranı (PIN) ve güç menüsü çalışır; bildirim paneli ve diğer uygulamalar kapalı.
      */
-    fun setKiosk(ctx: Context, on: Boolean, allowCalls: Boolean) {
+    fun setKiosk(ctx: Context, on: Boolean, allowCalls: Boolean, extra: Collection<String> = emptyList()) {
         if (!isOwner(ctx)) return
         val d = dpm(ctx)
         val a = admin(ctx)
         val pkgs = mutableListOf(ctx.packageName)
+        if (on) pkgs += extra
         if (on && allowCalls) {
             runCatching { ctx.getSystemService(TelecomManager::class.java).defaultDialerPackage }.getOrNull()?.let { pkgs += it }
             pkgs += listOf("com.android.server.telecom", "com.android.phone")

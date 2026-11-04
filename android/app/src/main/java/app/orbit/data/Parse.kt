@@ -54,6 +54,11 @@ object Parse {
         }
     }
 
+    private fun taskAllowed(tasks: JSONArray?): Set<String> = (0 until (tasks?.length() ?: 0)).flatMap { i ->
+        val t = tasks!!.getJSONObject(i)
+        if (t.optString("status") in setOf("open", "started", "rejected") && !t.optBoolean("locked")) strings(t.optJSONArray("allowed_packages")) else emptyList()
+    }.filter { it.isNotBlank() }.toSet()
+
     private fun windows(a: JSONArray?): List<TimeWindow> = (0 until (a?.length() ?: 0)).mapNotNull {
         val o = a!!.optJSONObject(it) ?: return@mapNotNull null
         runCatching { TimeWindow(time(o.getString("start")), time(o.getString("end"))) }.getOrNull()
@@ -202,6 +207,7 @@ object Parse {
         profileAvatar = b.optJSONObject("child")?.str("profile_avatar"),
         focus = Timers.activeFocus(b)?.let { app.orbit.engine.Focus(it.name, it.groups, it.packages) },
         taskRestrictions = taskRestrictions(b.optJSONArray("tasks"), b.optJSONArray("focus_profiles")),
+        taskAllowedPackages = taskAllowed(b.optJSONArray("tasks")),
     )
 
     // --- Gün sayaçları ---

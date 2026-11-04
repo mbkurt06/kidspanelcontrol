@@ -41,6 +41,10 @@ type Form = {
   shot_on: boolean;
   shot_min: string;
   shot_max: string;
+  srec_on: boolean;
+  srec_minutes: string;
+  srec_min_minutes: string;
+  allowed_packages: string[];
   record_camera: "back" | "front" | "choose";
   record_pause: "none" | "limit" | "child";
   record_pause_max: string;
@@ -69,6 +73,9 @@ function defaultsOf(f: Form): TaskDefaults {
     record_min_minutes: f.record_on && f.record_min_minutes ? Number(f.record_min_minutes) : null,
     screenshot_min: f.shot_on ? Number(f.shot_min) || 1 : null,
     screenshot_max: f.shot_on ? Number(f.shot_max) || 1 : null,
+    screen_record_minutes: f.srec_on ? Number(f.srec_minutes) || 30 : null,
+    screen_record_min_minutes: f.srec_on && f.srec_min_minutes ? Number(f.srec_min_minutes) : null,
+    allowed_packages: f.allowed_packages,
     record_camera: f.record_camera,
     record_pause: f.record_pause,
     record_pause_max: f.record_pause === "limit" ? Number(f.record_pause_max) || 10 : null,
@@ -99,6 +106,10 @@ function applyDefaults(f: Form, d: TaskDefaults | null | undefined, allChildren:
     shot_on: d.screenshot_min != null,
     shot_min: String(d.screenshot_min ?? 1),
     shot_max: String(d.screenshot_max ?? 3),
+    srec_on: d.screen_record_minutes != null,
+    srec_minutes: String(d.screen_record_minutes ?? f.srec_minutes),
+    srec_min_minutes: d.screen_record_min_minutes == null ? "" : String(d.screen_record_min_minutes),
+    allowed_packages: d.allowed_packages ?? f.allowed_packages,
     record_camera: d.record_camera ?? f.record_camera,
     record_pause: d.record_pause ?? f.record_pause,
     record_pause_max: String(d.record_pause_max ?? f.record_pause_max),
@@ -138,6 +149,10 @@ const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; 
   shot_on: false,
   shot_min: "1",
   shot_max: "3",
+  srec_on: false,
+  srec_minutes: "30",
+  srec_min_minutes: "",
+  allowed_packages: [],
   record_camera: "back",
   record_pause: "child",
   record_pause_max: "10",
@@ -147,7 +162,7 @@ const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; 
   mandatory: false,
 });
 
-type RecFields = { screenshot_min?: number | null; screenshot_max?: number | null; record_minutes?: number | null; record_min_minutes?: number | null; record_camera?: Form["record_camera"]; record_pause?: Form["record_pause"]; record_pause_max?: number | null };
+type RecFields = { screen_record_minutes?: number | null; screen_record_min_minutes?: number | null; allowed_packages?: string[] | null; screenshot_min?: number | null; screenshot_max?: number | null; record_minutes?: number | null; record_min_minutes?: number | null; record_camera?: Form["record_camera"]; record_pause?: Form["record_pause"]; record_pause_max?: number | null };
 const recForm = (t: RecFields) => ({
   record_on: t.record_minutes != null,
   record_minutes: t.record_minutes?.toString() ?? "60",
@@ -155,6 +170,10 @@ const recForm = (t: RecFields) => ({
   shot_on: t.screenshot_min != null,
   shot_min: String(t.screenshot_min ?? 1),
   shot_max: String(t.screenshot_max ?? t.screenshot_min ?? 3),
+  srec_on: t.screen_record_minutes != null,
+  srec_minutes: t.screen_record_minutes?.toString() ?? "30",
+  srec_min_minutes: t.screen_record_min_minutes?.toString() ?? "",
+  allowed_packages: t.allowed_packages ?? [],
   record_camera: t.record_camera ?? "back",
   record_pause: t.record_pause ?? "child",
   record_pause_max: t.record_pause_max?.toString() ?? "10",
@@ -188,6 +207,15 @@ export default function TaskEdit() {
 
   useEffect(() => {
     supabase.from("task_groups").select("*").order("sort").then(({ data }) => setGroups((data ?? []) as TaskGroup[]));
+  }, []);
+
+  // İzinli uygulama seçimi için çocukların telefonlarındaki uygulamalar
+  const [apps, setApps] = useState<Array<{ package: string; label: string; child_id: string }>>([]);
+  const [appQuery, setAppQuery] = useState("");
+  useEffect(() => {
+    supabase.from("child_apps").select("package, label, child_id, is_system").eq("installed", true).order("label").then(({ data }) =>
+      setApps(((data ?? []) as Array<{ package: string; label: string; child_id: string; is_system?: boolean }>).filter((a) => !a.is_system || a.label)),
+    );
   }, []);
 
   // Yeni görev: önce grubun, yoksa genel varsayılan; ajandadan geliyorsa ad/çocuk/tarih ajandadan
@@ -346,6 +374,9 @@ export default function TaskEdit() {
       screenshot_min: f.shot_on ? Math.max(1, Math.min(10, Number(f.shot_min) || 1)) : null,
       screenshot_max: f.shot_on ? Math.max(Number(f.shot_min) || 1, Math.min(10, Number(f.shot_max) || 1)) : null,
       record_min_minutes: f.record_on && f.record_min_minutes ? Math.min(Math.max(1, Number(f.record_minutes) || 60), Math.max(1, Number(f.record_min_minutes))) : null,
+      screen_record_minutes: f.srec_on ? Math.min(240, Math.max(1, Number(f.srec_minutes) || 30)) : null,
+      screen_record_min_minutes: f.srec_on && f.srec_min_minutes ? Math.min(Math.max(1, Number(f.srec_minutes) || 30), Math.max(1, Number(f.srec_min_minutes))) : null,
+      allowed_packages: f.allowed_packages,
       record_camera: f.record_camera,
       record_pause: f.record_pause,
       record_pause_max: f.record_pause === "limit" ? Math.max(1, Number(f.record_pause_max) || 10) : null,
@@ -383,6 +414,9 @@ export default function TaskEdit() {
         record_min_minutes: row.record_min_minutes,
         screenshot_min: row.screenshot_min,
         screenshot_max: row.screenshot_max,
+        screen_record_minutes: row.screen_record_minutes,
+        screen_record_min_minutes: row.screen_record_min_minutes,
+        allowed_packages: row.allowed_packages,
         record_camera: row.record_camera,
         record_pause: row.record_pause,
         record_pause_max: row.record_pause_max,
@@ -531,7 +565,7 @@ export default function TaskEdit() {
       <div className="card">
         <h2>Kanıt <Info>Çocuk yalnızca Orbit kamerasıyla kanıt gönderir (fotoğraf ve/veya kamera kaydı); onay veya redden sonra dosya silinir. Kayıt galeriden seçilemez.</Info></h2>
         <div className="row gap-xs wrap">
-          <button className={`chip small ${f.proof === "none" && !f.record_on && !f.shot_on ? "on" : ""}`} onClick={() => setF((x) => ({ ...x, proof: "none", before_after: false, record_on: false, shot_on: false }))}>
+          <button className={`chip small ${f.proof === "none" && !f.record_on && !f.shot_on && !f.srec_on ? "on" : ""}`} onClick={() => setF((x) => ({ ...x, proof: "none", before_after: false, record_on: false, shot_on: false, srec_on: false }))}>
             Kanıt yok
           </button>
           <button className={`chip small ${f.proof === "photo" && !f.before_after ? "on" : ""}`} onClick={() => setF((x) => (x.proof === "photo" && !x.before_after ? { ...x, proof: "none" } : { ...x, proof: "photo", before_after: false }))}>
@@ -546,6 +580,9 @@ export default function TaskEdit() {
           <button className={`chip small ${f.shot_on ? "on" : ""}`} aria-pressed={f.shot_on} onClick={() => set("shot_on", !f.shot_on)}>
             {f.shot_on ? "✓ " : ""}📱 Ekran görüntüsü
           </button>
+          <button className={`chip small ${f.srec_on ? "on" : ""}`} aria-pressed={f.srec_on} onClick={() => set("srec_on", !f.srec_on)}>
+            {f.srec_on ? "✓ " : ""}🎬 Ekran kaydı
+          </button>
           {f.proof !== "none" && f.proof !== "photo" && <span className="pill quiet">{PROOF_LABEL[f.proof]}</span>}
         </div>
         {f.shot_on && (
@@ -556,6 +593,27 @@ export default function TaskEdit() {
               <MinuteStepper value={Number(f.shot_min) || 1} onChange={(v) => setF((x) => ({ ...x, shot_min: String(v), shot_max: Number(x.shot_max) < v ? String(v) : x.shot_max }))} min={1} max={10} unit="adet" label="En az ekran görüntüsü" />
               <span className="muted small">En fazla</span>
               <MinuteStepper value={Number(f.shot_max) || 1} onChange={(v) => setF((x) => ({ ...x, shot_max: String(v), shot_min: Number(x.shot_min) > v ? String(v) : x.shot_min }))} min={1} max={10} unit="adet" label="En fazla ekran görüntüsü" />
+            </div>
+          </div>
+        )}
+        {f.srec_on && (
+          <div className="extra-group">
+            <span className="pop-label">EKRAN KAYDI <Info>Çocuk görevde yuvarlak kayıt düğmesini açar; ekranda yaptığı her şey (ör. Duolingo dersi) hızlandırılmış video olarak kaydedilir. En az süre dolmadan bitiremez, en fazla süre dolunca kayıt kendiliğinden biter ve göreve eklenir.</Info></span>
+            <div className="extra-row">
+              <div className="chips">
+                <button type="button" className={`chip-btn ${!f.srec_min_minutes ? "on" : ""}`} onClick={() => set("srec_min_minutes", "")}>Sabit süre</button>
+                <button type="button" className={`chip-btn ${f.srec_min_minutes ? "on" : ""}`} onClick={() => set("srec_min_minutes", String(Math.max(1, Math.min(10, (Number(f.srec_minutes) || 30) - 1))))}>Aralık</button>
+              </div>
+            </div>
+            <div className="extra-row">
+              {f.srec_min_minutes && (
+                <>
+                  <span className="muted small">En az</span>
+                  <MinuteStepper value={Number(f.srec_min_minutes) || 1} onChange={(v) => set("srec_min_minutes", String(v))} min={1} max={Math.max(1, Number(f.srec_minutes) || 30)} label="En az ekran kaydı" />
+                </>
+              )}
+              <span className="muted small">{f.srec_min_minutes ? "En fazla" : "Süre"}</span>
+              <MinuteStepper value={Number(f.srec_minutes) || 30} onChange={(v) => setF((x) => ({ ...x, srec_minutes: String(v), srec_min_minutes: x.srec_min_minutes && Number(x.srec_min_minutes) > v ? String(v) : x.srec_min_minutes }))} min={1} max={240} label="En fazla ekran kaydı" />
             </div>
           </div>
         )}
@@ -645,6 +703,13 @@ export default function TaskEdit() {
           </select>
         </label>
         {!fam.focusProfiles.length && <p className="muted tiny">Orbit menü kısıtı için önce Kurallar → Odak profilleri bölümünden profil oluştur.</p>}
+        <AllowedApps
+          apps={apps.filter((a) => f.child_ids.includes(a.child_id))}
+          value={f.allowed_packages}
+          query={appQuery}
+          onQuery={setAppQuery}
+          onChange={(v) => set("allowed_packages", v)}
+        />
       </div>
 
       <div className="card">
@@ -746,6 +811,53 @@ function PhotoCountFields({ title, min, max, onMin, onMax }: { title: string; mi
         <label className="field"><span>En az</span><input type="number" min={1} max={4} value={min} onChange={(e) => onMin(e.target.value)} /></label>
         <label className="field"><span>En fazla</span><input type="number" min={1} max={4} value={max} onChange={(e) => onMax(e.target.value)} /></label>
       </div>
+    </div>
+  );
+}
+
+/** Görev açıkken (Sınırla / Kilitle modunda bile) kullanılabilecek uygulamalar */
+function AllowedApps({ apps, value, query, onQuery, onChange }: {
+  apps: Array<{ package: string; label: string }>;
+  value: string[];
+  query: string;
+  onQuery: (q: string) => void;
+  onChange: (v: string[]) => void;
+}) {
+  const byPkg = new Map<string, string>();
+  apps.forEach((a) => byPkg.set(a.package, a.label || a.package));
+  const q = query.trim().toLocaleLowerCase("tr");
+  const list = [...byPkg.entries()]
+    .filter(([pkg]) => !value.includes(pkg))
+    .filter(([pkg, label]) => !q || label.toLocaleLowerCase("tr").includes(q) || pkg.includes(q))
+    .slice(0, q ? 30 : 12);
+  const toggle = (pkg: string) => onChange(value.includes(pkg) ? value.filter((x) => x !== pkg) : [...value, pkg]);
+  return (
+    <div className="field">
+      <span>
+        İzinli uygulamalar{" "}
+        <Info>Görev bitene kadar bu uygulamalar her zaman açık kalır; telefon Sınırla veya Kilitle modunda olsa bile. Ör. ders için Anton, dil için Duolingo. Çocuk görev ekranından tek dokunuşla açar.</Info>
+      </span>
+      {value.length > 0 && (
+        <div className="chips">
+          {value.map((pkg) => (
+            <button key={pkg} type="button" className="chip-btn on" onClick={() => toggle(pkg)} title="Kaldır">
+              ✓ {byPkg.get(pkg) ?? pkg} ×
+            </button>
+          ))}
+        </div>
+      )}
+      <input placeholder="Uygulama ara (ör. Duolingo)" value={query} onChange={(e) => onQuery(e.target.value)} />
+      {list.length > 0 ? (
+        <div className="chips">
+          {list.map(([pkg, label]) => (
+            <button key={pkg} type="button" className="chip-btn" onClick={() => toggle(pkg)}>
+              + {label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        apps.length === 0 && <span className="muted tiny">Seçili çocukların telefonundan uygulama listesi henüz gelmedi.</span>
+      )}
     </div>
   );
 }

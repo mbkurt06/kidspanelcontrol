@@ -579,7 +579,7 @@ function ReviewCard({ run, task, group, childName, color, onDone }: { run: TaskR
         <span className="muted tiny">{relTime(run.submitted_at)}</span>
       </div>
       {task?.description && <p className="muted small">{task.description}</p>}
-      {task?.record_minutes != null && <RecordingList runId={run.id} />}
+      {(task?.record_minutes != null || task?.screen_record_minutes != null) && <RecordingList runId={run.id} />}
       {proofs.length > 0 ? (
         <div className="proof-timeline">
           {before.map((p) => proofFig(p, "Öncesi"))}

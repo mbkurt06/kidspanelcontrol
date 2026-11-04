@@ -7,6 +7,18 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Matrix
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.remember
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -85,6 +97,9 @@ class CaptureActivity : ComponentActivity() {
     private var minPhotos = 1
     private var maxPhotos = 1
     private var multiPhoto = false
+    /** Çekilen kare/video onay bekliyor: "Yeniden çek" / "Kullan" */
+    private var review by mutableStateOf<Pair<String, String>?>(null)
+    private var reviewBmp by mutableStateOf<Bitmap?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -113,9 +128,31 @@ class CaptureActivity : ComponentActivity() {
                         if (multiPhoto && photos.isNotEmpty()) {
                             Text("Fotoğraf ${photos.size}/$maxPhotos", color = C.text, fontWeight = FontWeight.Bold, modifier = Modifier.align(Alignment.TopEnd).padding(12.dp))
                         }
+                        review?.let { (path, kind) ->
+                            Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+                                val b = reviewBmp
+                                if (kind == "photo" && b != null) Image(b.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Fit)
+                                else Text(if (kind == "video") "🎬 Video hazır" else "Önizleme", color = C.text, fontSize = 20.sp)
+                            }
+                        }
+                    }
+                    if (multiPhoto && photos.isNotEmpty() && review == null) {
+                        Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            photos.toList().forEach { p ->
+                                val th = remember(p) { runCatching { BitmapFactory.decodeFile(p, BitmapFactory.Options().apply { inSampleSize = 8 }) }.getOrNull() }
+                                Box(Modifier.size(64.dp).clip(RoundedCornerShape(10.dp)).background(C.surface2)) {
+                                    th?.let { Image(it.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop) }
+                                    Box(
+                                        Modifier.align(Alignment.TopEnd).padding(2.dp).size(22.dp).clip(CircleShape).background(Color(0xCC000000))
+                                            .clickable { photos.remove(p); File(p).delete() },
+                                        contentAlignment = Alignment.Center,
+                                    ) { Text("×", color = Color.White, fontSize = 14.sp) }
+                                }
+                            }
+                        }
                     }
                     if (error.isNotEmpty()) Text(error, color = C.bad, modifier = Modifier.padding(12.dp))
-                    Controls(media)
+                    if (review != null) ReviewControls() else Controls(media)
                 }
             }
         }
@@ -124,6 +161,35 @@ class CaptureActivity : ComponentActivity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         bind()
+    }
+
+    @Composable
+    private fun ReviewControls() {
+        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            OutlinedButton(onClick = { retake() }, modifier = Modifier.weight(1f).height(56.dp)) { Text("↺ Yeniden çek") }
+            Button(
+                onClick = { accept() },
+                modifier = Modifier.weight(1f).height(56.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = C.accent),
+            ) { Text("✓ Kullan") }
+        }
+    }
+
+    private fun retake() {
+        review?.let { File(it.first).delete() }
+        review = null
+        reviewBmp = null
+    }
+
+    private fun accept() {
+        val (path, kind) = review ?: return
+        review = null
+        reviewBmp = null
+        if (kind == "video") { done(listOf(path), "video"); return }
+        if (multiPhoto) {
+            photos += path
+            if (photos.size >= maxPhotos) finishPhotos()
+        } else done(listOf(path), "photo")
     }
 
     @Composable
@@ -209,10 +275,8 @@ class CaptureActivity : ComponentActivity() {
                 runOnUiThread {
                     busy = false
                     if (out.exists() && out.length() > 0) {
-                        if (multiPhoto) {
-                            photos += out.absolutePath
-                            if (photos.size >= maxPhotos) finishPhotos()
-                        } else done(listOf(out.absolutePath), "photo")
+                        reviewBmp = runCatching { BitmapFactory.decodeFile(out.absolutePath) }.getOrNull()
+                        review = out.absolutePath to "photo"
                     } else error = "Fotoğraf kaydedilemedi"
                 }
             }
@@ -242,7 +306,7 @@ class CaptureActivity : ComponentActivity() {
                     busy = false
                     recording = null
                     val ok = !ev.hasError() || ev.error == VideoRecordEvent.Finalize.ERROR_DURATION_LIMIT_REACHED
-                    if (ok && out.exists() && out.length() > 0) done(listOf(out.absolutePath), "video") else error = "Video kaydedilemedi"
+                    if (ok && out.exists() && out.length() > 0) review = out.absolutePath to "video" else error = "Video kaydedilemedi"
                 }
             }
         }
@@ -272,6 +336,7 @@ class CaptureActivity : ComponentActivity() {
     override fun onDestroy() {
         recording?.stop()
         if (isFinishing && !isChangingConfigurations && photos.isNotEmpty()) photos.forEach { File(it).delete() }
+        if (isFinishing) review?.let { File(it.first).delete() }
         exec.shutdown()
         super.onDestroy()
     }

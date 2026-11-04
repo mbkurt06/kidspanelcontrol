@@ -323,10 +323,10 @@ class OrbitService : Service() {
             lastMediaLocked = mediaLocked
             Policy.setLockedMediaControls(this, mediaLocked)
         }
-        val kioskKey = if (kiosk != null) "on:${rules.kiosk.calls}" else "off"
+        val kioskKey = if (kiosk != null) "on:${rules.kiosk.calls}:${rules.taskAllowedPackages.sorted().joinToString(",")}" else "off"
         if (kioskKey != lastKioskKey) {
             lastKioskKey = kioskKey
-            Policy.setKiosk(this, kiosk != null, rules.kiosk.calls == "all")
+            Policy.setKiosk(this, kiosk != null, rules.kiosk.calls == "all", rules.taskAllowedPackages)
         }
         // Müzik: kurallar kapattıysa durdur
         app.orbit.data.Music.blocked.value = runCatching { app.orbit.engine.Extras.musicBlocked(rules, engine, now) }.getOrNull()

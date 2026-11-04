@@ -193,6 +193,8 @@ data class Rules(
     val focus: Focus? = null,
     /** Onay bekleyen görevlerin bağımsız kısıtları */
     val taskRestrictions: List<TaskRestriction> = emptyList(),
+    /** Açık görevlerin izinli uygulamaları: görev sürerken her modda açık */
+    val taskAllowedPackages: Set<String> = emptySet(),
     /** Çocuğun cüzdandan günde en fazla kullanabileceği dakika (null = sınır yok) */
     val walletDailyMax: Int? = null,
     /** Tam kilit varsayılanları */

@@ -35,6 +35,14 @@ data class TaskItem(
     val screenshotMin: Int? = null,
     val screenshotMax: Int? = null,
     val screenshotCount: Int = 0,
+    /** Ekran kaydı kanıtı: en fazla / en az (dk), son kaydın durumu ve süresi */
+    val screenRecMinutes: Int? = null,
+    val screenRecMinMinutes: Int? = null,
+    val screenRecId: String? = null,
+    val screenRecStatus: String? = null,
+    val screenRecSeconds: Int = 0,
+    /** Görev sürerken açık olan uygulamalar */
+    val allowedPackages: List<String> = emptyList(),
     /** back | front | choose */
     val recordCamera: String = "back",
     /** none | limit | child */
@@ -70,6 +78,7 @@ data class TaskItem(
     val open get() = status in setOf("open", "started", "rejected")
     val needsProof get() = proof != "none"
     val needsScreenshot get() = screenshotMin != null && screenshotCount < screenshotMin
+    val needsScreenRec get() = screenRecMinutes != null && !(screenRecStatus == "done" && screenRecSeconds >= (screenRecMinMinutes ?: 0) * 60)
     /** Görevler artık tek başına süreli uygulamaları engellemez; kısıtlar odak profillerinden gelir. */
     val blocking get() = false
 }
@@ -107,6 +116,12 @@ object Tasks {
             screenshotMin = if (o.isNull("screenshot_min") || !o.has("screenshot_min")) null else o.optInt("screenshot_min"),
             screenshotMax = if (o.isNull("screenshot_max") || !o.has("screenshot_max")) null else o.optInt("screenshot_max"),
             screenshotCount = stages.count { it == "screenshot" },
+            screenRecMinutes = if (o.isNull("screen_record_minutes") || !o.has("screen_record_minutes")) null else o.optInt("screen_record_minutes"),
+            screenRecMinMinutes = if (o.isNull("screen_record_min_minutes") || !o.has("screen_record_min_minutes")) null else o.optInt("screen_record_min_minutes"),
+            screenRecId = o.optJSONObject("screen_recording")?.optString("id"),
+            screenRecStatus = o.optJSONObject("screen_recording")?.optString("status"),
+            screenRecSeconds = o.optJSONObject("screen_recording")?.optInt("recorded_seconds") ?: 0,
+            allowedPackages = o.optJSONArray("allowed_packages")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() } } ?: emptyList(),
             recordMinMinutes = if (o.isNull("record_min_minutes") || !o.has("record_min_minutes")) null else o.optInt("record_min_minutes"),
             recordCamera = o.optString("record_camera", "back"),
             recordPause = o.optString("record_pause", "child"),

@@ -55,7 +55,7 @@ export function RecordingList({ runId }: { runId: string }) {
   return (
     <div className="stack">
       {recs.map((r, i) => (
-        <RecordingPlayer key={r.id} rec={r} segs={segs.filter((s) => s.recording_id === r.id)} label={recs.length > 1 ? `${r.attempt + 1}. deneme` : undefined} last={i === recs.length - 1} />
+        <RecordingPlayer key={r.id} rec={r} segs={segs.filter((s) => s.recording_id === r.id)} label={recs.filter((x) => (x.camera === "screen") === (r.camera === "screen")).length > 1 ? `${r.attempt + 1}. deneme` : undefined} last={i === recs.length - 1} />
       ))}
     </div>
   );
@@ -137,7 +137,7 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
   return (
     <div className="rec-box">
       <button className="rec-head" onClick={() => setOpen(!open)}>
-        <span>📹 {label ? `${label} · ` : ""}Kayıt</span>
+        <span>{rec.camera === "screen" ? "🎬" : "📹"} {label ? `${label} · ` : ""}{rec.camera === "screen" ? "Ekran kaydı" : "Kayıt"}</span>
         <span className={`small ${early || alerts ? "warn-text" : "muted"}`}>
           {mm(rec.recorded_seconds)}
           {rec.planned_seconds ? ` / ${mm(rec.planned_seconds)}` : ""}

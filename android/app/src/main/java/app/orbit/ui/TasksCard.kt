@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -160,6 +162,7 @@ fun TasksCard(tasks: List<TaskItem>) {
             busyRun = null
             if (ok.isFailure) optimisticSubmitted = optimisticSubmitted - t.runId
             msg = if (ok.isSuccess) "\"${t.title}\" gönderildi, onay bekleniyor"
+                else if ("screen_recording_missing" in (ok.exceptionOrNull()?.message ?: "")) "Önce ekran kaydını tamamla"
                 else if ("recording_missing" in (ok.exceptionOrNull()?.message ?: "")) "Önce kaydı tamamla"
                 else if ("screenshot_missing" in (ok.exceptionOrNull()?.message ?: "")) "Önce ekran görüntüsü ekle"
                 else if ("recording_short" in (ok.exceptionOrNull()?.message ?: "")) "Kayıt en az süreden kısa"
@@ -177,7 +180,7 @@ fun TasksCard(tasks: List<TaskItem>) {
         val media = res.data?.getStringExtra("media") ?: "photo"
         val (task, stage) = p
         busyRun = task.runId
-        val thenSubmit = stage != "before" && !task.needsScreenshot
+        val thenSubmit = stage != "before" && !task.needsScreenshot && !task.needsScreenRec
         if (thenSubmit) optimisticSubmitted = optimisticSubmitted + task.runId
         msg = "Yükleniyor…"
         scope.launch {
@@ -196,7 +199,7 @@ fun TasksCard(tasks: List<TaskItem>) {
             msg = when {
                 r.isFailure -> "Yüklenemedi: ${r.exceptionOrNull()?.message ?: "internet?"}"
                 stage == "before" -> "${paths.size} öncesi fotoğrafı kaydedildi. Görevi yap, sonra \"Tamamladım\"a bas."
-                !thenSubmit -> "Fotoğraflar eklendi. Şimdi ekran görüntüsünü ekle."
+                !thenSubmit -> if (task.needsScreenRec) "Fotoğraflar eklendi. Şimdi ekran kaydını yap." else "Fotoğraflar eklendi. Şimdi ekran görüntüsünü ekle."
                 else -> "\"${task.title}\" gönderildi, onay bekleniyor"
             }
             Live.syncRequested = true
@@ -280,14 +283,50 @@ fun TasksCard(tasks: List<TaskItem>) {
                         t.recordingDone -> Text("📹 Kayıt tamam (${t.recSeconds / 60} dk)", color = C.good, fontSize = 13.sp)
                     }
                 }
+                if (t.open && t.allowedPackages.isNotEmpty()) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        t.allowedPackages.forEach { pkg ->
+                            val label = remember(pkg) { runCatching { ctx.packageManager.getApplicationLabel(ctx.packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg.substringAfterLast('.')) }
+                            OutlinedButton(onClick = {
+                                ctx.packageManager.getLaunchIntentForPackage(pkg)?.let { runCatching { ctx.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+                                    ?: run { msg = "$label telefonda yüklü değil" }
+                            }) { Text("▶ $label aç", color = C.text, fontSize = 13.sp) }
+                        }
+                    }
+                }
+                if (t.open && t.screenRecMinutes != null) {
+                    val active = app.orbit.service.ScreenCaptureService.running
+                    if (t.needsScreenRec || t.screenRecStatus != "done") Button(
+                        onClick = { ScreenCaptureActivity.start(ctx, t, "record") },
+                        enabled = !active && !t.locked,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = C.bad),
+                    ) {
+                        val minTxt = t.screenRecMinMinutes?.let { "en az $it · " } ?: ""
+                        Text(
+                            when {
+                                active -> "🎬 Ekran kaydı sürüyor (yuvarlak düğme)"
+                                t.screenRecStatus == "recording" || t.screenRecStatus == "paused" -> "🎬 Ekran kaydına devam et (${t.screenRecSeconds / 60} dk)"
+                                else -> "🎬 Ekran kaydını başlat (${minTxt}en fazla ${t.screenRecMinutes} dk)"
+                            }
+                        )
+                    }
+                    else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("🎬 Ekran kaydı tamam (${t.screenRecSeconds / 60} dk)", color = C.good, fontSize = 13.sp)
+                        TextButton(onClick = { ScreenCaptureActivity.start(ctx, t, "record") }) { Text("Yeniden kaydet", fontSize = 13.sp) }
+                    }
+                }
                 if (t.open && t.screenshotMin != null) {
                     val mx = t.screenshotMax ?: t.screenshotMin
-                    if (t.screenshotCount < mx) Button(
-                        onClick = { shotFor = t },
-                        enabled = busyRun != t.runId,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(containerColor = if (t.needsScreenshot) C.blue else C.surface),
-                    ) { Text("📱 Ekran görüntüsü ekle (${t.screenshotCount}/${t.screenshotMin}${if (mx > t.screenshotMin) "–$mx" else ""})") }
+                    if (t.screenshotCount < mx) {
+                        Button(
+                            onClick = { ScreenCaptureActivity.start(ctx, t, "shot") },
+                            enabled = busyRun != t.runId && !app.orbit.service.ScreenCaptureService.running,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = if (t.needsScreenshot) C.blue else C.surface),
+                        ) { Text("📱 Ekran görüntüsü al (${t.screenshotCount}/${t.screenshotMin}${if (mx > t.screenshotMin) "–$mx" else ""})") }
+                        TextButton(onClick = { shotFor = t }) { Text("Galeriden seç", fontSize = 12.sp) }
+                    }
                     else Text("📱 ${t.screenshotCount} ekran görüntüsü eklendi", color = C.good, fontSize = 13.sp)
                 }
                 val needBefore = t.needsProof && t.beforeCount < t.beforePhotoMin
@@ -300,7 +339,8 @@ fun TasksCard(tasks: List<TaskItem>) {
                             when {
                                 needBefore -> capture(t, "before", t.beforePhotoMin, t.beforePhotoMax)
                                 needAfter -> capture(t, if (t.beforeAfter) "after" else "single", t.afterPhotoMin, t.afterPhotoMax)
-                                t.needsScreenshot -> shotFor = t
+                                t.needsScreenRec -> ScreenCaptureActivity.start(ctx, t, "record")
+                                t.needsScreenshot -> ScreenCaptureActivity.start(ctx, t, "shot")
                                 else -> submit(t)
                             }
                         },
@@ -313,7 +353,8 @@ fun TasksCard(tasks: List<TaskItem>) {
                                 busy -> "Gönderiliyor…"
                                 needBefore -> "Başla (${t.beforeCount}/${t.beforePhotoMin} öncesi)"
                                 needAfter -> "Tamamladım (${t.afterCount}/${t.afterPhotoMin} sonrası)"
-                                t.needsScreenshot -> "Önce ekran görüntüsü ekle"
+                                t.needsScreenRec -> "Önce ekran kaydını yap"
+                                t.needsScreenshot -> "Önce ekran görüntüsü al"
                                 else -> "Tamamladım"
                             }
                         )

@@ -416,6 +416,8 @@ class RuleEngine(private val rules: Rules) {
     private fun inWindows(ws: List<TimeWindow>, t: LocalTime) = ws.isEmpty() || ws.any { it.contains(t) }
 
     fun verdict(pkg: String, s: Snapshot, usage: DayUsage): AppVerdict {
+        // Görevin izinli uygulaması: görev açıkken her durumda açık, süreden düşmez
+        if (pkg in rules.taskAllowedPackages) return AppVerdict(true)
         val v = baseVerdict(pkg, s, usage)
         if (s.parentMode || !v.allowed) return v
         // Sayaç odak modu: kuralların açtıklarından sadece odak profilindekiler açık kalır

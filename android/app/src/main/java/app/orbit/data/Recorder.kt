@@ -196,9 +196,23 @@ object Recorder {
             val m = runCatching { JSONObject(meta.readText()) }.getOrNull()
             if (m == null) { meta.delete(); continue }
             val runId = m.getString("runId")
-            val path = "${c.familyId}/$runId/rec-${recId.take(8)}-$seq.mp4"
+            // Büyük video parçaları sadece Wi-Fi'de; önce OneDrive (yarıda kalırsa kaldığı yerden), yoksa Orbit deposu
+            if (video.length() > 8_000_000 && !Cloud.unmetered(appCtx)) continue
+            var path = "${c.familyId}/$runId/rec-${recId.take(8)}-$seq.mp4"
             val ok = runCatching {
-                Api.uploadFile("orbit-proofs", path, video, "video/mp4")
+                var url = m.optString("odUrl").takeIf { it.isNotBlank() }
+                if (url == null && Cloud.available) {
+                    url = Cloud.session("kayit-${java.time.Instant.ofEpochMilli(m.optLong("start")).atZone(java.time.ZoneId.of("Europe/Berlin")).toLocalTime().toString().take(8).replace(':', '-')}-${recId.take(6)}-$seq.mp4")
+                    if (url != null) { m.put("odUrl", url); meta.writeText(m.toString()) }
+                }
+                if (url != null) {
+                    val id = runCatching { Cloud.uploadFile(video, url, "video/mp4") }.getOrElse { e ->
+                        // Oturumun süresi dolduysa yenisini açmak için sil
+                        if (e is Api.ApiError && (e.code == 404 || e.code == 410)) { m.remove("odUrl"); meta.writeText(m.toString()) }
+                        throw e
+                    }
+                    path = "${c.familyId}/$runId/od:$id"
+                } else Api.uploadFile("orbit-proofs", path, video, "video/mp4")
                 Api.rpc("device_record_segment", JSONObject()
                     .put("p_id", recId).put("p_seq", seq).put("p_path", path).put("p_frames", m.optInt("frames"))
                     .put("p_start", Instant.ofEpochMilli(m.optLong("start")).toString())

@@ -1,18 +1,17 @@
 package app.orbit.service
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
 import android.graphics.Matrix
-import android.media.MediaCodec
-import android.media.MediaCodecInfo
-import android.media.MediaFormat
-import android.media.MediaMuxer
 import android.os.Build
 import android.os.PowerManager
 import android.util.Log
@@ -23,10 +22,18 @@ import androidx.camera.core.ImageProxy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.FallbackStrategy
+import androidx.camera.video.FileOutputOptions
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Recording
+import androidx.camera.video.VideoCapture
+import androidx.camera.video.VideoRecordEvent
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import app.orbit.R
+import app.orbit.data.Api
 import app.orbit.data.RecState
 import app.orbit.data.Recorder
 import app.orbit.ui.RecordActivity
@@ -39,9 +46,9 @@ import java.io.File
 import java.util.concurrent.Executors
 
 /**
- * Kameralı görev kaydı: ön plan servisi kamerayı açık tutar, saniyede 2 kare alır ve
- * 40 kare/sn'lik H.264 videoya (zaman atlamalı) yazar. Her 10 dakikada bir yeni parça açılır,
- * kapanan parçalar Wi‑Fi/İnternet varken yüklenir. Mola verilince parça kapanır.
+ * Kameralı görev kaydı: ön plan servisi kamerayı açık tutar ve normal video (720p, sesli) kaydeder.
+ * Her 3 dakikada bir yeni parça açılır; kapanan parçalar Wi‑Fi varken OneDrive'a (bağlı değilse Orbit deposuna) yüklenir.
+ * Mola verilince parça kapanır, devam edince yenisi başlar.
  */
 class RecordService : LifecycleService() {
     companion object {
@@ -52,6 +59,8 @@ class RecordService : LifecycleService() {
         const val ACTION_RESUME = "resume"
         const val ACTION_FINISH = "finish"
         const val ACTION_CANCEL = "cancel"
+        /** Parça uzunluğu */
+        private const val SEGMENT_MS = 3 * 60_000L
 
         @Volatile var running = false
             private set
@@ -69,9 +78,13 @@ class RecordService : LifecycleService() {
     private val camExec = Executors.newSingleThreadExecutor()
     private var provider: ProcessCameraProvider? = null
     private var boundCamera: String? = null
-    private var encoder: SegmentEncoder? = null
+    private var videoCap: VideoCapture<androidx.camera.video.Recorder>? = null
+    private var recording: Recording? = null
     private var segStartMs = 0L
-    private var lastFrameMs = 0L
+    private var rollover = false
+    private var finishing = false
+    private var realtimeSent = false
+    private var lastPreviewMs = 0L
     private var lastFrameSeen = 0L
     private var wake: PowerManager.WakeLock? = null
     private var ticking = false
@@ -81,13 +94,14 @@ class RecordService : LifecycleService() {
         running = true
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CH, "Görev kaydı", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) })
+        app.orbit.device.Policy.grantSelf(this, Manifest.permission.RECORD_AUDIO)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
         val s = Recorder.current()
         if (s == null || !s.active) {
-            stopSelf()
+            if (!finishing) stopSelf()
             return START_NOT_STICKY
         }
         Recorder.lastAlive = System.currentTimeMillis()
@@ -116,34 +130,44 @@ class RecordService : LifecycleService() {
             .setOngoing(true)
             .setContentIntent(pi)
             .build()
-        if (Build.VERSION.SDK_INT >= 30) startForeground(3, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA) else startForeground(3, n)
+        val type = if (Build.VERSION.SDK_INT >= 30) ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0
+        if (Build.VERSION.SDK_INT >= 30) runCatching { startForeground(3, n, type) }.onFailure { startForeground(3, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA) }
+        else startForeground(3, n)
         if (wake == null) {
             wake = getSystemService(PowerManager::class.java).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "orbit:rec").apply { acquire(4 * 3600_000L) }
         }
     }
 
     private fun bindCamera(s: RecState) {
-        if (provider != null && boundCamera == s.camera) return
+        if (provider != null && boundCamera == s.camera) { startSegment(); return }
         val f = ProcessCameraProvider.getInstance(this)
         f.addListener({
             runCatching {
                 val p = f.get()
                 provider = p
+                recording?.stop()
                 p.unbindAll()
+                // Küçük görüntü: önizleme ve "kamera görüntü veriyor mu" denetimi
                 val analysis = ImageAnalysis.Builder()
                     .setResolutionSelector(
                         ResolutionSelector.Builder()
-                            .setResolutionStrategy(ResolutionStrategy(Size(1280, 720), ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER))
+                            .setResolutionStrategy(ResolutionStrategy(Size(640, 480), ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER))
                             .build()
                     )
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                    .setOutputImageFormat(ImageAnalysis.OUTPUT_IMAGE_FORMAT_YUV_420_888)
                     .build()
                 analysis.setAnalyzer(camExec) { img -> onFrame(img) }
+                val recorder = androidx.camera.video.Recorder.Builder()
+                    .setQualitySelector(QualitySelector.from(Quality.HD, FallbackStrategy.lowerQualityOrHigherThan(Quality.HD)))
+                    .setTargetVideoEncodingBitRate(2_000_000)
+                    .build()
+                val vc = VideoCapture.withOutput(recorder)
                 val sel = if (s.camera == "front") CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
-                p.bindToLifecycle(this, sel, analysis)
+                p.bindToLifecycle(this, sel, analysis, vc)
+                videoCap = vc
                 boundCamera = s.camera
                 Recorder.error.value = null
+                startSegment()
             }.onFailure {
                 Log.e(TAG, "kamera açılamadı", it)
                 Recorder.error.value = "Kamera açılamadı: ${it.message ?: "bilinmeyen hata"}"
@@ -151,27 +175,14 @@ class RecordService : LifecycleService() {
         }, ContextCompat.getMainExecutor(this))
     }
 
-    /** Kamera iş parçacığı: her 500 ms'de bir kareyi kodla ve önizlemeyi güncelle. */
+    /** Kamera iş parçacığı: canlılık ve saniyede bir önizleme */
     private fun onFrame(img: ImageProxy) {
         try {
             val now = System.currentTimeMillis()
             lastFrameSeen = now
-            val s = Recorder.current() ?: return
-            if (s.status != "recording" || now - lastFrameMs < Recorder.CAPTURE_INTERVAL_MS) return
-            lastFrameMs = now
+            if (now - lastPreviewMs < 1000) return
+            lastPreviewMs = now
             val rot = img.imageInfo.rotationDegrees
-            var enc = encoder
-            if (enc == null) {
-                val seq = now / 1000
-                segStartMs = now
-                enc = runCatching { SegmentEncoder(Recorder.segmentFile(s.id, seq), img.width and 1.inv(), img.height and 1.inv(), rot) }
-                    .onFailure { Log.e(TAG, "kodlayıcı açılamadı", it); Recorder.error.value = "Kayıt başlatılamadı" }
-                    .getOrNull() ?: return
-                encoder = enc
-            }
-            enc.encode(img)
-            if (enc.frames >= Recorder.SEGMENT_FRAMES) closeSegment()
-            // Önizleme (küçük)
             runCatching {
                 val b = img.toBitmap()
                 val w = 360
@@ -187,20 +198,50 @@ class RecordService : LifecycleService() {
         }
     }
 
-    /** Kamera iş parçacığında çağrılır. */
-    private fun closeSegment() {
-        val enc = encoder ?: return
-        encoder = null
+    /** Ana iş parçacığında: yeni video parçası başlat */
+    @SuppressLint("MissingPermission")
+    private fun startSegment() {
+        if (recording != null || finishing) return
+        val vc = videoCap ?: return
         val s = Recorder.current() ?: return
-        runCatching { enc.finish() }.onFailure { Log.e(TAG, "parça kapatılamadı", it) }
-        Recorder.segmentClosed(s.id, s.runId, enc.file, enc.frames, segStartMs, System.currentTimeMillis())
+        if (s.status != "recording") return
+        val start = System.currentTimeMillis()
+        val file = Recorder.segmentFile(s.id, start / 1000)
+        segStartMs = start
+        var pending = vc.output.prepareRecording(this, FileOutputOptions.Builder(file).build())
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) pending = pending.withAudioEnabled()
+        recording = runCatching {
+            pending.start(ContextCompat.getMainExecutor(this)) { ev -> if (ev is VideoRecordEvent.Finalize) onFinalized(ev, file, start, s.id, s.runId) }
+        }.onFailure { Log.e(TAG, "kayıt başlatılamadı", it); Recorder.error.value = "Kayıt başlatılamadı" }.getOrNull()
+        if (!realtimeSent) {
+            realtimeSent = true
+            net { Api.rpc("device_record_realtime", JSONObject().put("p_id", s.id)) }
+        }
+    }
+
+    private fun onFinalized(ev: VideoRecordEvent.Finalize, file: File, start: Long, recId: String, runId: String) {
+        recording = null
+        val dur = (ev.recordingStats.recordedDurationNanos / 1_000_000_000L).toInt()
+        if (file.exists() && file.length() > 0 && dur > 0) {
+            Recorder.segmentClosed(recId, runId, file, dur * 30, start, start + dur * 1000L)
+        } else {
+            if (ev.hasError()) Log.w(TAG, "parça kaydedilemedi: ${ev.error}", ev.cause)
+            file.delete()
+        }
+        net { Recorder.pump() }
+        if (finishing) { stopAll(); return }
+        if (rollover) { rollover = false; startSegment() }
+    }
+
+    private fun closeSegment() {
+        recording?.stop()
     }
 
     private fun pause() {
         val s = Recorder.current() ?: return
         if (s.status != "recording" || !s.canPause) return
         val n = Recorder.update { it.copy(status = "paused", pauseCount = it.pauseCount + 1) } ?: return
-        camExec.execute { closeSegment() }
+        closeSegment()
         net { Recorder.push(n, JSONObject().put("type", "pause")) }
         goForeground(n)
     }
@@ -211,22 +252,20 @@ class RecordService : LifecycleService() {
         val n = Recorder.update { it.copy(status = "recording") } ?: return
         net { Recorder.push(n, JSONObject().put("type", "resume").apply { if (auto) put("note", "mola hakkı bitti") }) }
         goForeground(n)
+        startSegment()
     }
 
     private fun finish(cancelled: Boolean) {
         val s = Recorder.current() ?: return
         if (!s.active) return
         val n = Recorder.update { it.copy(status = if (cancelled) "cancelled" else "done") } ?: return
-        camExec.execute {
-            closeSegment()
-            net {
-                Recorder.push(n, JSONObject().put("type", if (cancelled) "cancel" else "done"))
-                Recorder.submitIfAuto(n)
-                Recorder.pump()
-                Live.syncRequested = true
-            }
+        finishing = true
+        net {
+            Recorder.push(n, JSONObject().put("type", if (cancelled) "cancel" else "done"))
+            Recorder.submitIfAuto(n)
+            Live.syncRequested = true
         }
-        stopAll()
+        if (recording != null) closeSegment() else stopAll()
     }
 
     private fun net(block: () -> Unit) {
@@ -246,16 +285,19 @@ class RecordService : LifecycleService() {
             val s = Recorder.current() ?: break
             if (!s.active) break
             if (s.status == "recording") {
-                // Kamera kare vermiyorsa (başka uygulama kamerayı aldı vb.) süre sayılmaz
+                // Kamera görüntü vermiyorsa (başka uygulama kamerayı aldı vb.) süre sayılmaz
                 val camOk = now - lastFrameSeen < 5_000
                 if (camOk) {
                     gapReported = false
                     val n = Recorder.update { it.copy(recordedSeconds = it.recordedSeconds + dt) } ?: break
                     if (n.recordedSeconds >= n.plannedSeconds) { finish(cancelled = false); break }
+                    if (recording != null && !rollover && now - segStartMs > SEGMENT_MS) { rollover = true; closeSegment() }
+                    if (recording == null && !rollover) startSegment()
                 } else if (!gapReported && now - lastFrameSeen > 15_000 && lastFrameSeen > 0) {
                     gapReported = true
                     net { Recorder.push(s, JSONObject().put("type", "gap").put("note", "kamera görüntü vermiyor")) }
                     boundCamera = null
+                    provider = null
                     bindCamera(s)
                 }
             } else if (s.status == "paused") {
@@ -283,7 +325,7 @@ class RecordService : LifecycleService() {
 
     override fun onDestroy() {
         running = false
-        camExec.execute { closeSegment() }
+        runCatching { recording?.stop() }
         camExec.shutdown()
         runCatching { provider?.unbindAll() }
         wake?.let { if (it.isHeld) it.release() }
@@ -291,126 +333,3 @@ class RecordService : LifecycleService() {
     }
 }
 
-/** Tek bir video parçası: YUV kareleri H.264 olarak MP4'e yazar (sabit 40 kare/sn zaman damgası). */
-class SegmentEncoder(val file: File, private val w: Int, private val h: Int, rotation: Int) {
-    private val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-    private val muxer = MediaMuxer(file.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-    private var track = -1
-    private var started = false
-    private val info = MediaCodec.BufferInfo()
-    var frames = 0
-        private set
-
-    init {
-        val f = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, w, h)
-        f.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible)
-        f.setInteger(MediaFormat.KEY_BIT_RATE, 2_000_000)
-        f.setInteger(MediaFormat.KEY_FRAME_RATE, Recorder.VIDEO_FPS)
-        f.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 2)
-        codec.configure(f, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-        codec.start()
-        muxer.setOrientationHint(rotation)
-    }
-
-    private fun pts(n: Int) = n * 1_000_000L / Recorder.VIDEO_FPS
-
-    fun encode(img: ImageProxy) {
-        val idx = codec.dequeueInputBuffer(20_000)
-        if (idx < 0) { drain(false); return }
-        val input = codec.getInputImage(idx)
-        val size = w * h * 3 / 2
-        if (input != null) {
-            copyPlane(img.planes[0], input.planes[0], w, h)
-            copyPlane(img.planes[1], input.planes[1], w / 2, h / 2)
-            copyPlane(img.planes[2], input.planes[2], w / 2, h / 2)
-        } else {
-            // Yedek: düzlemsel I420
-            val buf = codec.getInputBuffer(idx)!!
-            buf.clear()
-            writePlanar(img.planes[0], w, h, buf)
-            writePlanar(img.planes[1], w / 2, h / 2, buf)
-            writePlanar(img.planes[2], w / 2, h / 2, buf)
-        }
-        codec.queueInputBuffer(idx, 0, size, pts(frames), 0)
-        frames++
-        drain(false)
-    }
-
-    private fun copyPlane(src: ImageProxy.PlaneProxy, dst: android.media.Image.Plane, pw: Int, ph: Int) {
-        val s = src.buffer
-        val d = dst.buffer
-        val sp = src.pixelStride
-        val dp = dst.pixelStride
-        val sr = src.rowStride
-        val dr = dst.rowStride
-        if (sp == 1 && dp == 1) {
-            val row = ByteArray(pw)
-            for (y in 0 until ph) {
-                s.position(y * sr); s.get(row, 0, minOf(pw, s.remaining()))
-                d.position(y * dr); d.put(row, 0, minOf(pw, d.remaining()))
-            }
-        } else {
-            val sl = s.limit()
-            val dl = d.limit()
-            for (y in 0 until ph) {
-                val so = y * sr
-                val doff = y * dr
-                for (x in 0 until pw) {
-                    val si = so + x * sp
-                    val di = doff + x * dp
-                    if (si < sl && di < dl) d.put(di, s.get(si))
-                }
-            }
-        }
-    }
-
-    private fun writePlanar(src: ImageProxy.PlaneProxy, pw: Int, ph: Int, out: java.nio.ByteBuffer) {
-        val s = src.buffer
-        for (y in 0 until ph) for (x in 0 until pw) {
-            val i = y * src.rowStride + x * src.pixelStride
-            out.put(if (i < s.limit()) s.get(i) else 0)
-        }
-    }
-
-    private fun drain(eos: Boolean) {
-        var tries = 0
-        while (true) {
-            val i = codec.dequeueOutputBuffer(info, if (eos) 10_000 else 0)
-            when {
-                i == MediaCodec.INFO_TRY_AGAIN_LATER -> {
-                    if (!eos || ++tries > 200) return
-                }
-                i == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                    track = muxer.addTrack(codec.outputFormat)
-                    muxer.start()
-                    started = true
-                }
-                i >= 0 -> {
-                    val buf = codec.getOutputBuffer(i)
-                    if (info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) info.size = 0
-                    if (info.size > 0 && started && buf != null) {
-                        buf.position(info.offset)
-                        buf.limit(info.offset + info.size)
-                        muxer.writeSampleData(track, buf, info)
-                    }
-                    codec.releaseOutputBuffer(i, false)
-                    if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) return
-                }
-            }
-        }
-    }
-
-    fun finish() {
-        try {
-            val idx = codec.dequeueInputBuffer(50_000)
-            if (idx >= 0) codec.queueInputBuffer(idx, 0, 0, pts(frames), MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-            drain(true)
-        } finally {
-            runCatching { codec.stop() }
-            runCatching { codec.release() }
-            if (started) runCatching { muxer.stop() }
-            runCatching { muxer.release() }
-            if (!started || frames == 0) file.delete()
-        }
-    }
-}

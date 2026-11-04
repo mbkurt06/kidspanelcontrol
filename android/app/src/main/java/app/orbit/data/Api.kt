@@ -155,6 +155,17 @@ object Api {
         }
     }
 
+    /** Sunucu fonksiyonu çağır (oturumla). Dönüş: (HTTP kodu, gövde) */
+    fun function(name: String, body: JSONObject): Pair<Int, String> {
+        val req = Request.Builder().url("$base/functions/v1/$name")
+            .header("apikey", key)
+            .header("Authorization", "Bearer ${token()}")
+            .post(body.toString().toRequestBody(JSON)).build()
+        http.newCall(req).execute().use { r -> return r.code to r.body?.string().orEmpty() }
+    }
+
+    val bigClient: OkHttpClient get() = uploadClient
+
     private val uploadClient: OkHttpClient by lazy {
         http.newBuilder().writeTimeout(120, TimeUnit.SECONDS).readTimeout(120, TimeUnit.SECONDS).build()
     }

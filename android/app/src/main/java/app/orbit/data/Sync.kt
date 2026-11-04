@@ -206,8 +206,11 @@ object Sync {
     fun uploadProof(runId: String, stage: String, media: String, bytes: ByteArray, contentType: String) {
         val c = Store.creds ?: throw Api.ApiError(401, "Eşleşmemiş")
         val ext = if (media == "video") "mp4" else "jpg"
-        val path = "${c.familyId}/$runId/${stage}-${System.currentTimeMillis()}.$ext"
-        Api.upload("orbit-proofs", path, bytes, contentType)
+        val name = "${stage}-${java.time.LocalTime.now().toString().take(8).replace(':', '-')}-${System.currentTimeMillis() % 100000}.$ext"
+        // Önce OneDrive (bağlıysa), değilse Orbit deposu
+        val od = runCatching { Cloud.uploadBytes(bytes, name, contentType) }.onFailure { Cloud.log("OneDrive yüklemesi", it) }.getOrNull()
+        val path = if (od != null) "${c.familyId}/$runId/od:$od" else "${c.familyId}/$runId/${stage}-${System.currentTimeMillis()}.$ext"
+        if (od == null) Api.upload("orbit-proofs", path, bytes, contentType)
         Api.rpc("device_add_proof", JSONObject().put("p_run", runId).put("p_stage", stage).put("p_media", media).put("p_path", path))
     }
 

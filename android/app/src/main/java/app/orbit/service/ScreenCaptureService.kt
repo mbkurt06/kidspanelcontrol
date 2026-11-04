@@ -163,9 +163,14 @@ class ScreenCaptureService : Service() {
 
     private fun setupDisplay(mp: MediaProjection) {
         val m = resources.displayMetrics
-        val scale = if (mode == "record") 480f / m.widthPixels else minOf(1f, 1080f / m.widthPixels)
+        val scale = if (mode == "record") minOf(1f, 720f / m.widthPixels) else minOf(1f, 1080f / m.widthPixels)
         width = ((m.widthPixels * scale).toInt() / 16) * 16
         height = ((m.heightPixels * scale).toInt() / 16) * 16
+        if (mode == "record") {
+            // Normal video: ekran doğrudan video kodlayıcıya (MediaRecorder) yazılır
+            display = mp.createVirtualDisplay("orbit-screen", width, height, m.densityDpi, DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR, null, null, bg)
+            return
+        }
         val r = ImageReader.newInstance(width, height, PixelFormat.RGBA_8888, 2)
         reader = r
         r.setOnImageAvailableListener({ rd ->
@@ -282,38 +287,63 @@ class ScreenCaptureService : Service() {
                 minReached = recorded >= recMin
                 updateBubble()
                 main.post(tick)
-                bg.post(frameLoop)
+                startSeg()
             }
         }
     }
 
-    private val frameLoop = object : Runnable {
-        override fun run() {
-            if (stopping || recId == null) return
-            if (paused) { bg.postDelayed(this, Recorder.CAPTURE_INTERVAL_MS); return }
-            val px = lastFrame
-            if (px != null) {
-                runCatching {
-                    var enc = encoder
-                    if (enc == null) {
-                        segStart = System.currentTimeMillis()
-                        enc = ScreenEncoder(Recorder.segmentFile(recId!!, segStart / 1000), width, height)
-                        encoder = enc
-                    }
-                    enc.encode(px)
-                    if (enc.frames >= Recorder.SEGMENT_FRAMES) closeSegment()
-                }.onFailure { Log.e(TAG, "kodlama", it) }
-            }
-            bg.postDelayed(this, Recorder.CAPTURE_INTERVAL_MS)
+    private val frameLoop = Runnable { }
+    private var mr: android.media.MediaRecorder? = null
+    private var segFile: File? = null
+    private var realtimeSent = false
+
+    /** Yeni video parçası (ana iş parçacığı) */
+    private fun startSeg() {
+        if (mr != null || stopping || paused) return
+        val id = recId ?: return
+        val d = display ?: return
+        val now = System.currentTimeMillis()
+        val f = Recorder.segmentFile(id, now / 1000)
+        val r = (if (Build.VERSION.SDK_INT >= 31) android.media.MediaRecorder(this) else @Suppress("DEPRECATION") android.media.MediaRecorder())
+        runCatching {
+            r.setVideoSource(android.media.MediaRecorder.VideoSource.SURFACE)
+            r.setOutputFormat(android.media.MediaRecorder.OutputFormat.MPEG_4)
+            r.setVideoEncoder(android.media.MediaRecorder.VideoEncoder.H264)
+            r.setVideoSize(width, height)
+            r.setVideoFrameRate(30)
+            r.setVideoEncodingBitRate(1_500_000)
+            r.setOutputFile(f.path)
+            r.prepare()
+            d.surface = r.surface
+            r.start()
+        }.onFailure {
+            Log.e(TAG, "ekran kaydı başlatılamadı", it)
+            runCatching { r.release() }
+            toast("Ekran kaydı başlatılamadı")
+            return
+        }
+        mr = r
+        segFile = f
+        segStart = now
+        if (!realtimeSent) {
+            realtimeSent = true
+            bg.post { runCatching { Api.rpc("device_record_realtime", JSONObject().put("p_id", id)) } }
         }
     }
 
-    /** bg iş parçacığında */
+    /** Parçayı kapat ve yükleme sırasına ekle */
     private fun closeSegment() {
-        val enc = encoder ?: return
-        encoder = null
-        runCatching { enc.finish() }
-        recId?.let { Recorder.segmentClosed(it, runId, enc.file, enc.frames, segStart, System.currentTimeMillis()) }
+        val r = mr ?: return
+        mr = null
+        val f = segFile
+        segFile = null
+        val ok = runCatching { r.stop() }.isSuccess
+        runCatching { r.release() }
+        runCatching { display?.surface = null }
+        val end = System.currentTimeMillis()
+        val dur = ((end - segStart) / 1000).toInt()
+        val id = recId
+        if (f != null && id != null && ok && dur > 0) Recorder.segmentClosed(id, runId, f, dur * 30, segStart, end) else f?.delete()
     }
 
     private var lastPush = 0L
@@ -321,7 +351,9 @@ class ScreenCaptureService : Service() {
         override fun run() {
             if (stopping || recId == null) return
             if (paused) { pausedSec++; updateBubble(); main.postDelayed(this, 1000); return }
-            if (lastFrame != null) recorded++
+            recorded++
+            if (mr != null && System.currentTimeMillis() - segStart > 3 * 60_000L) { closeSegment(); startSeg() }
+            if (mr == null) startSeg()
             if (!minReached && recorded >= recMin) {
                 minReached = true
                 vibrate()
@@ -358,11 +390,13 @@ class ScreenCaptureService : Service() {
         if (paused) {
             pauseCount++
             push("paused", "pause")
-            bg.post { closeSegment() }
+            closeSegment()
+            bg.post { Recorder.pump() }
             app.orbit.data.TaskSession.stop(runId)
             toast("Duraklatıldı: diğer uygulamalar açık ve süreden düşer")
         } else {
             push("recording", "resume")
+            startSeg()
             lockToTask()
             allowed.firstOrNull()?.let { pkg -> packageManager.getLaunchIntentForPackage(pkg)?.let { runCatching { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } } }
             toast("Kayıt devam ediyor")
@@ -374,8 +408,8 @@ class ScreenCaptureService : Service() {
         if (recorded < recMin) { toast("En az ${recMin / 60} dk kayıt gerekli (şu an ${recorded / 60} dk)"); return }
         stopping = true
         push("done", "done")
+        closeSegment()
         bg.post {
-            closeSegment()
             Recorder.pump()
             if (autoSubmit) runCatching { Sync.submitTask(runId) }
             Live.syncRequested = true
@@ -390,9 +424,8 @@ class ScreenCaptureService : Service() {
         bg.removeCallbacks(frameLoop)
         val old = recId
         push("cancelled", "cancel")
+        closeSegment()
         bg.post {
-            encoder?.let { runCatching { it.finish() }; it.file.delete() }
-            encoder = null
             old?.let { File(filesDir, "rec/$it").deleteRecursively() }
             main.post {
                 recId = null
@@ -411,7 +444,8 @@ class ScreenCaptureService : Service() {
             if (recorded >= recMin) { finishRecording(); return }
             stopping = true
             push("recording", null)
-            bg.post { closeSegment(); Recorder.pump() }
+            closeSegment()
+            bg.post { Recorder.pump() }
             toast("Kayıt durdu; görevden tekrar başlatınca kaldığı yerden devam eder")
         }
         stopAll()
@@ -564,6 +598,7 @@ class ScreenCaptureService : Service() {
     }
 
     private fun stopAll() {
+        closeSegment()
         stopping = true
         if (mode == "record") app.orbit.data.TaskSession.stop(runId)
         main.removeCallbacks(tick)
@@ -583,7 +618,7 @@ class ScreenCaptureService : Service() {
 
     override fun onDestroy() {
         running = false
-        bg.post { closeSegment(); runCatching { reader?.close() } }
+        bg.post { runCatching { reader?.close() } }
         worker.quitSafely()
         super.onDestroy()
     }

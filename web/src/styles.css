@@ -1632,3 +1632,12 @@ select:focus {
   margin-top: 6px;
   max-width: 260px;
 }
+
+.btn.lock-on {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 60%, transparent);
+}
+.btn.limit-on {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 60%, transparent);
+}

@@ -233,19 +233,16 @@ function ChildCard({ child }: { child: Child }) {
         </div>
       </Link>
 
-      {kiosk || limited ? (
-        <button className="btn danger-fill wide" disabled={!!busy} onClick={() => run("unlock", () => unlockNow(child.id), "Kilit kaldırılıyor")}>
-          <Icon name="unlock" size={18} /> Kilidi kaldır
-        </button>
-      ) : null}
-
       <div className="card-actions">
-        {!(kiosk || limited) && (
-          <button className={`btn grow ${lockOpen ? "on" : ""}`} disabled={!!busy} onClick={() => setLockOpen(!lockOpen)} aria-expanded={lockOpen}>
-            <Icon name="lock" size={18} /> Kilitle…
-          </button>
-        )}
-        <div className={`give-box ${kiosk || limited ? "grow" : ""}`}>
+        <button
+          className={`btn grow ${lockOpen ? "on" : ""} ${kiosk ? "lock-on" : limited ? "limit-on" : ""}`}
+          disabled={!!busy}
+          onClick={() => setLockOpen(!lockOpen)}
+          aria-expanded={lockOpen}
+        >
+          <Icon name="lock" size={18} /> {kiosk ? "Kilitli" : limited ? "Sınırlı" : "Kilitle…"}
+        </button>
+        <div className="give-box">
           <button type="button" aria-label="1 dk azalt" disabled={give === 0} {...holdDown}>
             −
           </button>
@@ -281,6 +278,21 @@ function ChildCard({ child }: { child: Child }) {
 
       {lockOpen && (
         <div className="lock-panel">
+          {(kiosk || limited) && (
+            <>
+              <button
+                className="btn danger-fill wide"
+                disabled={!!busy}
+                onClick={() => {
+                  setLockOpen(false);
+                  run("unlock", () => unlockNow(child.id), "Kilit kaldırılıyor");
+                }}
+              >
+                <Icon name="unlock" size={18} /> Kilidi kaldır
+              </button>
+              <span className="muted small">ya da değiştir:</span>
+            </>
+          )}
           <div className="field">
             <span>Ne olsun</span>
             <select value={lockKind} onChange={(e) => setLockKind(e.target.value)}>

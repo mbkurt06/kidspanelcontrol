@@ -17,7 +17,7 @@ import {
   type TaskTemplate,
 } from "../lib/types";
 import TaskGroupDetail from "../components/TaskGroupDetail";
-import { groupProgress, moveToGroup, newGroup, repeatText } from "../lib/groups";
+import { groupDay, groupProgress, moveToGroup, newGroup, repeatText } from "../lib/groups";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
@@ -78,7 +78,12 @@ export default function Tasks() {
 
   const pending = runs.filter((r) => r.status === "submitted" && visibleChildIds.has(r.child_id) && (childFilter === "all" || r.child_id === childFilter));
   const todays = runs.filter(
-    (r) => visibleChildIds.has(r.child_id) && (childFilter === "all" || r.child_id === childFilter) && (r.day === today || (taskById[r.task_id]?.recurrence === "once" && ["open", "started", "rejected"].includes(r.status)))
+    (r) => visibleChildIds.has(r.child_id) && (childFilter === "all" || r.child_id === childFilter) && (() => {
+      const t = taskById[r.task_id];
+      const g = t?.group_id ? groups.find((x) => x.id === t.group_id) : null;
+      if (g) return r.day === groupDay(g);
+      return r.day === today || (t?.recurrence === "once" && ["open", "started", "rejected"].includes(r.status));
+    })()
   );
   const rewards = runs.filter((r) => r.status === "approved" && r.reward_text && !r.reward_delivered_at && visibleChildIds.has(r.child_id));
   const history = runs.filter((r) => {

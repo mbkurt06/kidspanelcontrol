@@ -207,6 +207,7 @@ object Music {
     }.onFailure { Log.w(TAG, "çalma listesi silinemedi", it) }.getOrDefault(false)
 
     fun savePlaylistTracks(playlistId: String, items: List<Track>): Boolean = runCatching {
+        items.forEach { ensureMeta(it) }
         Api.delete("music_playlist_items?playlist_id=eq.$playlistId")
         items.forEachIndexed { i, track ->
             Api.post("music_playlist_items", JSONObject().put("playlist_id", playlistId).put("track_key", track.id.toString()).put("title", track.title).put("sort", i))
@@ -221,8 +222,19 @@ object Music {
     }.getOrDefault(emptySet())
 
     /** Şarkıyı listenin sonuna ekle (zaten varsa dokunma) */
+    /** Şarkı kataloğa kayıtlı değilse kaydet (listeye eklemek için gerekli) */
+    private fun ensureMeta(track: Track) {
+        val child = Store.creds?.childId ?: return
+        runCatching {
+            Api.post("music_meta?on_conflict=child_id,track_key", JSONObject().put("child_id", child).put("track_key", track.id.toString())
+                .put("title", track.title).put("file_name", track.fileName).put("relative_path", track.folder)
+                .put("duration_ms", track.durationMs).put("missing", false), upsert = true)
+        }.onFailure { Log.w(TAG, "katalog kaydı", it) }
+    }
+
     fun addToPlaylist(playlistId: String, track: Track): Boolean = runCatching {
         val key = track.id.toString()
+        ensureMeta(track)
         val rows = Api.get("music_playlist_items?playlist_id=eq.$playlistId&select=track_key,sort")
         if ((0 until rows.length()).any { rows.getJSONObject(it).optString("track_key") == key }) return true
         val next = (0 until rows.length()).maxOfOrNull { rows.getJSONObject(it).optInt("sort") }?.plus(1) ?: 0

@@ -356,7 +356,7 @@ declare r orbit.task_runs; t orbit.tasks; mins int; validity text; v_on date; ex
   nowt time := (now() at time zone 'Europe/Berlin')::time;
 begin
   for r in
-    select r2 from orbit.task_runs r2
+    select r2.* from orbit.task_runs r2
       join orbit.tasks t2 on t2.id = r2.task_id
       join orbit.families f on f.id = t2.family_id
       left join orbit.task_groups g2 on g2.id = t2.group_id

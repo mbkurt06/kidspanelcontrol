@@ -285,7 +285,7 @@ fun MusicScreen() {
             list.forEachIndexed { i, t ->
                 var editing by remember(t.id) { mutableStateOf(false) }
                 var name by remember(t.id) { mutableStateOf(t.fileName.substringBeforeLast('.')) }
-                TrackRow(t, t.id.toString() == currentId, onRename = { editing = true }, onAdd = { addFor = t }) { Music.play(ctx, if (selectedPlaylist == null) list else playlistSongs, if (selectedPlaylist == null) i else playlistSongs.indexOfFirst { it.id == t.id }.coerceAtLeast(0)) }
+                TrackRow(t, t.id.toString() == currentId, onRename = { editing = true }, onAdd = { addFor = t }) { Music.play(ctx, list, i) }
                 if (editing) AlertDialog(
                     onDismissRequest = { editing = false },
                     title = { Text("Dosyanın adını değiştir") },

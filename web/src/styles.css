@@ -1347,68 +1347,52 @@ summary.section-collapse-head { list-style: none; cursor: pointer; }
   opacity: 0.6;
 }
 
-/* Saat ve tarih seçici */
+/* Saat ve tarih seçici: tek kapsül (ana ekran kartıyla aynı ölçü) */
 .tf {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 0;
+  height: 36px;
+  padding: 0 3px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
   flex-wrap: nowrap;
+  vertical-align: middle;
 }
-.tf-seg {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: var(--surface-2, var(--line));
-  border-radius: 12px;
-  padding: 2px;
-}
-.tf-arrow {
-  background: none;
-  border: 0;
-  color: var(--muted);
-  font-size: 13px;
-  width: 52px;
-  height: 30px;
-  border-radius: 10px;
-  cursor: pointer;
-  touch-action: manipulation;
-  user-select: none;
-  -webkit-user-select: none;
-}
-.tf-arrow:active {
-  background: var(--accent);
-  color: #fff;
-}
+.tf-seg { display: flex; align-items: center; }
 .tf-num {
-  width: 52px;
+  width: 26px;
+  min-height: 0;
+  height: 28px;
   text-align: center;
-  font-size: 24px;
+  font-size: 15px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   background: transparent;
   border: 0;
   color: var(--text);
-  padding: 2px 0;
+  padding: 0;
+  border-radius: 6px;
 }
-.tf-num:focus {
-  outline: 2px solid var(--accent);
-  border-radius: 8px;
-}
-.tf-colon {
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--muted);
-}
+.tf-num:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+.tf-colon { font-size: 15px; font-weight: 700; color: var(--muted); padding: 0 1px; }
 .tf-more {
-  background: var(--line);
+  background: transparent;
   border: 0;
-  color: var(--text);
-  min-width: 40px;
-  height: 40px;
-  border-radius: 12px;
+  color: var(--muted);
+  width: 30px;
+  height: 30px;
+  min-width: 0;
+  border-radius: 50%;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 2px;
 }
+.tf-more:hover { color: var(--text); background: var(--line); }
 .tf-big {
   font-size: 40px;
   font-weight: 700;
@@ -1896,3 +1880,12 @@ input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
 .sub-collapse { border-top: 1px solid var(--line); padding-top: 4px; }
 .sub-collapse > .stack-s { padding-top: 6px; }
 .sub-collapse-head .text-strong { color: var(--text); font-weight: 600; }
+
+/* Tarih kutusu: kapsül */
+.df { display: inline-flex; width: auto; max-width: 100%; height: 36px; gap: 0; padding: 0 3px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); }
+.df-value { min-height: 0; height: 30px; background: transparent; border-radius: 999px; font-size: 14px; font-weight: 600; padding: 0 8px; text-align: center; }
+.df .tf-more { margin-left: 0; font-size: 18px; }
+.field > .df { align-self: flex-start; }
+.pop-label { display: inline-flex; align-items: center; gap: 4px; }
+.pop-label .info-popover, .sub-collapse .info-popover { font-size: 13px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--text); }
+.pop-label .info-btn { transform: scale(0.8); }

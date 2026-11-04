@@ -11,7 +11,7 @@ import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
 import TimerTab from "./TimerTab";
-import { currentSectionFor, suggestGroup, timedPossible } from "../lib/sections";
+import { currentSectionFor, hm, mins, suggestGroup, timedPossible } from "../lib/sections";
 
 type Tab = "apps" | "program" | "time" | "timer" | "alarms" | "report" | "device";
 
@@ -648,7 +648,14 @@ function TimeTab({ childId }: { childId: string }) {
         setMsg(`${minutesText(m)} verildi · ${text}`);
       } else if (detail === "from") {
         const day = fromDay === "today" ? today : todayISO("Europe/Berlin", 1);
-        const { patch, text } = await fromPatch(childId, fam, day, start, endMode, until);
+        let patch: GrantPatch, text: string;
+        if (cmode.mode === "usage") ({ patch, text } = await fromPatch(childId, fam, day, start, endMode, until));
+        else {
+          const span = cmode.mode === "clock" ? m : cmode.withinFactor ? m * cmode.withinFactor : cmode.withinMinutes ?? 120;
+          const end = hm(Math.min(mins(start) + span, 1439));
+          patch = { valid_on: day, section_id: null, vault: false, window_start: start, window_end: end };
+          text = `${start}–${end} arası`;
+        }
         await insertGrant(childId, m, patch, note);
         setMsg(`${minutesText(m)} verildi · ${dateText(day)} ${text}`);
       } else if (when === "vault") {
@@ -702,6 +709,8 @@ function TimeTab({ childId }: { childId: string }) {
     fam.reload();
   }
 
+  const fromSpan = cmode.mode === "clock" ? Number(minutes) || 0 : cmode.withinFactor ? (Number(minutes) || 0) * cmode.withinFactor : cmode.withinMinutes ?? 120;
+  const fromEnd = hm(Math.min(mins(start) + fromSpan, 1439));
   const stNow = fam.statuses[childId];
   const kioskNow = !!stNow?.lock_reason?.startsWith("🔒");
   const limitedNow = !kioskNow && (!!stNow?.locked || (!!stNow && stNow.remaining_minutes === 0));
@@ -715,6 +724,20 @@ function TimeTab({ childId }: { childId: string }) {
         : cmode.mode === "within"
           ? `Telefon şimdi açılır; ${mText} dk kullandıkça düşer, ${cmode.withinFactor ? `${cmode.withinFactor} katı süre` : `${(cmode.withinMinutes ?? 120) / 60} saat`} içinde kullanmalı.`
           : `Telefon şimdi açılır; ${mText} dk kullandıkça düşer, bitince kapanır.`;
+  const whenHint =
+    when === "now"
+      ? nowHint
+      : when === "vault"
+        ? "Kasada bekler; istediğinde buradan “Şimdi ver” ile açarsın."
+        : when === "child"
+          ? "Çocuk bu süreyi kendisi açabilir; yalnızca izin verilen saatlerde kullanılır."
+          : customWhen === "from"
+            ? cmode.mode === "usage"
+              ? `${start}'den itibaren ${mText} dk kullanabilir; kullandıkça düşer.`
+              : cmode.mode === "clock"
+                ? `${start}–${fromEnd} arası telefon açık; kullanılmasa da ${fromEnd}'de kapanır.`
+                : `${start}'den itibaren ${mText} dk; kullandıkça düşer, ${fromEnd}'e kadar kullanmalı.`
+            : "Açık saatlerdeki süreye eklenir; kullandıkça düşer.";
 
   const grantRow = (g: TimeGrant, kind: "wallet" | "vault") => (
     <div className="app-row wrap" key={g.id}>
@@ -765,7 +788,7 @@ function TimeTab({ childId }: { childId: string }) {
           </div>
         </div>
         <div className="extra-group">
-          <span className="pop-label">NE ZAMAN</span>
+          <span className="pop-label">NE ZAMAN {whenHint && <Info>{whenHint}</Info>}</span>
           <div className="chips">
             {([["now", "Hemen"], ["vault", "Kasaya"], ["child", "Cüzdana"], ["custom", "Özel"]] as const).map(([v, l]) => (
               <button key={v} type="button" className={`chip-btn ${when === v ? "on" : ""}`} onClick={() => setWhen(v)}>
@@ -782,16 +805,21 @@ function TimeTab({ childId }: { childId: string }) {
               ))}
             </div>
           )}
-          {when === "now" && (
+          {(when === "now" || (when === "custom" && customWhen === "from")) && (
             <details className="sub-collapse">
               <summary className="sub-collapse-head">
-                <span>Kapalı / sınırlıyken: <b className="text-strong">{closedModeLabel(cmode)}</b>{sameClosedMode(cmode, defMode) ? " · varsayılan" : ""}</span>
+                <span>
+                  Nasıl kullanılsın: <b className="text-strong">{closedModeLabel(cmode)}</b>
+                  {sameClosedMode(cmode, defMode) ? " · varsayılan" : ""}
+                </span>
                 <span className="collapse-arrow" aria-hidden="true" />
               </summary>
               <div className="stack-s">
                 <ClosedModePicker value={cmode} onChange={setCmode} />
-                <div className="row gap-s">
-                  <span className="muted tiny grow">Seçtiğin ayar bu veriş için geçerli. Varsayılan: {closedModeLabel(defMode)}</span>
+                <div className="row gap-s" style={{ alignItems: "center" }}>
+                  <span className="muted tiny grow">
+                    Varsayılan: {closedModeLabel(defMode)} <Info>Seçtiğin ayar sadece bu veriş için geçerli. “Varsayılan yap” dersen Kurallar’daki ayar da değişir. Telefon açık saatteyse süre o anki bölüme eklenir; bu ayar kapalı ya da sınırlı saatlerde geçerlidir.</Info>
+                  </span>
                   {!sameClosedMode(cmode, defMode) && (
                     <>
                       <button type="button" className="chip-btn" onClick={() => setCmode(defMode)}>Geri al</button>
@@ -802,31 +830,39 @@ function TimeTab({ childId }: { childId: string }) {
               </div>
             </details>
           )}
-          <p className="muted small">
-            {when === "now" ? nowHint : when === "vault" ? "Kasada bekler; istediğinde buradan “Şimdi ver” ile açarsın." : when === "child" ? "Çocuk bu süreyi kendisi açabilir; yalnızca izin verilen saatlerde kullanılır." : null}
-          </p>
         </div>
         {when === "custom" && customWhen === "from" && (
-          <>
-            <div className="row gap-s wrap" style={{ alignItems: "center" }}>
-              <select value={fromDay} onChange={(e) => setFromDay(e.target.value as typeof fromDay)} aria-label="Gün">
-                <option value="today">Bugün</option>
-                <option value="tomorrow">Yarın</option>
-              </select>
-              <span className="small">saat</span>
+          <div className="extra-group">
+            <div className="extra-row">
+              <div className="chips">
+                {([["today", "Bugün"], ["tomorrow", "Yarın"]] as const).map(([v, l]) => (
+                  <button key={v} type="button" className={`chip-btn ${fromDay === v ? "on" : ""}`} onClick={() => setFromDay(v)}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+              <span className="small muted">saat</span>
               <TimeField value={start} onChange={(v) => setStart(v)} label="Başlangıç" />
-              <span className="small">'den itibaren</span>
+              <span className="small muted">'den itibaren</span>
             </div>
-            <label className="field compact">
-              <span>Ne zamana kadar kullanabilir <Info>O saat gelince süre çocuğun kalan süresine eklenir. Bitiş saatine kadar kullanmazsa düşer; kapalı saatlere denk gelirse o aralıkta telefon bu süre kadar açılır.</Info></span>
-              <select value={endMode} onChange={(e) => setEndMode(e.target.value as typeof endMode)}>
-                <option value="open">Açık saatler bitene kadar</option>
-                <option value="until">Belirli saate kadar</option>
-                <option value="eod">Gün sonuna kadar</option>
-              </select>
-            </label>
-            {endMode === "until" && <TimeField value={until} onChange={(v) => setUntil(v)} label="Bitiş" />}
-          </>
+            {cmode.mode === "usage" && (
+              <>
+                <span className="pop-label">
+                  NE ZAMANA KADAR <Info>O saat gelince süre kullanılabilir olur. Bitişe kadar kullanmazsa düşer; kapalı saatlere denk gelirse o aralıkta telefon bu süre kadar açılır.</Info>
+                </span>
+                <div className="extra-row">
+                  <div className="chips">
+                    {([["open", "Açık saatler bitene kadar"], ["until", "Belirli saate kadar"], ["eod", "Gün sonuna kadar"]] as const).map(([v, l]) => (
+                      <button key={v} type="button" className={`chip-btn ${endMode === v ? "on" : ""}`} onClick={() => setEndMode(v)}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+                  {endMode === "until" && <TimeField value={until} onChange={(v) => setUntil(v)} label="Bitiş" />}
+                </div>
+              </>
+            )}
+          </div>
         )}
         {when === "custom" && customWhen === "date" && (
           <div className="field compact">

@@ -117,9 +117,6 @@ export function TimeField({
     const max = kind === "h" ? 23 : 59;
     return (
       <div className="tf-seg">
-        <button type="button" className="tf-arrow" aria-label={kind === "h" ? "Saati artır" : "Dakikayı artır"} {...(kind === "h" ? hUp : mUp)}>
-          ▲
-        </button>
         <input
           className="tf-num"
           inputMode="numeric"
@@ -162,9 +159,6 @@ export function TimeField({
             if (e.key === "Enter") (e.target as HTMLInputElement).blur();
           }}
         />
-        <button type="button" className="tf-arrow" aria-label={kind === "h" ? "Saati azalt" : "Dakikayı azalt"} {...(kind === "h" ? hDown : mDown)}>
-          ▼
-        </button>
       </div>
     );
   };
@@ -175,7 +169,7 @@ export function TimeField({
       <span className="tf-colon">:</span>
       {seg("m")}
       <button type="button" className="tf-more" aria-label="Listeden seç" onClick={() => setOpen(true)}>
-        ▾
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2" /></svg>
       </button>
       {clearable && (
         <button type="button" className="tf-more" aria-label="Saati kaldır" onClick={() => { onChange?.(""); onCommit?.(""); }}>
@@ -306,7 +300,7 @@ export function DateField({
     <div className="df">
       {value && (
         <button type="button" className="tf-more" aria-label="Önceki gün" onClick={() => shift(-1)}>
-          ◀
+          ‹
         </button>
       )}
       <button type="button" className="df-value" onClick={() => setOpen(true)} aria-label={label ?? "Tarih"}>
@@ -314,7 +308,7 @@ export function DateField({
       </button>
       {value && (
         <button type="button" className="tf-more" aria-label="Sonraki gün" onClick={() => shift(1)}>
-          ▶
+          ›
         </button>
       )}
       {clearable && value && (

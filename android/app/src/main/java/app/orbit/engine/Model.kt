@@ -82,6 +82,9 @@ data class Grant(
     val vault: Boolean = false,
     /** O gün bu saatler arasında geçerli ekstra süre (bölüm kapalı olsa bile) */
     val window: TimeWindow? = null,
+    /** Kullanılmayan kısmı bitişte kasaya aktarılır */
+    val toVault: Boolean = false,
+    val settled: Boolean = false,
 )
 
 /** Bölüm kuralı: açık (süre saymaz) / süreli / kapalı */
@@ -122,10 +125,21 @@ data class Focus(val name: String, val groups: Set<String>, val packages: Set<St
 data class TaskRestriction(
     val title: String,
     val status: String,
+    /** none | limit | kiosk | mode */
     val phoneMode: String,
     val screens: Set<String>,
+    val runId: String = "",
+    /** phoneMode = mode: kurallardaki durum */
+    val modeId: String? = null,
+    /** Görev saat aralığı: kısıtlama sadece bu aralıkta */
+    val window: TimeWindow? = null,
+    /** Son gün (tek seferlik); null = sadece bugün */
+    val dueDate: LocalDate? = null,
+    /** Kısıtlıyken izinli uygulamalar: paket → günlük dakika (null = sınırsız) */
+    val allowed: Map<String, Int?> = emptyMap(),
 ) {
     val active get() = status in setOf("open", "started", "submitted", "rejected")
+    val rank get() = when (phoneMode) { "kiosk" -> 3; "limit" -> 2; "mode" -> 1; else -> 0 }
 }
 
 /** Bir bölümde bir grup (groupId) ya da tek uygulama (pkg) için kural. */

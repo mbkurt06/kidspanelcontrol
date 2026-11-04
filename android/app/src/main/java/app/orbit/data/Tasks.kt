@@ -44,7 +44,10 @@ data class TaskItem(
     /** Görev sürerken açık olan uygulamalar */
     val allowedPackages: List<String> = emptyList(),
     /** keep = o anki durumu koru, focus = görev sırasında sadece izinli uygulamalar */
-    val allowedMode: String = "keep",
+    val allowedMode: String = "focus",
+    /** Görev saat aralığı (HH:mm); dışında görev gizlenir */
+    val windowStart: String? = null,
+    val windowEnd: String? = null,
     /** back | front | choose */
     val recordCamera: String = "back",
     /** none | limit | child */
@@ -80,6 +83,12 @@ data class TaskItem(
     val open get() = status in setOf("open", "started", "rejected")
     val needsProof get() = proof != "none"
     val needsScreenshot get() = screenshotMin != null && screenshotCount < screenshotMin
+    /** Görev saat aralığında mı (dışında açık görevler gizlenir) */
+    fun inWindow(now: java.time.LocalTime = java.time.LocalTime.now()): Boolean {
+        val a = windowStart?.let { runCatching { java.time.LocalTime.parse(it) }.getOrNull() } ?: return true
+        val b = windowEnd?.let { runCatching { java.time.LocalTime.parse(it) }.getOrNull() } ?: return true
+        return if (a < b) !now.isBefore(a) && now.isBefore(b) else !now.isBefore(a) || now.isBefore(b)
+    }
     val needsScreenRec get() = screenRecMinutes != null && !(screenRecStatus == "done" && screenRecSeconds >= (screenRecMinMinutes ?: 0) * 60)
     /** Görevler artık tek başına süreli uygulamaları engellemez; kısıtlar odak profillerinden gelir. */
     val blocking get() = false
@@ -123,7 +132,9 @@ object Tasks {
             screenRecId = o.optJSONObject("screen_recording")?.optString("id"),
             screenRecStatus = o.optJSONObject("screen_recording")?.optString("status"),
             screenRecSeconds = o.optJSONObject("screen_recording")?.optInt("recorded_seconds") ?: 0,
-            allowedMode = o.optString("allowed_mode", "keep"),
+            allowedMode = o.optString("allowed_mode", "focus"),
+            windowStart = o.s("window_start")?.take(5),
+            windowEnd = o.s("window_end")?.take(5),
             allowedPackages = o.optJSONArray("allowed_packages")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() } } ?: emptyList(),
             recordMinMinutes = if (o.isNull("record_min_minutes") || !o.has("record_min_minutes")) null else o.optInt("record_min_minutes"),
             recordCamera = o.optString("record_camera", "back"),

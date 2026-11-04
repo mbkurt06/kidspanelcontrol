@@ -194,15 +194,23 @@ class RuleEngine(private val rules: Rules) {
         // Ebeveynin şu an için verdiği saat aralıklı süre "Sınırla"yı (elle ya da programdan) o süre boyunca açar
         val windowNow = activeWindows(day, t).isNotEmpty()
         val locked0 = lockedCmd && !windowNow
+        // Zorunlu görevin kısıtlaması (verilen süre sürerken kalkar)
+        val taskR = if (windowNow) null else taskRestrictionNow(day, t)
+        raNow = if (taskR != null) restrictedAllowedNow(day, t) else emptyMap()
+        raDay = day
         // Kilit programı: "Sınırla" (sadece her zaman açık uygulamalar) ve "Serbest"
         val limit = if (locked0 || windowNow) null else Extras.limitNow(rules, this, day, t)
+            ?: taskR?.takeIf { it.phoneMode == "limit" }?.let { r ->
+                "Önce görev: ${r.title}" to (r.window?.end?.let { day.atTime(it).atZone(zone).toInstant().toEpochMilli() } ?: dayEnd)
+            }
         val freeRule = if (locked0 || limit != null || free0) null else Extras.freeNow(rules, this, day, t)
         val locked = locked0 || limit != null
         val lockUntil = if (locked0) lockUntil0 else limit?.second
         val free = free0 || freeRule != null
         val manual = manualMode(nowMs)
         val sched = scheduledModes(day, t).maxByOrNull { it.first.priority }
-        val active = manual?.first ?: sched?.first
+        val taskMode = taskR?.takeIf { it.phoneMode == "mode" }?.modeId?.let { rules.modes[it] }
+        val active = taskMode ?: manual?.first ?: sched?.first
         val modeEnds = if (manual != null) manual.second?.let { java.time.Instant.ofEpochMilli(it).atZone(zone).toLocalTime() } else sched?.second
 
         val parentUntil = parentModeUntil(nowMs)
@@ -252,7 +260,50 @@ class RuleEngine(private val rules: Rules) {
         sec.defaultRule == SecRule.TIMED || rules.sectionRules.any { it.sectionId == sec.id && it.rule == SecRule.TIMED }
 
     /** Şu an geçerli saat aralıklı süreler */
-    fun activeWindows(day: LocalDate, t: LocalTime): List<Grant> = dayWindows(day).filter { it.window!!.contains(t) }
+    fun activeWindows(day: LocalDate, t: LocalTime): List<Grant> = dayWindows(day).filter { it.window!!.contains(t) && it.id !in spentWindows && it.minutes > 0 }
+
+    /** Süresi tamamen kullanılmış saat aralıkları (kısıtlamayı artık kaldırmaz) */
+    var spentWindows: Set<String> = emptySet()
+
+    /** Saat aralıklı sürede kullanılan saniye */
+    fun windowUsedSeconds(usage: DayUsage, g: Grant, day: LocalDate) = bucket(usage, "s:grant:${g.id}@$day") + bucket(usage, "w:${g.id}")
+
+    fun refreshSpent(usage: DayUsage, day: LocalDate) {
+        spentWindows = dayWindows(day).filter { windowUsedSeconds(usage, it, day) >= it.minutes * 60L }.map { it.id }.toSet()
+    }
+
+    /** Şu an geçerli zorunlu görev kısıtlamaları (görev saat aralığında, onaylanmamış) */
+    fun taskRestrictionsNow(day: LocalDate, t: LocalTime): List<TaskRestriction> = rules.taskRestrictions.filter {
+        it.active && it.phoneMode != "none" && (it.window?.contains(t) ?: true) && (it.dueDate == null || !day.isAfter(it.dueDate))
+    }
+
+    /** En sıkı kısıtlama: Kilitle > Sınırla > durum */
+    fun taskRestrictionNow(day: LocalDate, t: LocalTime): TaskRestriction? =
+        if (activeWindows(day, t).isNotEmpty()) null else taskRestrictionsNow(day, t).maxByOrNull { it.rank }
+
+    /** Kısıtlıyken izinli uygulamalar: paket → günlük dakika sınırı */
+    fun restrictedAllowedNow(day: LocalDate, t: LocalTime): Map<String, Int?> {
+        val m = HashMap<String, Int?>()
+        for (r in taskRestrictionsNow(day, t)) for ((p, mins) in r.allowed) {
+            m[p] = if (!m.containsKey(p)) mins else { val o = m[p]; if (o == null || mins == null) null else maxOf(o, mins) }
+        }
+        return m
+    }
+
+    /** Kısıtlıyken izinli uygulamanın kalan süresi var mı */
+    fun restrictedLeft(pkg: String, usage: DayUsage): Boolean {
+        if (!raNow.containsKey(pkg)) return false
+        val mins = raNow[pkg] ?: return true
+        return bucket(usage, "ra:$pkg@$raDay") < mins * 60L
+    }
+
+    /** Son anlık durumda geçerli kısıtlıyken izinli uygulamalar */
+    var raNow: Map<String, Int?> = emptyMap()
+        private set
+    private var raDay: LocalDate? = null
+
+    /** Görev oturumu (Göreve başla / ekran kaydı): görev uygulamaları her durumda açık, süre saymaz */
+    var sessionPackages: Set<String> = emptySet()
 
     /**
      * Saat aralığı sanal bölümü: sadece o an normal bölüm kapalıysa (süreli kullanım yoksa).
@@ -409,19 +460,17 @@ class RuleEngine(private val rules: Rules) {
         }
     }
 
-    private fun taskLimitTitles() = rules.taskRestrictions.filter { it.active && it.phoneMode == "limit" }.map { it.title }
-    private fun hasMandatoryBlock() = rules.mandatoryOpen.isNotEmpty() || taskLimitTitles().isNotEmpty()
-    private fun mandatoryReason() = "Önce görevini yap: ${(rules.mandatoryOpen + taskLimitTitles()).first()}"
+    private fun hasMandatoryBlock() = rules.mandatoryOpen.isNotEmpty()
+    private fun mandatoryReason() = "Önce görevini yap: ${rules.mandatoryOpen.first()}"
 
     private fun inWindows(ws: List<TimeWindow>, t: LocalTime) = ws.isEmpty() || ws.any { it.contains(t) }
 
     fun verdict(pkg: String, s: Snapshot, usage: DayUsage): AppVerdict {
         // Görevin izinli uygulaması: görev açıkken her durumda açık, süreden düşmez
-        // Kısıtlı zamanda açılır (süreden düşmez); serbest zamanda normal kuralıyla sayılır
-        if (pkg in rules.taskAllowedPackages) {
-            val b = baseVerdict(pkg, s, usage)
-            return if (b.allowed) b else AppVerdict(true)
-        }
+        if (s.parentMode) return AppVerdict(true)
+        if (pkg in sessionPackages) return AppVerdict(true)
+        // Zorunlu görev kısıtlaması sürerken izin verilen uygulamalar (isteğe bağlı günlük dakika)
+        if (raNow.containsKey(pkg) && restrictedLeft(pkg, usage)) return AppVerdict(true, buckets = listOf("ra:$pkg@$raDay"))
         val v = baseVerdict(pkg, s, usage)
         if (s.parentMode || !v.allowed) return v
         // Sayaç odak modu: kuralların açtıklarından sadece odak profilindekiler açık kalır
@@ -505,6 +554,12 @@ class RuleEngine(private val rules: Rules) {
                 countedSeconds = u.countedSeconds + seconds,
                 perAppCounted = u.perAppCounted + (pkg to ((u.perAppCounted[pkg] ?: 0) + seconds)),
             )
+        }
+        val raB = v.buckets.filter { it.startsWith("ra:") }
+        if (v.allowed && raB.isNotEmpty()) {
+            val m = u.buckets.toMutableMap()
+            for (k in raB) m[k] = (m[k] ?: 0) + seconds
+            u = u.copy(buckets = m)
         }
         if (v.allowed && v.countsDaily && v.buckets.isNotEmpty()) {
             val m = u.buckets.toMutableMap()

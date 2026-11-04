@@ -253,6 +253,7 @@ class OrbitService : Service() {
         }
         recordingTick(rec, nowMs)
         val engine = RuleEngine(rules)
+        engine.sessionPackages = session?.packages.orEmpty()
         val zone = engine.zone()
         val now = ZonedDateTime.now(zone)
 
@@ -275,6 +276,12 @@ class OrbitService : Service() {
             }
         }
         var usage = Store.usage(now.toLocalDate())
+        engine.refreshSpent(usage, now.toLocalDate())
+        // Kullanılmayan saat aralıklı süreyi kasaya aktar (dakikada bir)
+        if (nowMs - lastLeftover > 60_000) {
+            lastLeftover = nowMs
+            leftoverTick(engine, usage, now)
+        }
 
         // 3) Ön plandaki uygulama ve süre sayımı
         updateForeground(nowMs)
@@ -382,7 +389,8 @@ class OrbitService : Service() {
         if (kiosk != null) {
             lockReason = "🔒 ${kiosk.name}"
             val ok = mutableSetOf(packageName, "android", "com.android.systemui", "com.android.phone", "com.android.emergency", "com.android.server.telecom")
-            ok += rules.taskAllowedPackages
+            ok += engine.raNow.keys.filter { engine.restrictedLeft(it, usage) }
+            session?.let { ok += it.packages }
             if (captureOn) ok += listOf("com.android.permissioncontroller", "com.google.android.permissioncontroller")
             if (rules.kiosk.calls == "all") runCatching { getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull()?.let { ok += it }
             if (interactive && fg != null && fg !in ok && nowMs - lastKioskFront > 2_000) {
@@ -455,6 +463,45 @@ class OrbitService : Service() {
     }
 
     /** Kayıt: servis beklenmedik kapandıysa molaya al ve bildir; bekleyen parçaları yükle. */
+    private var lastLeftover = 0L
+
+    /**
+     * Saat aralıklı süre bittiğinde kullanılmayan kısmı bildir: sunucu devam kaydına ya da kasaya aktarır.
+     * Gün değişince sayaçlar sıfırlandığı için son kullanım dakikada bir saklanır.
+     */
+    private fun leftoverTick(engine: RuleEngine, usage: app.orbit.engine.DayUsage, now: ZonedDateTime) {
+        val day = now.toLocalDate()
+        val t = now.toLocalTime()
+        val prefs = Store.prefs()
+        val used = runCatching { org.json.JSONObject(prefs.getString("grantUsed", "{}")) }.getOrDefault(org.json.JSONObject())
+        val done = prefs.getStringSet("grantLeftDone", emptySet()).orEmpty().toMutableSet()
+        val due = mutableListOf<Pair<String, Int>>()
+        for (g in Store.rules().grants) {
+            val w = g.window ?: continue
+            if (!g.toVault || g.settled || g.vault || g.validOn == null || g.id in done) continue
+            if (g.validOn == day) used.put(g.id, engine.windowUsedSeconds(usage, g, day))
+            val ended = g.validOn.isBefore(day) || (g.validOn == day && (if (w.end == java.time.LocalTime.of(23, 59)) false else !t.isBefore(w.end)))
+            if (!ended) continue
+            val sec = used.optLong(g.id, 0)
+            due += g.id to (g.minutes - ((sec + 59) / 60).toInt()).coerceAtLeast(0)
+        }
+        prefs.edit().putString("grantUsed", used.toString()).apply()
+        if (due.isEmpty()) return
+        scope.launch(Dispatchers.IO) {
+            val ok = mutableSetOf<String>()
+            for ((id, left) in due) {
+                runCatching { app.orbit.data.Api.rpc("device_grant_leftover", org.json.JSONObject().put("p_grant", id).put("p_minutes", left)) }
+                    .onSuccess { ok += id }
+            }
+            if (ok.isNotEmpty()) {
+                val cur = Store.prefs().getStringSet("grantLeftDone", emptySet()).orEmpty().toMutableSet()
+                cur += ok
+                Store.prefs().edit().putStringSet("grantLeftDone", cur.toList().takeLast(200).toSet()).apply()
+                Live.syncRequested = true
+            }
+        }
+    }
+
     private fun recordingTick(rec: app.orbit.data.RecState?, nowMs: Long) {
         val R = app.orbit.data.Recorder
         if (rec?.status == "recording" && !RecordService.running && nowMs - R.lastAlive > 15_000) {

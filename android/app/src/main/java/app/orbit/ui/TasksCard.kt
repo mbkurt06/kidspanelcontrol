@@ -286,7 +286,7 @@ fun TasksCard(tasks: List<TaskItem>) {
                         t.recordingDone -> Text("📹 Kayıt tamam (${t.recSeconds / 60} dk)", color = C.good, fontSize = 13.sp)
                     }
                 }
-                if (t.open && t.allowedPackages.isNotEmpty() && t.allowedMode == "focus" && t.screenRecMinutes == null) {
+                if (t.open && t.allowedPackages.isNotEmpty() && t.screenRecMinutes == null) {
                     val label = remember(t.allowedPackages) { t.allowedPackages.joinToString(", ") { pkg -> runCatching { ctx.packageManager.getApplicationLabel(ctx.packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg.substringAfterLast('.')) } }
                     val openApp = { ctx.packageManager.getLaunchIntentForPackage(t.allowedPackages.first())?.let { runCatching { ctx.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } } ?: run { msg = "Uygulama telefonda yüklü değil" } }
                     if (session?.runId == t.runId) {

@@ -94,7 +94,7 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
     val unreadMsgs = messages.count { it.fromParent && !it.read }
     val live by Live.state.collectAsState()
     val profileRules = remember(live.lastSync) { Store.rules() }
-    val openTasks = remember(live.lastSync, live.snapshot?.now?.minute) { Tasks.current().count { it.open } }
+    val openTasks = remember(live.lastSync, live.snapshot?.now?.minute) { Tasks.current().count { it.open && it.inWindow() } }
     val focusNow = remember(live.lastSync, live.snapshot?.now?.minute) { app.orbit.data.Timers.activeFocus() }
     val taskScreenSets = profileRules.taskRestrictions.filter { it.active && it.screens.isNotEmpty() }.map { it.screens }
     val taskScreens = taskScreenSets.reduceOrNull { a, b -> a intersect b }
@@ -229,7 +229,7 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
             ) {
                 when (screen) {
                     Screen.TODAY -> if (kiosk != null) KioskToday(kiosk) { screen = it } else TodayScreen { if (visible(it)) screen = it }
-                    Screen.TASKS -> TasksCard(remember(live.lastSync, live.snapshot?.now?.minute) { Tasks.current() })
+                    Screen.TASKS -> TasksCard(remember(live.lastSync, live.snapshot?.now?.minute) { Tasks.current().filter { !it.open || it.inWindow() } })
                     Screen.WALLET -> WalletScreen()
                     Screen.ASK -> AskScreen()
                     Screen.PROFILE -> ProfileScreen()

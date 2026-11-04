@@ -328,13 +328,15 @@ class OrbitService : Service() {
         val kiosk = if (snap.parentMode) null else runCatching { app.orbit.engine.Extras.kiosk(rules, engine, now) }.getOrNull()
         val mediaLocked = snap.locked || kiosk != null
         if (mediaLocked) {
+            // Kilit başlarken bir kez: diğer uygulamaların çalan sesini durdur.
+            // Her döngüde istemek Orbit'in kendi müzik çalarını da 2 sn'de bir durduruyordu.
             if (mediaFocus == null) {
                 mediaFocus = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_EXCLUSIVE)
                     .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).build())
                     .setOnAudioFocusChangeListener { }
                     .build()
+                runCatching { getSystemService(AudioManager::class.java).requestAudioFocus(mediaFocus!!) }
             }
-            runCatching { getSystemService(AudioManager::class.java).requestAudioFocus(mediaFocus!!) }
         } else {
             mediaFocus?.let { runCatching { getSystemService(AudioManager::class.java).abandonAudioFocusRequest(it) } }
             mediaFocus = null

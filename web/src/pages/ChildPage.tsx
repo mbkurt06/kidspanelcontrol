@@ -646,10 +646,10 @@ function TimeTab({ childId }: { childId: string }) {
       if (when === "now") {
         const text = await giveNow(childId, m, fam, fam.statuses[childId], { override: cmode, note: note || undefined });
         setMsg(`${minutesText(m)} verildi · ${text}`);
-      } else if (detail === "from") {
-        const day = fromDay === "today" ? today : todayISO("Europe/Berlin", 1);
+      } else if (detail === "from" || (detail && cmode.mode !== "usage")) {
+        const day = detail === "from" ? (fromDay === "today" ? today : todayISO("Europe/Berlin", 1)) : detail === "today" ? today : detail === "tomorrow" ? todayISO("Europe/Berlin", 1) : date;
         let patch: GrantPatch, text: string;
-        if (cmode.mode === "usage") ({ patch, text } = await fromPatch(childId, fam, day, start, endMode, until));
+        if (detail === "from" && cmode.mode === "usage") ({ patch, text } = await fromPatch(childId, fam, day, start, endMode, until));
         else {
           const span = cmode.mode === "clock" ? m : cmode.withinFactor ? m * cmode.withinFactor : cmode.withinMinutes ?? 120;
           const end = hm(Math.min(mins(start) + span, 1439));
@@ -737,7 +737,11 @@ function TimeTab({ childId }: { childId: string }) {
               : cmode.mode === "clock"
                 ? `${start}–${fromEnd} arası telefon açık; kullanılmasa da ${fromEnd}'de kapanır.`
                 : `${start}'den itibaren ${mText} dk; kullandıkça düşer, ${fromEnd}'e kadar kullanmalı.`
-            : "Açık saatlerdeki süreye eklenir; kullandıkça düşer.";
+            : cmode.mode === "usage"
+              ? "Seçtiğin bölüme ya da gün boyu süreye eklenir; kullandıkça düşer."
+              : cmode.mode === "clock"
+                ? `O gün ${start}–${fromEnd} arası telefon açık; kullanılmasa da ${fromEnd}'de kapanır.`
+                : `O gün ${start}'den itibaren ${mText} dk; kullandıkça düşer, ${fromEnd}'e kadar kullanmalı.`;
 
   const grantRow = (g: TimeGrant, kind: "wallet" | "vault") => (
     <div className="app-row wrap" key={g.id}>
@@ -805,7 +809,7 @@ function TimeTab({ childId }: { childId: string }) {
               ))}
             </div>
           )}
-          {(when === "now" || (when === "custom" && customWhen === "from")) && (
+          {(when === "now" || when === "custom") && (
             <details className="sub-collapse">
               <summary className="sub-collapse-head">
                 <span>
@@ -870,7 +874,14 @@ function TimeTab({ childId }: { childId: string }) {
             <DateField value={date} onChange={(v) => setDate(v)} />
           </div>
         )}
-        {when === "custom" && (customWhen === "today" || customWhen === "tomorrow" || customWhen === "date") && (
+        {when === "custom" && customWhen !== "from" && cmode.mode !== "usage" && (
+          <div className="extra-row">
+            <span className="small muted">saat</span>
+            <TimeField value={start} onChange={(v) => setStart(v)} label="Başlangıç" />
+            <span className="small muted">'den itibaren</span>
+          </div>
+        )}
+        {when === "custom" && (customWhen === "today" || customWhen === "tomorrow" || customWhen === "date") && cmode.mode === "usage" && (
           <label className="field compact">
             <span>Nereye eklensin</span>
             <select value={target} onChange={(e) => setTarget(e.target.value)}>

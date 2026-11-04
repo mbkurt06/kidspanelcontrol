@@ -25,6 +25,7 @@ export type AgendaItem = {
   status: "open" | "done";
   completed_at: string | null;
   created_at: string;
+  task_id?: string | null;
 };
 
 export type ChildApp = {
@@ -101,7 +102,55 @@ export type FamilySettings = {
   task_after_photo_min: number;
   task_after_photo_max: number;
   proof_retention_days: number;
+  task_defaults?: TaskDefaults | null;
 };
+
+/** Yeni görevde hazır gelen ayarlar (ad, tarih, saat hariç). */
+export type TaskDefaults = Partial<{
+  child_ids: string[];
+  assign_mode: "each" | "first";
+  proof: ProofType;
+  before_after: boolean;
+  proof_before_min: number;
+  proof_before_max: number;
+  proof_after_min: number;
+  proof_after_max: number;
+  reward_minutes: number | null;
+  reward_text: string | null;
+  reward_validity: RewardValidity;
+  reward_expires_days: number | null;
+  record_minutes: number | null;
+  record_camera: "back" | "front" | "choose";
+  record_pause: "none" | "limit" | "child";
+  record_pause_max: number | null;
+  phone_restriction: TaskPhoneRestriction;
+  orbit_focus_profile_id: string | null;
+}>;
+
+export type TaskGroup = {
+  id: string;
+  family_id: string;
+  name: string;
+  child_ids: string[];
+  active: boolean;
+  recurrence: "once" | "days" | "biweekly" | "monthly";
+  days: number[];
+  start_date: string;
+  end_date: string | null;
+  start_time: string | null;
+  due_time: string | null;
+  sequential: boolean;
+  min_count: number | null;
+  reward_mode: "done" | "all";
+  reward_validity: "today" | "wallet" | "vault";
+  fail_mode: "vault" | "burn" | "penalty";
+  penalty_minutes: number | null;
+  defaults: TaskDefaults | null;
+  sort: number;
+  created_at: string;
+};
+
+export type TaskGroupRun = { group_id: string; child_id: string; day: string; status: "open" | "met" | "failed"; grant_id: string | null; settled_at: string | null };
 
 export type RuleKind = "kiosk" | "limit" | "free" | "music_off" | "music_on";
 export const RULE_KIND: Record<RuleKind, { label: string; color: string; hint: string }> = {
@@ -331,6 +380,8 @@ export type Task = TaskTemplate & {
   created_at: string;
   phone_restriction: TaskPhoneRestriction;
   orbit_focus_profile_id: string | null;
+  group_id: string | null;
+  group_order: number;
 };
 
 export type RunStatus = "open" | "started" | "submitted" | "approved" | "rejected" | "claimed" | "expired";

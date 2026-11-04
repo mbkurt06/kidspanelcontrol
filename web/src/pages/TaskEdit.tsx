@@ -4,7 +4,8 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { todayISO } from "../lib/util";
-import { PROOF_LABEL, VALIDITY_LABEL, type ProofType, type RewardValidity, type Task, type TaskPhoneRestriction } from "../lib/types";
+import { PROOF_LABEL, VALIDITY_LABEL, type AgendaItem, type ProofType, type RewardValidity, type Task, type TaskDefaults, type TaskGroup, type TaskPhoneRestriction } from "../lib/types";
+import { repeatText } from "../lib/groups";
 import { DayPicker } from "../components/Windows";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
@@ -40,7 +41,60 @@ type Form = {
   record_pause_max: string;
   phone_restriction: TaskPhoneRestriction;
   orbit_focus_profile_id: string;
+  group_id: string;
+  mandatory: boolean;
 };
+
+/** Varsayılana giren alanlar: ad, açıklama, tarih ve saat hariç */
+function defaultsOf(f: Form): TaskDefaults {
+  return {
+    child_ids: f.child_ids,
+    assign_mode: f.assign_mode,
+    proof: f.proof,
+    before_after: f.before_after,
+    proof_before_min: Number(f.proof_before_min) || 1,
+    proof_before_max: Number(f.proof_before_max) || 4,
+    proof_after_min: Number(f.proof_after_min) || 1,
+    proof_after_max: Number(f.proof_after_max) || 4,
+    reward_minutes: f.reward_minutes.trim() === "" ? null : Number(f.reward_minutes),
+    reward_text: f.reward_text.trim() || null,
+    reward_validity: f.reward_validity,
+    reward_expires_days: f.reward_expires_days ? Number(f.reward_expires_days) : null,
+    record_minutes: f.record_on ? Number(f.record_minutes) || 60 : null,
+    record_camera: f.record_camera,
+    record_pause: f.record_pause,
+    record_pause_max: f.record_pause === "limit" ? Number(f.record_pause_max) || 10 : null,
+    phone_restriction: f.phone_restriction,
+    orbit_focus_profile_id: f.orbit_focus_profile_id || null,
+  };
+}
+function applyDefaults(f: Form, d: TaskDefaults | null | undefined, allChildren: string[]): Form {
+  if (!d) return f;
+  const kids = (d.child_ids ?? f.child_ids).filter((id) => allChildren.includes(id));
+  return {
+    ...f,
+    child_ids: kids.length ? kids : f.child_ids,
+    assign_mode: d.assign_mode ?? f.assign_mode,
+    proof: d.proof ?? f.proof,
+    before_after: d.before_after ?? f.before_after,
+    proof_before_min: String(d.proof_before_min ?? f.proof_before_min),
+    proof_before_max: String(d.proof_before_max ?? f.proof_before_max),
+    proof_after_min: String(d.proof_after_min ?? f.proof_after_min),
+    proof_after_max: String(d.proof_after_max ?? f.proof_after_max),
+    reward_minutes: d.reward_minutes === undefined ? f.reward_minutes : d.reward_minutes == null ? "" : String(d.reward_minutes),
+    reward_text: d.reward_text ?? f.reward_text,
+    reward_validity: d.reward_validity ?? f.reward_validity,
+    reward_expires_days: d.reward_expires_days == null ? "" : String(d.reward_expires_days),
+    record_on: d.record_minutes != null,
+    record_minutes: String(d.record_minutes ?? f.record_minutes),
+    record_camera: d.record_camera ?? f.record_camera,
+    record_pause: d.record_pause ?? f.record_pause,
+    record_pause_max: String(d.record_pause_max ?? f.record_pause_max),
+    phone_restriction: d.phone_restriction ?? f.phone_restriction,
+    orbit_focus_profile_id: d.orbit_focus_profile_id ?? "",
+  };
+}
+const sameDefaults = (a: TaskDefaults, b: TaskDefaults | null | undefined) => !!b && JSON.stringify(a) === JSON.stringify({ ...a, ...b });
 
 const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; task_before_photo_max?: number; task_after_photo_min?: number; task_after_photo_max?: number }): Form => ({
   title: "",
@@ -73,6 +127,8 @@ const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; 
   record_pause_max: "10",
   phone_restriction: "none",
   orbit_focus_profile_id: "",
+  group_id: "",
+  mandatory: false,
 });
 
 type RecFields = { record_minutes?: number | null; record_camera?: Form["record_camera"]; record_pause?: Form["record_pause"]; record_pause_max?: number | null };
@@ -102,6 +158,39 @@ export default function TaskEdit() {
   const [photoCountsOpen, setPhotoCountsOpen] = useState(false);
   const [photoDefaultsMsg, setPhotoDefaultsMsg] = useState("");
   const photoDefaultsInitialized = useRef(false);
+  const [groups, setGroups] = useState<TaskGroup[]>([]);
+  const [agenda, setAgenda] = useState<AgendaItem | null>(null);
+  const [defMsg, setDefMsg] = useState("");
+  const [defAsk, setDefAsk] = useState(false);
+  const defaultsApplied = useRef(false);
+  const group = groups.find((g) => g.id === f.group_id) ?? null;
+  const activeDefaults = (group?.defaults ?? fam.family?.task_defaults) || null;
+
+  useEffect(() => {
+    supabase.from("task_groups").select("*").order("sort").then(({ data }) => setGroups((data ?? []) as TaskGroup[]));
+  }, []);
+
+  // Yeni görev: önce grubun, yoksa genel varsayılan; ajandadan geliyorsa ad/çocuk/tarih ajandadan
+  useEffect(() => {
+    if (!isNew || params.get("template") || defaultsApplied.current || !fam.family) return;
+    const gid = params.get("group") ?? "";
+    if (gid && !groups.length) return;
+    defaultsApplied.current = true;
+    const g = groups.find((x) => x.id === gid) ?? null;
+    setF((x) => {
+      let next = applyDefaults({ ...x, group_id: g?.id ?? "" }, g?.defaults ?? fam.family?.task_defaults, fam.children.map((c) => c.id));
+      if (g?.child_ids.length) next = { ...next, child_ids: g.child_ids };
+      return next;
+    });
+    const aid = params.get("agenda");
+    if (aid)
+      supabase.from("agenda_items").select("*").eq("id", aid).maybeSingle().then(({ data }) => {
+        const a = data as AgendaItem | null;
+        if (!a) return;
+        setAgenda(a);
+        setF((x) => ({ ...x, title: a.title, description: a.note ?? "", child_ids: [a.child_id], recurrence: "once", start_date: todayISO(), due_date: a.due_date, due_time: a.due_time?.slice(0, 5) ?? "" }));
+      });
+  }, [fam.family, fam.children, groups, isNew, params]);
 
   useEffect(() => {
     if (!isNew || params.get("template") || !fam.family || photoDefaultsInitialized.current) return;
@@ -148,6 +237,8 @@ export default function TaskEdit() {
             ...recForm(t as RecFields),
             phone_restriction: t.phone_restriction ?? "none",
             orbit_focus_profile_id: t.orbit_focus_profile_id ?? "",
+            group_id: t.group_id ?? "",
+            mandatory: t.mandatory ?? false,
           });
       } else {
         const tid = params.get("template");
@@ -228,7 +319,8 @@ export default function TaskEdit() {
       reward_date: f.reward_validity === "date" ? f.reward_date : null,
       reward_expires_days: f.reward_validity === "wallet" && f.reward_expires_days ? Number(f.reward_expires_days) : null,
       reward_section_id: f.reward_validity !== "wallet" && f.reward_validity !== "vault" && f.reward_section_id ? f.reward_section_id : null,
-      mandatory: false,
+      mandatory: f.group_id ? f.mandatory : false,
+      group_id: f.group_id || null,
       active: f.active,
       record_minutes: f.record_on ? Math.min(240, Math.max(1, Number(f.record_minutes) || 60)) : null,
       record_camera: f.record_camera,
@@ -237,7 +329,16 @@ export default function TaskEdit() {
       phone_restriction: f.phone_restriction,
       orbit_focus_profile_id: f.orbit_focus_profile_id || null,
     };
-    const { error } = isNew ? await supabase.from("tasks").insert(row) : await supabase.from("tasks").update(row).eq("id", id);
+    const prev = isNew ? null : (await supabase.from("tasks").select("group_id, group_order").eq("id", id).maybeSingle()).data as { group_id: string | null; group_order: number } | null;
+    let groupOrder = prev?.group_order ?? 0;
+    if (f.group_id && prev?.group_id !== f.group_id) {
+      const { data: last } = await supabase.from("tasks").select("group_order").eq("group_id", f.group_id).order("group_order", { ascending: false }).limit(1);
+      groupOrder = ((last?.[0] as { group_order?: number } | undefined)?.group_order ?? 0) + 1;
+    }
+    const full = { ...row, group_order: groupOrder, child_ids: group?.child_ids.length ? group.child_ids : row.child_ids };
+    const res = isNew ? await supabase.from("tasks").insert(full).select("id").single() : await supabase.from("tasks").update(full).eq("id", id).select("id").single();
+    const error = res.error;
+    if (!error && agenda) await supabase.from("agenda_items").update({ task_id: (res.data as { id: string }).id }).eq("id", agenda.id);
     if (!error && saveTemplate) {
       await supabase.from("task_templates").insert({
         family_id: fam.familyId,
@@ -263,7 +364,22 @@ export default function TaskEdit() {
     }
     setBusy(false);
     if (error) return setErr(errorText(error));
-    nav("/tasks");
+    nav(agenda ? "/agenda" : f.group_id ? `/tasks?group=${f.group_id}` : "/tasks");
+  }
+
+  async function saveDefaults(target: "family" | "group") {
+    setErr("");
+    setDefMsg("");
+    setDefAsk(false);
+    const d = defaultsOf(f);
+    const { error } =
+      target === "group" && group
+        ? await supabase.from("task_groups").update({ defaults: d }).eq("id", group.id)
+        : await supabase.from("families").update({ task_defaults: d }).eq("id", fam.familyId);
+    if (error) return setErr(errorText(error));
+    setDefMsg(target === "group" && group ? `“${group.name}” grubundaki yeni görevler bu ayarlarla açılacak.` : "Yeni görevler bu ayarlarla açılacak.");
+    if (target === "group" && group) setGroups((gs) => gs.map((g) => (g.id === group.id ? { ...g, defaults: d } : g)));
+    else await fam.reload();
   }
 
   async function remove() {
@@ -286,6 +402,12 @@ export default function TaskEdit() {
         <span />
       </header>
       {err && <p className="error">{err}</p>}
+      {agenda && (
+        <div className="card soft from-agenda">
+          <span className="pop-label">AJANDADAN</span>
+          <span className="small">{fam.children.find((c) => c.id === agenda.child_id)?.name} yazdı: <b>{agenda.title}</b>. Görev olunca ajandada yanında görev etiketi görünür; onaylayınca orada yapıldı olur.</span>
+        </div>
+      )}
 
       <div className="card">
         <label className="field">
@@ -298,7 +420,26 @@ export default function TaskEdit() {
         </label>
       </div>
 
-      <div className="card">
+      <div className="card extra-card">
+        <h2>Grup <Info>Gruptaki görevler grubun günlerine, sırasına ve tamamlama koşuluna uyar. Fotoğraf, kamera, ödül gibi ayarlar görevin kendisinde kalır.</Info></h2>
+        <div className="chips">
+          <button type="button" className={`chip-btn ${!f.group_id ? "on" : ""}`} onClick={() => set("group_id", "")}>Tek görev</button>
+          {groups.map((g) => (
+            <button key={g.id} type="button" className={`chip-btn ${f.group_id === g.id ? "on" : ""}`} onClick={() => setF((x) => ({ ...x, group_id: g.id, child_ids: g.child_ids.length ? g.child_ids : x.child_ids }))}>{g.name}</button>
+          ))}
+        </div>
+        {group && (
+          <>
+            <span className="muted tiny">{repeatText(group)} · {fam.children.filter((c) => group.child_ids.includes(c.id)).map((c) => c.name).join(", ")}{group.sequential ? " · sırayla" : ""}</span>
+            <div className="chips">
+              <button type="button" className={`chip-btn ${f.mandatory ? "on" : ""}`} onClick={() => set("mandatory", true)}>Zorunlu</button>
+              <button type="button" className={`chip-btn ${!f.mandatory ? "on" : ""}`} onClick={() => set("mandatory", false)}>Seçmeli</button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {!group && <div className="card">
         <h2>Kime</h2>
         <div className="row gap-xs wrap">
           {fam.children.map((c) => (
@@ -317,9 +458,9 @@ export default function TaskEdit() {
             </button>
           </div>
         )}
-      </div>
+      </div>}
 
-      <div className="card">
+      {!group && <div className="card">
         <h2>Ne zaman</h2>
         <div className="row gap-xs wrap">
           <button className={`chip ${f.recurrence === "once" ? "on" : ""}`} onClick={() => set("recurrence", "once")}>
@@ -359,7 +500,7 @@ export default function TaskEdit() {
           <span>Saat <Info>İstersen son teslim saatini de belirle.</Info></span>
           <TimeField clearable value={f.due_time} onChange={(v) => set("due_time", v)} label="Saat" />
         </div>
-      </div>
+      </div>}
 
       <div className="card">
         <h2>Kanıt <Info>Çocuk yalnızca Orbit kamerasıyla kanıt gönderir; onay veya redden sonra dosya silinir.</Info></h2>
@@ -389,7 +530,6 @@ export default function TaskEdit() {
                   <PhotoCountFields title="Tamamlanma fotoğrafları" min={f.proof_after_min} max={f.proof_after_max} onMin={(v) => set("proof_after_min", v)} onMax={(v) => set("proof_after_max", v)} />
                 </div>
                 {photoDefaultsMsg && <p className="ok">{photoDefaultsMsg}</p>}
-                <button className="btn small" onClick={savePhotoDefaults}>Varsayılanı kaydet</button>
               </>
             )}
           </>
@@ -517,9 +657,29 @@ export default function TaskEdit() {
           <input type="checkbox" checked={saveTemplate} onChange={(e) => setSaveTemplate(e.target.checked)} />
           Şablon olarak da kaydet
         </label>
-        <button className="btn primary wide" disabled={busy} onClick={save}>
-          {isNew ? "Görevi ver" : "Kaydet"}
-        </button>
+        {defMsg && <p className="ok small">{defMsg}</p>}
+        <div className="extra-actions">
+          <div className="pop-anchor">
+            <button type="button" className="pill-btn" onClick={() => (group ? setDefAsk((v) => !v) : saveDefaults("family"))}>Varsayılan yap</button>
+            {defAsk && (
+              <>
+                <div className="pop-backdrop" onClick={() => setDefAsk(false)} />
+                <div className="lock-pop menu-pop up" role="menu">
+                  <span className="pop-label">NEREDE GEÇERLİ</span>
+                  <button className="menu-item" role="menuitem" onClick={() => saveDefaults("group")}>Sadece “{group?.name}” grubunda</button>
+                  <button className="menu-item" role="menuitem" onClick={() => saveDefaults("family")}>Bütün yeni görevlerde</button>
+                </div>
+              </>
+            )}
+          </div>
+          {activeDefaults && !sameDefaults(defaultsOf(f), activeDefaults) && (
+            <button type="button" className="pill-btn ghost" onClick={() => setF((x) => applyDefaults(x, activeDefaults, fam.children.map((c) => c.id)))}>Varsayılana dön</button>
+          )}
+          <span className="grow" />
+          <button className="pill-btn primary" disabled={busy} onClick={save}>
+            {isNew ? "Görevi ver" : "Kaydet"}
+          </button>
+        </div>
         {!isNew && (
           <button className="btn ghost danger-text" onClick={remove}>
             Görevi sil

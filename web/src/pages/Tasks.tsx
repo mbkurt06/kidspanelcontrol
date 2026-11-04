@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DateField } from "../components/DateTime";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { agendaDateText, dateTimeText, minutesText, relTime, todayISO } from "../lib/util";
@@ -12,42 +12,56 @@ import {
   type Task,
   type TaskProof,
   type TaskRun,
+  type TaskGroup,
+  type TaskGroupRun,
   type TaskTemplate,
 } from "../lib/types";
+import TaskGroupDetail from "../components/TaskGroupDetail";
+import { groupProgress, moveToGroup, newGroup, repeatText } from "../lib/groups";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
+import { MinuteStepper } from "../components/MinuteStepper";
 import { RecordingList } from "../components/RecordingPlayer";
 import { STARTER_TEMPLATES } from "../lib/templates";
 
 export default function Tasks() {
   const fam = useFamily();
   const nav = useNavigate();
+  const [params, setParams] = useSearchParams();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [runs, setRuns] = useState<TaskRun[]>([]);
+  const [groups, setGroups] = useState<TaskGroup[]>([]);
+  const [groupRuns, setGroupRuns] = useState<TaskGroupRun[]>([]);
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [templatesOpen, setTemplatesOpen] = useState(false);
+  const [singlesOpen, setSinglesOpen] = useState(true);
+  const [addFor, setAddFor] = useState<string | null>(null);
+  const [view, setView] = useState<"all" | "groups" | "single">("all");
+  const [childFilter, setChildFilter] = useState<string>("all");
   const [err, setErr] = useState("");
   const today = todayISO();
   const [historyView, setHistoryView] = useState<"day" | "week" | "month" | "range">("day");
   const [rangeFrom, setRangeFrom] = useState(todayISO("Europe/Berlin", -7));
   const [rangeTo, setRangeTo] = useState(today);
   const monthStart = `${today.slice(0, 7)}-01`;
+  const selectedId = params.get("group");
+  const tabParam = params.get("tab") as "tasks" | "settings" | "history" | null;
 
   const load = useCallback(async () => {
     await supabase.rpc("parent_ensure_runs", { p_day: today });
-    const [t, r, tp] = await Promise.all([
+    const [t, r, tp, g, gr] = await Promise.all([
       supabase.from("tasks").select("*").order("created_at", { ascending: false }),
-      supabase
-        .from("task_runs")
-        .select("*")
-        .order("day", { ascending: false })
-        .limit(300),
+      supabase.from("task_runs").select("*").order("day", { ascending: false }).limit(400),
       supabase.from("task_templates").select("*").order("title"),
+      supabase.from("task_groups").select("*").order("sort").order("created_at"),
+      supabase.from("task_group_runs").select("*").gte("day", todayISO("Europe/Berlin", -40)),
     ]);
     if (t.error) setErr(errorText(t.error));
     setTasks((t.data ?? []) as Task[]);
     setRuns((r.data ?? []) as TaskRun[]);
     setTemplates((tp.data ?? []) as TaskTemplate[]);
+    setGroups((g.data ?? []) as TaskGroup[]);
+    setGroupRuns((gr.data ?? []) as TaskGroupRun[]);
   }, [today]);
 
   useEffect(() => {
@@ -60,18 +74,37 @@ export default function Tasks() {
   const childName = (id: string) => fam.children.find((c) => c.id === id)?.name ?? "";
   const childColor = (id: string) => fam.children.find((c) => c.id === id)?.color ?? "#888";
   const visibleChildIds = new Set(fam.visibleChildren.map((c) => c.id));
+  const forChild = (ids: string[]) => childFilter === "all" || ids.includes(childFilter);
 
-  const pending = runs.filter((r) => r.status === "submitted" && visibleChildIds.has(r.child_id));
+  const pending = runs.filter((r) => r.status === "submitted" && visibleChildIds.has(r.child_id) && (childFilter === "all" || r.child_id === childFilter));
   const todays = runs.filter(
-    (r) => visibleChildIds.has(r.child_id) && (r.day === today || (taskById[r.task_id]?.recurrence === "once" && ["open", "started", "rejected"].includes(r.status)))
+    (r) => visibleChildIds.has(r.child_id) && (childFilter === "all" || r.child_id === childFilter) && (r.day === today || (taskById[r.task_id]?.recurrence === "once" && ["open", "started", "rejected"].includes(r.status)))
   );
   const rewards = runs.filter((r) => r.status === "approved" && r.reward_text && !r.reward_delivered_at && visibleChildIds.has(r.child_id));
   const history = runs.filter((r) => {
-    if (!visibleChildIds.has(r.child_id)) return false;
+    if (!visibleChildIds.has(r.child_id) || (childFilter !== "all" && r.child_id !== childFilter)) return false;
     const from = historyView === "range" ? rangeFrom : historyView === "month" ? monthStart : historyView === "week" ? todayISO("Europe/Berlin", -6) : today;
     const to = historyView === "range" ? rangeTo : today;
     return r.day >= from && r.day <= to;
   });
+  const singles = tasks.filter((t) => !t.group_id && forChild(t.child_ids));
+  const shownGroups = groups.filter((g) => forChild(g.child_ids));
+  const selected = groups.find((g) => g.id === selectedId) ?? null;
+
+  const select = (id: string | null, tab?: string) => {
+    const next = new URLSearchParams(params);
+    if (id) next.set("group", id); else next.delete("group");
+    if (tab) next.set("tab", tab); else next.delete("tab");
+    setParams(next, { replace: true });
+  };
+
+  async function createGroup() {
+    const kids = childFilter === "all" ? fam.children.map((c) => c.id) : [childFilter];
+    const { data, error } = await supabase.from("task_groups").insert({ ...newGroup(fam.familyId, kids), sort: groups.length }).select().single();
+    if (error) return setErr(errorText(error));
+    await load();
+    select((data as TaskGroup).id, "settings");
+  }
 
   async function seedTemplates() {
     const { error } = await supabase.from("task_templates").insert(STARTER_TEMPLATES.map((t) => ({ ...t, family_id: fam.familyId })));
@@ -79,160 +112,283 @@ export default function Tasks() {
     load();
   }
 
+  const groupCard = (g: TaskGroup) => {
+    const n = tasks.filter((t) => t.group_id === g.id).length;
+    const kids = fam.children.filter((c) => g.child_ids.includes(c.id) && (childFilter === "all" || c.id === childFilter));
+    return (
+      <div key={g.id} className={`group-card ${selected?.id === g.id ? "on" : ""} ${g.active ? "" : "inactive"}`}>
+        <button className="group-card-main" onClick={() => select(selected?.id === g.id ? null : g.id)}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+          <span className="grow group-card-copy">
+            <b>{g.name}</b>
+            <span className="muted tiny">{n} görev · {repeatText(g)} · {fam.children.filter((c) => g.child_ids.includes(c.id)).map((c) => c.name).join(", ") || "kimse"}</span>
+          </span>
+          <span className="group-card-progress">
+            {kids.map((c) => {
+              const pr = groupProgress(g, tasks, runs, groupRuns, c.id);
+              if (!pr.total) return null;
+              return <span key={c.id} className={pr.status === "met" ? "good-text" : ""} title={c.name}>{kids.length > 1 ? `${c.name.slice(0, 1)} ` : ""}{pr.approved}/{pr.need}</span>;
+            })}
+          </span>
+        </button>
+        <button className={`switch ${g.active ? "on" : ""}`} role="switch" aria-checked={g.active} aria-label={`${g.name} aktif`} onClick={async () => { await supabase.from("task_groups").update({ active: !g.active }).eq("id", g.id); load(); }}>
+          <span />
+        </button>
+      </div>
+    );
+  };
+
   return (
-    <div className="page">
+    <div className="page wide-page">
       <header className="page-head">
         <h1>Görevler</h1>
+        <div className="row gap-s">
+          <button className="pill-btn" onClick={createGroup}>
+            <Icon name="plus" size={14} /> Grup
+          </button>
+          <button className="pill-btn primary" onClick={() => nav(selected ? `/tasks/new?group=${selected.id}` : "/tasks/new")}>
+            <Icon name="plus" size={14} /> Görev
+          </button>
+        </div>
       </header>
       {err && <p className="error">{err}</p>}
 
       {pending.length > 0 && (
-        <section className="stack">
+        <section className="stack" id="onay">
           <h2 className="section-title">Onay bekleyen ({pending.length})</h2>
           {pending.map((r) => (
-            <ReviewCard key={r.id} run={r} task={taskById[r.task_id]} childName={childName(r.child_id)} color={childColor(r.child_id)} onDone={load} />
+            <ReviewCard key={r.id} run={r} task={taskById[r.task_id]} group={groups.find((g) => g.id === taskById[r.task_id]?.group_id)} childName={childName(r.child_id)} color={childColor(r.child_id)} onDone={load} />
           ))}
         </section>
       )}
 
-      {rewards.length > 0 && (
-        <div className="card soft">
-          <h2>Verilecek ödüller</h2>
-          {rewards.map((r) => (
-            <div className="app-row" key={r.id}>
-              <span className="dot" style={{ background: childColor(r.child_id) }} />
-              <div className="grow">
-                <b>{r.reward_text}</b>
-                <div className="muted tiny">
-                  {childName(r.child_id)} · {taskById[r.task_id]?.title}
-                </div>
-              </div>
-              <button
-                className="btn small"
-                onClick={async () => {
-                  await supabase.from("task_runs").update({ reward_delivered_at: new Date().toISOString() }).eq("id", r.id);
-                  load();
-                }}
-              >
-                Verildi
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="card">
-        <h2>Bugün</h2>
-        {!todays.length && <p className="muted small">Bugün için görev yok.</p>}
-        {fam.visibleChildren.map((c) => {
-          const list = todays.filter((r) => r.child_id === c.id);
-          if (!list.length) return null;
-          return (
-            <div key={c.id} className="stack-s">
-              <div className="row gap-s">
-                <span className="dot" style={{ background: c.color, marginTop: 0 }} />
-                <b>{c.name}</b>
-                <span className="muted small">
-                  {list.filter((r) => r.status === "approved").length}/{list.filter((r) => r.status !== "claimed").length} tamam
-                </span>
-              </div>
-              {list.map((r) => {
-                const t = taskById[r.task_id];
-                return (
-                  <div className="app-row" key={r.id}>
-                    <div className="grow">
-                      <b>
-                        {t?.title}
-                      </b>
-                      <div className="muted tiny">
-                        {t ? dateTimeText(t.created_at) : ""}{t?.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}
-                      </div>
-                    </div>
-                    <span className={`pill ${r.status === "approved" ? "" : r.status === "submitted" ? "accent" : r.status === "rejected" ? "warn" : "quiet"}`}>
-                      {STATUS_LABEL[r.status]}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="card">
-        <div className="row between wrap">
-          <h2>Görev geçmişi <Info>Bugün, son 7 gün, bu ay veya seçtiğin tarih aralığındaki görev kayıtları.</Info></h2>
-          <div className="row gap-xs wrap">
-            {(["day", "week", "month", "range"] as const).map((v) => (
-              <button key={v} className={`chip small ${historyView === v ? "on" : ""}`} onClick={() => setHistoryView(v)}>
-                {v === "day" ? "Bugün" : v === "week" ? "7 gün" : v === "month" ? "1 ay" : "Özel"}
-              </button>
+      <div className="tasks-layout">
+        <aside className="tasks-aside">
+          <div className="chips">
+            {([["all", `Tümü ${tasks.filter((t) => forChild(t.child_ids)).length}`], ["groups", `Gruplar ${shownGroups.length}`], ["single", `Tek görevler ${singles.length}`]] as const).map(([k, l]) => (
+              <button key={k} className={`chip-btn ${view === k ? "on" : ""}`} onClick={() => setView(k)}>{l}</button>
             ))}
           </div>
-        </div>
-        {historyView === "range" && <div className="grid2">
-          <label className="field"><span>Başlangıç</span><DateField value={rangeFrom} onChange={setRangeFrom} /></label>
-          <label className="field"><span>Bitiş</span><DateField value={rangeTo} onChange={setRangeTo} /></label>
-        </div>}
-        {!history.length && <p className="muted small">Bu görünümde görev yok.</p>}
-        {history.map((r) => {
-          const t = taskById[r.task_id];
-          return <Link to={t ? `/tasks/${t.id}` : "/tasks"} className="app-row" key={r.id}>
-            <div className="grow">
-              <b>{t?.title ?? "Görev"}</b>
-              <div className="muted tiny">{childName(r.child_id)} · {r.day} · {STATUS_LABEL[r.status]}{t?.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}</div>
+          {fam.children.length > 1 && (
+            <div className="chips">
+              <button className={`chip-btn small-chip ${childFilter === "all" ? "on" : ""}`} onClick={() => setChildFilter("all")}>Herkes</button>
+              {fam.children.map((c) => (
+                <button key={c.id} className={`chip-btn small-chip ${childFilter === c.id ? "on" : ""}`} onClick={() => setChildFilter(c.id)}>
+                  <span className="dot" style={{ background: c.color, marginTop: 0 }} /> {c.name}
+                </button>
+              ))}
             </div>
-            <Icon name="chevron" size={18} />
-          </Link>;
-        })}
-      </div>
+          )}
 
-      <div className="card">
-        <div className="section-collapse-head collapse-title" role="button" tabIndex={0} onClick={() => setTemplatesOpen((v) => !v)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setTemplatesOpen((v) => !v); } }} aria-expanded={templatesOpen}>
-          <span>Şablonlar <Info>Sık verilen görevler. Bir şablonu açınca ayarları hazır yeni görev formu açılır.</Info></span>
-          <span className={`collapse-arrow${templatesOpen ? " open" : ""}`} aria-hidden="true" />
-        </div>
-        {templatesOpen && templates.map((t) => (
-          <div className="app-row" key={t.id}>
-            <div className="grow">
-              <b>{t.title}</b>
-              <div className="muted tiny">
-                {PROOF_LABEL[t.proof]}
-                {t.before_after ? " (öncesi/sonrası)" : ""}
-                {t.reward_minutes != null ? ` · ${t.reward_minutes > 0 ? "+" : ""}${minutesText(t.reward_minutes)}` : ""}
-                {t.reward_text ? ` · ${t.reward_text}` : ""}
-              </div>
+          {view !== "single" && (
+            <div className="stack-s">
+              {shownGroups.map(groupCard)}
+              {!shownGroups.length && <button className="group-card empty" onClick={createGroup}>+ İlk görev grubunu oluştur</button>}
             </div>
-            <button className="btn small" onClick={() => nav(`/tasks/new?template=${t.id}`)}>
-              Ver
-            </button>
-            <button
-              className="icon-btn"
-              aria-label="Şablonu sil"
-              onClick={async () => {
-                if (!confirm(`"${t.title}" şablonu silinsin mi?`)) return;
-                await supabase.from("task_templates").delete().eq("id", t.id);
-                load();
-              }}
-            >
-              <Icon name="trash" size={18} />
-            </button>
-          </div>
-        ))}
-        {templatesOpen && !templates.length && (
-          <button className="btn" onClick={seedTemplates}>
-            Hazır şablonları ekle (Odanı topla, Ödevini yap…)
-          </button>
-        )}
+          )}
+
+          {view !== "groups" && (
+            <div className="stack-s">
+              <div className="sub-collapse-head" role="button" tabIndex={0} onClick={() => setSinglesOpen((v) => !v)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSinglesOpen((v) => !v); } }}>
+                <span>TEK GÖREVLER</span>
+                <span className={`collapse-arrow${singlesOpen ? " open" : ""}`} aria-hidden="true" />
+              </div>
+              {singlesOpen && (
+                <div className="card list-card">
+                  {!singles.length && <p className="muted small" style={{ padding: 12 }}>Gruba bağlı olmayan görev yok.</p>}
+                  {singles.map((t) => (
+                    <div className="single-row" key={t.id}>
+                      <Link to={`/tasks/${t.id}`} className="grow single-copy">
+                        <b>{t.title}</b>
+                        <span className="muted tiny">
+                          {t.recurrence === "days" ? (t.days.length === 7 ? "Her gün" : "Tekrarlı") : t.due_date ? agendaDateText(t.due_date) : "Tek sefer"} · {t.child_ids.map(childName).join(", ")}{t.active ? "" : " · kapalı"}
+                        </span>
+                      </Link>
+                      <span className="reward-chip">{t.reward_minutes ? `${t.reward_minutes > 0 ? "+" : ""}${t.reward_minutes} dk` : "—"}</span>
+                      {groups.length > 0 && (
+                        <div className="pop-anchor">
+                          <button className="chip-btn small-chip accent-text" onClick={() => setAddFor(addFor === t.id ? null : t.id)}>Gruba ekle</button>
+                          {addFor === t.id && (
+                            <>
+                              <div className="pop-backdrop" onClick={() => setAddFor(null)} />
+                              <div className="lock-pop menu-pop right" role="menu">
+                                <span className="pop-label">HANGİ GRUBA</span>
+                                {groups.map((g) => (
+                                  <button key={g.id} className="menu-item" role="menuitem" onClick={async () => { await moveToGroup(t, g, tasks); setAddFor(null); load(); }}>{g.name}</button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </aside>
+
+        <main className="tasks-main">
+          {selected ? (
+            <TaskGroupDetail
+              group={selected}
+              groups={groups}
+              tasks={tasks}
+              runs={runs}
+              groupRuns={groupRuns}
+              childFilter={childFilter}
+              initialTab={tabParam ?? undefined}
+              onChange={load}
+              onDeleted={() => { select(null); load(); }}
+            />
+          ) : (
+            <>
+              <div className="card">
+                <h2>Bugün</h2>
+                {!todays.length && <p className="muted small">Bugün için görev yok.</p>}
+                {fam.visibleChildren.filter((c) => childFilter === "all" || c.id === childFilter).map((c) => {
+                  const list = todays.filter((r) => r.child_id === c.id);
+                  if (!list.length) return null;
+                  return (
+                    <div key={c.id} className="stack-s">
+                      <div className="row gap-s">
+                        <span className="dot" style={{ background: c.color, marginTop: 0 }} />
+                        <b>{c.name}</b>
+                        <span className="muted small">
+                          {list.filter((r) => r.status === "approved").length}/{list.filter((r) => r.status !== "claimed").length} tamam
+                        </span>
+                      </div>
+                      {list.map((r) => {
+                        const t = taskById[r.task_id];
+                        const g = groups.find((x) => x.id === t?.group_id);
+                        return (
+                          <div className="app-row" key={r.id}>
+                            <div className="grow">
+                              <b>{t?.title}</b>
+                              <div className="muted tiny">
+                                {g ? `${g.name} · ` : ""}{t ? dateTimeText(t.created_at) : ""}{t?.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}
+                              </div>
+                            </div>
+                            <span className={`pill ${r.status === "approved" ? "" : r.status === "submitted" ? "accent" : r.status === "rejected" ? "warn" : "quiet"}`}>
+                              {STATUS_LABEL[r.status]}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {rewards.length > 0 && (
+                <div className="card soft">
+                  <h2>Verilecek ödüller</h2>
+                  {rewards.map((r) => (
+                    <div className="app-row" key={r.id}>
+                      <span className="dot" style={{ background: childColor(r.child_id) }} />
+                      <div className="grow">
+                        <b>{r.reward_text}</b>
+                        <div className="muted tiny">
+                          {childName(r.child_id)} · {taskById[r.task_id]?.title}
+                        </div>
+                      </div>
+                      <button
+                        className="pill-btn"
+                        onClick={async () => {
+                          await supabase.from("task_runs").update({ reward_delivered_at: new Date().toISOString() }).eq("id", r.id);
+                          load();
+                        }}
+                      >
+                        Verildi
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="card">
+                <div className="row between wrap">
+                  <h2>Görev geçmişi <Info>Bugün, son 7 gün, bu ay veya seçtiğin tarih aralığındaki görev kayıtları.</Info></h2>
+                  <div className="chips">
+                    {(["day", "week", "month", "range"] as const).map((v) => (
+                      <button key={v} className={`chip-btn ${historyView === v ? "on" : ""}`} onClick={() => setHistoryView(v)}>
+                        {v === "day" ? "Bugün" : v === "week" ? "7 gün" : v === "month" ? "1 ay" : "Özel"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {historyView === "range" && (
+                  <div className="extra-row">
+                    <DateField value={rangeFrom} onChange={setRangeFrom} />
+                    <span className="muted">–</span>
+                    <DateField value={rangeTo} onChange={setRangeTo} />
+                  </div>
+                )}
+                {!history.length && <p className="muted small">Bu görünümde görev yok.</p>}
+                {history.map((r) => {
+                  const t = taskById[r.task_id];
+                  return (
+                    <Link to={t ? `/tasks/${t.id}` : "/tasks"} className="app-row" key={r.id}>
+                      <div className="grow">
+                        <b>{t?.title ?? "Görev"}</b>
+                        <div className="muted tiny">{childName(r.child_id)} · {r.day} · {STATUS_LABEL[r.status]}{t?.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}</div>
+                      </div>
+                      <Icon name="chevron" size={18} />
+                    </Link>
+                  );
+                })}
+              </div>
+
+              <div className="card">
+                <div className="section-collapse-head collapse-title" role="button" tabIndex={0} onClick={() => setTemplatesOpen((v) => !v)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setTemplatesOpen((v) => !v); } }} aria-expanded={templatesOpen}>
+                  <span>Şablonlar <Info>Sık verilen görevler. Bir şablonu açınca ayarları hazır yeni görev formu açılır.</Info></span>
+                  <span className={`collapse-arrow${templatesOpen ? " open" : ""}`} aria-hidden="true" />
+                </div>
+                {templatesOpen && templates.map((t) => (
+                  <div className="app-row" key={t.id}>
+                    <div className="grow">
+                      <b>{t.title}</b>
+                      <div className="muted tiny">
+                        {PROOF_LABEL[t.proof]}
+                        {t.before_after ? " (öncesi/sonrası)" : ""}
+                        {t.reward_minutes != null ? ` · ${t.reward_minutes > 0 ? "+" : ""}${minutesText(t.reward_minutes)}` : ""}
+                        {t.reward_text ? ` · ${t.reward_text}` : ""}
+                      </div>
+                    </div>
+                    <button className="pill-btn" onClick={() => nav(`/tasks/new?template=${t.id}`)}>
+                      Ver
+                    </button>
+                    <button
+                      className="icon-btn"
+                      aria-label="Şablonu sil"
+                      onClick={async () => {
+                        if (!confirm(`"${t.title}" şablonu silinsin mi?`)) return;
+                        await supabase.from("task_templates").delete().eq("id", t.id);
+                        load();
+                      }}
+                    >
+                      <Icon name="trash" size={18} />
+                    </button>
+                  </div>
+                ))}
+                {templatesOpen && !templates.length && (
+                  <button className="pill-btn" onClick={seedTemplates}>
+                    Hazır şablonları ekle (Odanı topla, Ödevini yap…)
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </main>
       </div>
-      <button className="agenda-fab" aria-label="Yeni görev ekle" onClick={() => nav("/tasks/new")}>+</button>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
 
-function ReviewCard({ run, task, childName, color, onDone }: { run: TaskRun; task?: Task; childName: string; color: string; onDone: () => void }) {
+function ReviewCard({ run, task, group, childName, color, onDone }: { run: TaskRun; task?: Task; group?: TaskGroup; childName: string; color: string; onDone: () => void }) {
   const [proofs, setProofs] = useState<(TaskProof & { url?: string })[]>([]);
   const [minutes, setMinutes] = useState(String(task?.reward_minutes ?? ""));
   const [validity, setValidity] = useState<RewardValidity>(task?.reward_validity ?? "today");
@@ -341,32 +497,25 @@ function ReviewCard({ run, task, childName, color, onDone }: { run: TaskRun; tas
       )}
       {!rejecting ? (
         <>
-          <div className="grid2">
-            <label className="field">
-              <span>Ekstra süre (dk)</span>
-              <input type="number" min={0} value={minutes} onChange={(e) => setMinutes(e.target.value)} placeholder="yok" />
-            </label>
-            <label className="field">
-              <span>Ne zaman</span>
-              <select value={validity} onChange={(e) => setValidity(e.target.value as RewardValidity)}>
-                {(Object.keys(VALIDITY_LABEL) as RewardValidity[]).map((v) => (
-                  <option key={v} value={v}>
-                    {VALIDITY_LABEL[v]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          {validity === "date" && (
-            <div className="field">
-              <span>Gün</span>
-              <DateField value={date} onChange={(v) => setDate(v)} />
+          <div className="extra-group">
+            <span className="pop-label">ÖDÜL</span>
+            <div className="extra-row">
+              <MinuteStepper value={Number(minutes) || 0} onChange={(v) => setMinutes(String(v))} max={1440} label="Ödül dakikası" />
+              {!group && (
+                <div className="chips">
+                  {(Object.keys(VALIDITY_LABEL) as RewardValidity[]).filter((v) => ["today", "wallet", "vault"].includes(v) || v === validity).map((v) => (
+                    <button key={v} type="button" className={`chip-btn ${validity === v ? "on" : ""}`} onClick={() => setValidity(v)}>{VALIDITY_LABEL[v]}</button>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-          {validity !== "wallet" && validity !== "vault" && Number(minutes) > 0 && (
-            <label className="field">
+            {group && <span className="muted tiny">“{group.name}” grubunda: süre grubun koşulu sağlanınca açılır{group.sequential ? "; onaylayınca sıradaki görev açılır" : ""}.</span>}
+          </div>
+          {!group && validity === "date" && <DateField value={date} onChange={(v) => setDate(v)} />}
+          {!group && validity !== "wallet" && validity !== "vault" && Number(minutes) > 0 && (
+            <label className="field compact">
               <span>Nereye eklensin</span>
-              <select value={sectionId} onChange={(e) => setSectionId(e.target.value)}>
+              <select className="compact-select" value={sectionId} onChange={(e) => setSectionId(e.target.value)}>
                 <option value="">Gün boyu</option>
                 {fam.sections.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -378,28 +527,27 @@ function ReviewCard({ run, task, childName, color, onDone }: { run: TaskRun; tas
           )}
           {task?.reward_text && <p className="small">Ödül: {task.reward_text}</p>}
           {err && <p className="error">{err}</p>}
-          <div className="row gap-s">
-            <button className="btn primary grow" disabled={busy} onClick={() => decide(true)}>
-              <Icon name="check" size={18} /> Onayla
+          <div className="extra-actions">
+            <button className="pill-btn minus" disabled={busy} onClick={() => setRejecting(true)}>
+              <Icon name="x" size={14} /> Reddet
             </button>
-            <button className="btn grow" disabled={busy} onClick={() => setRejecting(true)}>
-              <Icon name="x" size={18} /> Reddet
+            <span className="grow" />
+            <button className="pill-btn primary" disabled={busy} onClick={() => decide(true)}>
+              <Icon name="check" size={14} /> Onayla
             </button>
           </div>
         </>
       ) : (
         <>
-          <label className="field">
-            <span>Neden? (çocuk görecek)</span>
-            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Masanın altı hâlâ dağınık" autoFocus />
-          </label>
+          <input className="compact-input" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Neden? Çocuk görecek · ör. Masanın altı hâlâ dağınık" autoFocus />
           {err && <p className="error">{err}</p>}
-          <div className="row gap-s">
-            <button className="btn primary grow" disabled={busy} onClick={() => decide(false)}>
-              Geri gönder
-            </button>
-            <button className="btn grow" disabled={busy} onClick={() => setRejecting(false)}>
+          <div className="extra-actions">
+            <button className="pill-btn" disabled={busy} onClick={() => setRejecting(false)}>
               Vazgeç
+            </button>
+            <span className="grow" />
+            <button className="pill-btn primary" disabled={busy} onClick={() => decide(false)}>
+              Geri gönder
             </button>
           </div>
         </>

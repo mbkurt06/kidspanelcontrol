@@ -3,18 +3,28 @@ import { DateField, TimeField } from "../components/DateTime";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { agendaDateText, todayISO } from "../lib/util";
-import type { AgendaItem } from "../lib/types";
+import type { AgendaItem, Task } from "../lib/types";
+import { useNavigate } from "react-router-dom";
 import { Icon } from "../components/Icon";
 
 export default function Agenda() {
   const fam = useFamily();
+  const nav = useNavigate();
   const [items, setItems] = useState<AgendaItem[]>([]);
+  const [tasks, setTasks] = useState<Record<string, Task>>({});
   const [open, setOpen] = useState<AgendaItem | null>(null);
   const [form, setForm] = useState(false);
   const [err, setErr] = useState("");
   const load = useCallback(async () => {
     const { data, error } = await supabase.from("agenda_items").select("*").order("due_date").order("due_time");
-    if (error) setErr(errorText(error)); else setItems((data ?? []) as AgendaItem[]);
+    if (error) return setErr(errorText(error));
+    const list = (data ?? []) as AgendaItem[];
+    setItems(list);
+    const ids = [...new Set(list.map((x) => x.task_id).filter(Boolean))] as string[];
+    if (ids.length) {
+      const { data: t } = await supabase.from("tasks").select("*").in("id", ids);
+      setTasks(Object.fromEntries(((t ?? []) as Task[]).map((x) => [x.id, x])));
+    }
   }, []);
   useEffect(() => { load(); }, [load]);
   const grouped = fam.visibleChildren.map((child) => ({ child, items: items.filter((x) => x.child_id === child.id) }));
@@ -39,11 +49,19 @@ export default function Agenda() {
       {list.map((item) => <button className={`agenda-row ${item.status === "done" ? "done" : ""}`} key={item.id} onClick={() => setOpen(item)}>
         <span className={`check-box ${item.status === "done" ? "checked" : ""}`} aria-hidden="true">{item.status === "done" ? "✓" : ""}</span>
         <span className="agenda-copy"><span className="muted tiny">{new Date(item.entered_at).toLocaleDateString("tr-TR")} · {new Date(item.entered_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</span><b>{item.title}</b><span className="muted tiny">{agendaDateText(item.due_date)}{item.due_time ? ` · ${item.due_time.slice(0, 5)}` : ""}</span></span>
+        {item.task_id && tasks[item.task_id] ? (
+          <span className="task-tag" title="Bu girdi bir görev">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 10h6M9 14h6" /></svg>
+            Görev{tasks[item.task_id].reward_minutes ? ` · +${tasks[item.task_id].reward_minutes} dk` : " · ödülsüz"}
+          </span>
+        ) : item.status !== "done" ? (
+          <span className="task-tag ghost">Göreve dönüştür</span>
+        ) : null}
         <Icon name="chevron" size={18} />
       </button>)}
     </section>)}
     {form && <AgendaForm defaultChildren={fam.visibleChildren.map((c) => c.id)} allChildren={fam.children} onClose={() => setForm(false)} onSaved={() => { setForm(false); load(); }} />}
-    {open && <AgendaDetail item={open} childName={fam.children.find((c) => c.id === open.child_id)?.name ?? ""} onClose={() => setOpen(null)} onToggle={() => toggle(open)} onRemove={() => remove(open)} />}
+    {open && <AgendaDetail item={open} task={open.task_id ? tasks[open.task_id] : undefined} childName={fam.children.find((c) => c.id === open.child_id)?.name ?? ""} onClose={() => setOpen(null)} onToggle={() => toggle(open)} onRemove={() => remove(open)} onConvert={() => nav(`/tasks/new?agenda=${open.id}`)} onOpenTask={() => open.task_id && nav(`/tasks/${open.task_id}`)} />}
     <button className="agenda-fab" aria-label="Ajandaya kayıt ekle" onClick={() => setForm(true)}>+</button>
   </div>;
 }
@@ -77,13 +95,25 @@ function AgendaForm({ defaultChildren, allChildren, onClose, onSaved }: { defaul
   </div></div>;
 }
 
-function AgendaDetail({ item, childName, onClose, onToggle, onRemove }: { item: AgendaItem; childName: string; onClose: () => void; onToggle: () => void; onRemove: () => void }) {
+function AgendaDetail({ item, task, childName, onClose, onToggle, onRemove, onConvert, onOpenTask }: { item: AgendaItem; task?: Task; childName: string; onClose: () => void; onToggle: () => void; onRemove: () => void; onConvert: () => void; onOpenTask: () => void }) {
   return <div className="sheet-backdrop" onClick={onClose}><div className="sheet compact-sheet" onClick={(e) => e.stopPropagation()}>
     <div className="row between"><h2>{item.title}</h2><button className="icon-btn" onClick={onClose} aria-label="Kapat">×</button></div>
-    <div className="muted small">{childName}</div>
-    <div className="detail-line">{new Date(item.entered_at).toLocaleDateString("tr-TR")} · {new Date(item.entered_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</div>
+    <div className="muted small">{childName} · {new Date(item.entered_at).toLocaleDateString("tr-TR")} {new Date(item.entered_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}'de yazdı</div>
     <div className="detail-line">{agendaDateText(item.due_date)}{item.due_time ? ` · ${item.due_time.slice(0, 5)}` : ""}</div>
     {item.note && <p className="muted small">{item.note}</p>}
-    <div className="row gap-s"><button className="btn primary" onClick={onToggle}>{item.status === "done" ? "Açık yap" : "Tamamlandı"}</button><button className="icon-btn" aria-label="Sil" onClick={onRemove}><Icon name="trash" size={18} /></button></div>
+    {task ? (
+      <div className="card soft">
+        <span className="pop-label">BU GİRDİ BİR GÖREV</span>
+        <span className="small"><b>{task.title}</b> · {task.reward_minutes ? `+${task.reward_minutes} dk` : "ödülsüz"}. Çocuk görevi yapıp sen onaylayınca burada yapıldı olur.</span>
+      </div>
+    ) : item.status !== "done" ? (
+      <span className="muted tiny">Göreve dönüştürünce bütün görev seçenekleri (ödül, fotoğraf, kamera kaydı, grup…) açılır. Girdi ajandada kalır.</span>
+    ) : null}
+    <div className="extra-actions">
+      <button className="icon-pill" aria-label="Sil" onClick={onRemove}><Icon name="trash" size={16} /></button>
+      {!task && <button className="pill-btn" onClick={onToggle}>{item.status === "done" ? "Açık yap" : "Tamamlandı"}</button>}
+      <span className="grow" />
+      {task ? <button className="pill-btn primary" onClick={onOpenTask}>Göreve git</button> : item.status !== "done" && <button className="pill-btn primary" onClick={onConvert}>Göreve dönüştür</button>}
+    </div>
   </div></div>;
 }

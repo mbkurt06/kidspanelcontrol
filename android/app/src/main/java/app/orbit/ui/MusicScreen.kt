@@ -87,6 +87,7 @@ fun MusicScreen() {
     var playlistDialog by remember { mutableStateOf(false) }
     var playlistName by remember { mutableStateOf("") }
     var editingPlaylist by remember { mutableStateOf<String?>(null) }
+    var addFor by remember { mutableStateOf<Track?>(null) }
 
     val perm = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
     val granted = ContextCompat.checkSelfPermission(ctx, perm) == PackageManager.PERMISSION_GRANTED
@@ -269,6 +270,14 @@ fun MusicScreen() {
         dismissButton = { Button(onClick = { playlistDialog = false }) { Text("İptal") } },
     )
 
+    // Çalma listesine ekle (YouTube gibi): listeler onay kutusuyla, oradan yeni liste
+    addFor?.let { track ->
+        AddToPlaylistDialog(track, playlists, onClose = { addFor = null }, onChanged = {
+            refreshPlaylists()
+            selectedPlaylist?.let { id -> scope.launch { playlistSongs = withContext(Dispatchers.IO) { Music.playlistTracks(id, all) } } }
+        })
+    }
+
     // Liste
     if (list.isNotEmpty()) {
         Card {
@@ -276,12 +285,7 @@ fun MusicScreen() {
             list.forEachIndexed { i, t ->
                 var editing by remember(t.id) { mutableStateOf(false) }
                 var name by remember(t.id) { mutableStateOf(t.fileName.substringBeforeLast('.')) }
-                TrackRow(t, t.id.toString() == currentId, onRename = { editing = true }, onAdd = selectedPlaylist?.let { id -> {
-                    if (playlistSongs.none { it.id == t.id }) {
-                        playlistSongs = playlistSongs + t
-                        scope.launch(Dispatchers.IO) { Music.savePlaylistTracks(id, playlistSongs + t) }
-                    }
-                } }) { Music.play(ctx, if (selectedPlaylist == null) list else playlistSongs, if (selectedPlaylist == null) i else playlistSongs.indexOfFirst { it.id == t.id }.coerceAtLeast(0)) }
+                TrackRow(t, t.id.toString() == currentId, onRename = { editing = true }, onAdd = { addFor = t }) { Music.play(ctx, if (selectedPlaylist == null) list else playlistSongs, if (selectedPlaylist == null) i else playlistSongs.indexOfFirst { it.id == t.id }.coerceAtLeast(0)) }
                 if (editing) AlertDialog(
                     onDismissRequest = { editing = false },
                     title = { Text("Dosyanın adını değiştir") },
@@ -310,9 +314,17 @@ private fun TrackRow(t: Track, current: Boolean, onRename: () -> Unit, onAdd: ((
             Text(t.title, color = C.text, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             t.artist?.let { Muted(it, 12) }
         }
-        Text("✏️", modifier = Modifier.clickable(onClick = onRename).padding(8.dp))
-        onAdd?.let { Text("＋", modifier = Modifier.clickable(onClick = it).padding(8.dp)) }
         Muted(mmss(t.durationMs), 12)
+        var menu by remember { mutableStateOf(false) }
+        androidx.compose.foundation.layout.Box {
+            Text("⋮", color = C.text, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clickable { menu = true }.padding(horizontal = 12.dp, vertical = 4.dp))
+            androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, containerColor = C.surface) {
+                onAdd?.let { add ->
+                    androidx.compose.material3.DropdownMenuItem(text = { Text("➕ Çalma listesine ekle", color = C.text) }, onClick = { menu = false; add() })
+                }
+                androidx.compose.material3.DropdownMenuItem(text = { Text("✏️ Adını değiştir", color = C.text) }, onClick = { menu = false; onRename() })
+            }
+        }
     }
 }
 
@@ -361,5 +373,73 @@ private fun MusicChip(label: String, on: Boolean, onClick: () -> Unit) {
         fontSize = 13.sp,
         modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(if (on) C.accent else C.surface2).clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
+    )
+}
+
+/** Şarkıyı bir ya da birden fazla çalma listesine ekle; buradan yeni liste de oluşturulur. */
+@Composable
+private fun AddToPlaylistDialog(track: Track, playlists: List<app.orbit.data.Playlist>, onClose: () -> Unit, onChanged: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    val key = track.id.toString()
+    var inLists by remember { mutableStateOf<Set<String>?>(null) }
+    var lists by remember { mutableStateOf(playlists) }
+    var creating by remember { mutableStateOf(false) }
+    var newName by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    LaunchedEffect(key) { inLists = withContext(Dispatchers.IO) { Music.playlistsWith(key) } }
+    fun toggle(id: String, on: Boolean) {
+        inLists = (inLists ?: emptySet()).let { if (on) it + id else it - id }
+        scope.launch(Dispatchers.IO) {
+            if (on) Music.addToPlaylist(id, track) else Music.removeFromPlaylist(id, key)
+            withContext(Dispatchers.Main) { onChanged() }
+        }
+    }
+    AlertDialog(
+        onDismissRequest = onClose,
+        containerColor = C.surface,
+        title = { Text("Kaydet: ${track.title}", color = C.text, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val cur = inLists
+                if (cur == null) Muted("Yükleniyor…")
+                else {
+                    if (lists.isEmpty() && !creating) Muted("Henüz çalma listen yok.", 13)
+                    lists.forEach { p ->
+                        val on = p.id in cur
+                        Row(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { toggle(p.id, !on) }.padding(vertical = 8.dp, horizontal = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            androidx.compose.material3.Checkbox(checked = on, onCheckedChange = { toggle(p.id, it) })
+                            Text(p.name, color = C.text, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                        }
+                    }
+                }
+                if (creating) {
+                    TextField(value = newName, onValueChange = { newName = it }, label = { Text("Yeni liste adı") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(enabled = newName.isNotBlank() && !busy, onClick = {
+                            busy = true
+                            scope.launch {
+                                val id = withContext(Dispatchers.IO) { Music.createPlaylistId(newName)?.also { Music.addToPlaylist(it, track) } }
+                                busy = false
+                                if (id != null) {
+                                    lists = withContext(Dispatchers.IO) { Music.playlists() }
+                                    inLists = (inLists ?: emptySet()) + id
+                                    creating = false
+                                    newName = ""
+                                    onChanged()
+                                }
+                            }
+                        }) { Text("Oluştur") }
+                        Button(onClick = { creating = false; newName = "" }) { Text("Vazgeç") }
+                    }
+                } else {
+                    Text("＋ Yeni çalma listesi", color = C.accent, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.fillMaxWidth().clickable { creating = true }.padding(vertical = 10.dp, horizontal = 4.dp))
+                }
+            }
+        },
+        confirmButton = { Button(onClick = onClose) { Text("Bitti") } },
     )
 }

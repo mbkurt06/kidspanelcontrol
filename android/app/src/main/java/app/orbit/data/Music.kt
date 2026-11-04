@@ -214,6 +214,34 @@ object Music {
         true
     }.onFailure { Log.w(TAG, "çalma listesi kaydedilemedi", it) }.getOrDefault(false)
 
+    /** Şarkının bulunduğu çalma listeleri */
+    fun playlistsWith(trackKey: String): Set<String> = runCatching {
+        val rows = Api.get("music_playlist_items?track_key=eq.$trackKey&select=playlist_id")
+        (0 until rows.length()).map { rows.getJSONObject(it).optString("playlist_id") }.toSet()
+    }.getOrDefault(emptySet())
+
+    /** Şarkıyı listenin sonuna ekle (zaten varsa dokunma) */
+    fun addToPlaylist(playlistId: String, track: Track): Boolean = runCatching {
+        val key = track.id.toString()
+        val rows = Api.get("music_playlist_items?playlist_id=eq.$playlistId&select=track_key,sort")
+        if ((0 until rows.length()).any { rows.getJSONObject(it).optString("track_key") == key }) return true
+        val next = (0 until rows.length()).maxOfOrNull { rows.getJSONObject(it).optInt("sort") }?.plus(1) ?: 0
+        Api.post("music_playlist_items", JSONObject().put("playlist_id", playlistId).put("track_key", key).put("title", track.title).put("sort", next))
+        true
+    }.onFailure { Log.w(TAG, "listeye eklenemedi", it) }.getOrDefault(false)
+
+    fun removeFromPlaylist(playlistId: String, trackKey: String): Boolean = runCatching {
+        Api.delete("music_playlist_items?playlist_id=eq.$playlistId&track_key=eq.$trackKey")
+        true
+    }.onFailure { Log.w(TAG, "listeden çıkarılamadı", it) }.getOrDefault(false)
+
+    /** Yeni liste oluştur ve id'sini döndür */
+    fun createPlaylistId(name: String): String? {
+        val clean = name.trim().take(100)
+        if (!createPlaylist(clean)) return null
+        return playlists().lastOrNull { it.name == clean }?.id
+    }
+
     fun removeMissingTrack(trackKey: String): Boolean = runCatching {
         val child = Store.creds?.childId ?: return false
         Api.delete("music_playlist_items?track_key=eq.$trackKey")

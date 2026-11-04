@@ -3,7 +3,7 @@ import { DateField } from "../components/DateTime";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
-import { agendaDateText, dateTimeText, minutesText, relTime, todayISO } from "../lib/util";
+import { minutesText, relTime, todayISO } from "../lib/util";
 import {
   PROOF_LABEL,
   STATUS_LABEL,
@@ -17,12 +17,55 @@ import {
   type TaskTemplate,
 } from "../lib/types";
 import TaskGroupDetail from "../components/TaskGroupDetail";
-import { groupDay, groupProgress, moveToGroup, newGroup, repeatText } from "../lib/groups";
+import { groupDay, groupProgress, newGroup, repeatText } from "../lib/groups";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
 import { RecordingList } from "../components/RecordingPlayer";
 import { STARTER_TEMPLATES } from "../lib/templates";
+
+// --- Görev zaman aralığı: başlangıç (oluşturulma ya da ileri tarih) → bitiş ---
+const BERLIN = "Europe/Berlin";
+const isoLocal = (iso: string) => {
+  const d = new Date(iso);
+  const date = d.toLocaleDateString("sv-SE", { timeZone: BERLIN });
+  const time = d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", timeZone: BERLIN });
+  return { date, time };
+};
+const dShort = (iso: string) => { const [y, m, d] = iso.split("-"); return `${d}.${m}.${y}`; };
+const hm = (t: string | null | undefined) => (t ? t.slice(0, 5) : null);
+type Win = { sDate: string; sTime: string; eDate: string; eTime: string };
+function startOf(createdAt: string, date: string, time: string | null | undefined): [string, string] {
+  if (time) return [date, hm(time)!];
+  const c = isoLocal(createdAt);
+  return c.date >= date ? [c.date, c.time] : [date, "00:00"];
+}
+function taskWindow(t: Task, g: TaskGroup | null | undefined, day: string): Win {
+  if (g) {
+    if (g.recurrence === "once") {
+      const [sDate, sTime] = startOf(g.created_at, g.start_date, g.start_time);
+      return { sDate, sTime, eDate: g.end_date ?? g.start_date, eTime: hm(g.due_time) ?? "23:59" };
+    }
+    const [sDate, sTime] = startOf(g.created_at, day, g.start_time);
+    return { sDate, sTime, eDate: day, eTime: hm(g.due_time) ?? "23:59" };
+  }
+  if (t.recurrence === "days") {
+    const [sDate, sTime] = startOf(t.created_at, day, null);
+    return { sDate, sTime, eDate: day, eTime: hm(t.due_time) ?? "23:59" };
+  }
+  const [sDate, sTime] = startOf(t.created_at, t.start_date, null);
+  return { sDate, sTime, eDate: t.due_date ?? t.end_date ?? t.start_date, eTime: hm(t.due_time) ?? "23:59" };
+}
+const winText = (w: Win) =>
+  w.sDate === w.eDate ? `${dShort(w.sDate)} ${w.sTime}–${w.eTime}` : `${dShort(w.sDate)} ${w.sTime} – ${dShort(w.eDate)} ${w.eTime}`;
+const winEnded = (w: Win) => new Date(`${w.eDate}T${w.eTime}:00`).getTime() < Date.now();
+const FINAL = new Set(["approved", "expired", "claimed"]);
+const Pencil = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+);
+const Folder = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+);
 
 export default function Tasks() {
   const fam = useFamily();
@@ -34,9 +77,6 @@ export default function Tasks() {
   const [groupRuns, setGroupRuns] = useState<TaskGroupRun[]>([]);
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [templatesOpen, setTemplatesOpen] = useState(false);
-  const [singlesOpen, setSinglesOpen] = useState(true);
-  const [addFor, setAddFor] = useState<string | null>(null);
-  const [view, setView] = useState<"all" | "groups" | "single">("all");
   const [childFilter, setChildFilter] = useState<string>("all");
   const [err, setErr] = useState("");
   const today = todayISO();
@@ -90,7 +130,11 @@ export default function Tasks() {
     if (!visibleChildIds.has(r.child_id) || (childFilter !== "all" && r.child_id !== childFilter)) return false;
     const from = historyView === "range" ? rangeFrom : historyView === "month" ? monthStart : historyView === "week" ? todayISO("Europe/Berlin", -6) : today;
     const to = historyView === "range" ? rangeTo : today;
-    return r.day >= from && r.day <= to;
+    if (r.day < from || r.day > to) return false;
+    const t = taskById[r.task_id];
+    if (!t) return FINAL.has(r.status);
+    if (t.group_id) return true; // grup satırında karar verilir
+    return FINAL.has(r.status) || winEnded(taskWindow(t, null, r.day));
   });
   // Tek görevler: tekrarlılar ve henüz bitmemiş / bugüne ait tek seferlikler. Bitmiş eski görevler geçmişte görünür.
   const singles = tasks.filter((t) => {
@@ -101,6 +145,9 @@ export default function Tasks() {
     return rs.some((r) => ["open", "started", "submitted", "rejected"].includes(r.status) || r.day === today);
   });
   const [openHist, setOpenHist] = useState<string | null>(null);
+  const [othersOpen, setOthersOpen] = useState(false);
+  const todayTaskIds = new Set(todays.map((r) => r.task_id));
+  const otherSingles = singles.filter((t) => !todayTaskIds.has(t.id));
   // Geçmiş: gruptaki görevler grup adıyla tek satır
   const historyRows = useMemo(() => {
     const out: Array<{ key: string; kind: "task"; run: TaskRun } | { key: string; kind: "group"; group: TaskGroup; child: string; day: string; runs: TaskRun[] }> = [];
@@ -113,14 +160,23 @@ export default function Tasks() {
       if (i == null) { seen.set(k, out.length); out.push({ key: k, kind: "group", group: g, child: r.child_id, day: r.day, runs: [r] }); }
       else (out[i] as { runs: TaskRun[] }).runs.push(r);
     }
-    return out;
-  }, [history, groups, taskById]);
+    // Grup: koşul kararı verilmişse, hepsi bitmişse ya da süresi geçmişse
+    return out.filter((row) => {
+      if (row.kind === "task") return true;
+      const gr = groupRuns.find((x) => x.group_id === row.group.id && x.child_id === row.child && x.day === row.day);
+      if (gr && gr.status !== "open") return true;
+      if (row.runs.every((r) => FINAL.has(r.status))) return true;
+      const t = taskById[row.runs[0].task_id];
+      return !!t && winEnded(taskWindow(t, row.group, row.day));
+    });
+  }, [history, groups, groupRuns, taskById]);
   const shownGroups = groups.filter((g) => forChild(g.child_ids));
+  const otherGroups = shownGroups.filter((g) => !todays.some((r) => taskById[r.task_id]?.group_id === g.id));
   const selected = groups.find((g) => g.id === selectedId) ?? null;
-  const badges = (t?: Task) => {
+  const badges = (t?: Task, sub = false) => {
     if (!t) return null;
     const g = t.group_id ? groups.find((x) => x.id === t.group_id) : null;
-    const repeat = g ? g.recurrence !== "once" : t.recurrence === "days";
+    const repeat = !sub && (g ? g.recurrence !== "once" : t.recurrence === "days");
     return (
       <>
         {repeat && <span className="repeat-badge" title={g ? `Tekrarlı · ${repeatText(g)}` : "Tekrarlı görev"} aria-label="Tekrarlı">↻</span>}
@@ -150,32 +206,6 @@ export default function Tasks() {
     load();
   }
 
-  const groupCard = (g: TaskGroup) => {
-    const n = tasks.filter((t) => t.group_id === g.id).length;
-    const kids = fam.children.filter((c) => g.child_ids.includes(c.id) && (childFilter === "all" || c.id === childFilter));
-    return (
-      <div key={g.id} className={`group-card ${selected?.id === g.id ? "on" : ""} ${g.active ? "" : "inactive"}`}>
-        <button className="group-card-main" onClick={() => select(selected?.id === g.id ? null : g.id)}>
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
-          <span className="grow group-card-copy">
-            <b>{g.name}</b>
-            <span className="muted tiny">{n} görev · {repeatText(g)} · {fam.children.filter((c) => g.child_ids.includes(c.id)).map((c) => c.name).join(", ") || "kimse"}</span>
-          </span>
-          <span className="group-card-progress">
-            {kids.map((c) => {
-              const pr = groupProgress(g, tasks, runs, groupRuns, c.id);
-              if (!pr.total) return null;
-              return <span key={c.id} className={pr.status === "met" ? "good-text" : ""} title={c.name}>{kids.length > 1 ? `${c.name.slice(0, 1)} ` : ""}{pr.approved}/{pr.need}</span>;
-            })}
-          </span>
-        </button>
-        <button className={`switch ${g.active ? "on" : ""}`} role="switch" aria-checked={g.active} aria-label={`${g.name} aktif`} onClick={async () => { await supabase.from("task_groups").update({ active: !g.active }).eq("id", g.id); load(); }}>
-          <span />
-        </button>
-      </div>
-    );
-  };
-
   return (
     <div className="page wide-page">
       <header className="page-head">
@@ -200,75 +230,22 @@ export default function Tasks() {
         </section>
       )}
 
+      {fam.children.length > 1 && (
+        <div className="chips">
+          <button className={`chip-btn small-chip ${childFilter === "all" ? "on" : ""}`} onClick={() => setChildFilter("all")}>Herkes</button>
+          {fam.children.map((c) => (
+            <button key={c.id} className={`chip-btn small-chip ${childFilter === c.id ? "on" : ""}`} onClick={() => setChildFilter(c.id)}>
+              <span className="dot" style={{ background: c.color, marginTop: 0 }} /> {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="tasks-layout">
-        <aside className="tasks-aside">
-          <div className="chips">
-            {([["all", `Tümü ${tasks.filter((t) => forChild(t.child_ids)).length}`], ["groups", `Gruplar ${shownGroups.length}`], ["single", `Tek görevler ${singles.length}`]] as const).map(([k, l]) => (
-              <button key={k} className={`chip-btn ${view === k ? "on" : ""}`} onClick={() => setView(k)}>{l}</button>
-            ))}
-          </div>
-          {fam.children.length > 1 && (
-            <div className="chips">
-              <button className={`chip-btn small-chip ${childFilter === "all" ? "on" : ""}`} onClick={() => setChildFilter("all")}>Herkes</button>
-              {fam.children.map((c) => (
-                <button key={c.id} className={`chip-btn small-chip ${childFilter === c.id ? "on" : ""}`} onClick={() => setChildFilter(c.id)}>
-                  <span className="dot" style={{ background: c.color, marginTop: 0 }} /> {c.name}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {view !== "single" && (
-            <div className="stack-s">
-              {shownGroups.map(groupCard)}
-              {!shownGroups.length && <button className="group-card empty" onClick={createGroup}>+ İlk görev grubunu oluştur</button>}
-            </div>
-          )}
-
-          {view !== "groups" && (
-            <div className="stack-s">
-              <div className="sub-collapse-head" role="button" tabIndex={0} onClick={() => setSinglesOpen((v) => !v)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSinglesOpen((v) => !v); } }}>
-                <span>TEK GÖREVLER</span>
-                <span className={`collapse-arrow${singlesOpen ? " open" : ""}`} aria-hidden="true" />
-              </div>
-              {singlesOpen && (
-                <div className="card list-card">
-                  {!singles.length && <p className="muted small" style={{ padding: 12 }}>Gruba bağlı olmayan görev yok.</p>}
-                  {singles.map((t) => (
-                    <div className="single-row" key={t.id}>
-                      <Link to={`/tasks/${t.id}`} className="grow single-copy">
-                        <b>{t.title}</b>
-                        <span className="muted tiny">
-                          {t.recurrence === "days" ? (t.days.length === 7 ? "Her gün" : "Tekrarlı") : t.due_date ? agendaDateText(t.due_date) : "Tek sefer"} · {t.child_ids.map(childName).join(", ")}{t.active ? "" : " · kapalı"}
-                        </span>
-                      </Link>
-                      {badges(t)}
-                      {groups.length > 0 && (
-                        <div className="pop-anchor">
-                          <button className="chip-btn small-chip accent-text" onClick={() => setAddFor(addFor === t.id ? null : t.id)}>Gruba ekle</button>
-                          {addFor === t.id && (
-                            <>
-                              <div className="pop-backdrop" onClick={() => setAddFor(null)} />
-                              <div className="lock-pop menu-pop right" role="menu">
-                                <span className="pop-label">HANGİ GRUBA</span>
-                                {groups.map((g) => (
-                                  <button key={g.id} className="menu-item" role="menuitem" onClick={async () => { await moveToGroup(t, g, tasks); setAddFor(null); load(); }}>{g.name}</button>
-                                ))}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </aside>
-
         <main className="tasks-main">
           {selected ? (
+            <>
+            <button className="pill-btn ghost back-btn" onClick={() => select(null)}>← Görevler</button>
             <TaskGroupDetail
               group={selected}
               groups={groups}
@@ -280,6 +257,7 @@ export default function Tasks() {
               onChange={load}
               onDeleted={() => { select(null); load(); }}
             />
+            </>
           ) : (
             <>
               <div className="card">
@@ -305,10 +283,10 @@ export default function Tasks() {
                               <div className="grow">
                                 <b>{t?.title}</b>
                                 <div className="muted tiny">
-                                  {t ? dateTimeText(t.created_at) : ""}{t?.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}
+                                  {t && !sub ? winText(taskWindow(t, null, r.day)) : t?.mandatory ? "Zorunlu" : ""}
                                 </div>
                               </div>
-                              {badges(t)}
+                              {badges(t, sub)}
                               <span className={`pill ${r.status === "approved" ? "" : r.status === "submitted" ? "accent" : r.status === "rejected" ? "warn" : "quiet"}`}>
                                 {STATUS_LABEL[r.status]}
                               </span>
@@ -328,19 +306,25 @@ export default function Tasks() {
                           const open = openHist === key;
                           out.push(
                             <div key={key} className="hist-group">
-                              <button className="app-row hist-group-head" onClick={() => setOpenHist(open ? null : key)} aria-expanded={open}>
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+                              <div className="app-row hist-group-head" role="button" tabIndex={0} onClick={() => setOpenHist(open ? null : key)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenHist(open ? null : key); } }} aria-expanded={open}>
+                                <Folder />
                                 <div className="grow">
-                                  <b>{g.name} {g.recurrence !== "once" && <span className="repeat-badge" title={`Tekrarlı · ${repeatText(g)}`}>↻</span>}</b>
-                                  <div className="muted tiny">{rs.length} görev · {pr.approved}/{pr.need} tamam · toplam {pr.all} dk{pr.submitted ? ` · ${pr.submitted} onay bekliyor` : ""}</div>
+                                  <b>{g.name}</b>
+                                  <div className="muted tiny">
+                                    {(() => { const t0 = taskById[rs[0].task_id]; return t0 ? winText(taskWindow(t0, g, rs[0].day)) : ""; })()} · {rs.length} görev · {pr.approved}/{pr.need} tamam{pr.submitted ? ` · ${pr.submitted} onay bekliyor` : ""}
+                                  </div>
                                 </div>
+                                {g.recurrence !== "once" && <span className="repeat-badge" title={`Tekrarlı · ${repeatText(g)}`} aria-label="Tekrarlı">↻</span>}
+                                <span className="reward-chip" title="Gruptaki toplam ödül">+{pr.all} dk</span>
                                 <span className={`pill ${pr.status === "met" ? "" : pr.submitted ? "accent" : pr.status === "failed" ? "warn" : "quiet"}`}>
                                   {pr.status === "met" ? "Tamam" : pr.status === "failed" ? "Olmadı" : pr.submitted ? "Onay bekliyor" : "Devam ediyor"}
                                 </span>
+                                <button className="icon-pill" aria-label={`${g.name} grubunu düzenle`} title="Grubu düzenle" onClick={(e) => { e.stopPropagation(); select(g.id); }}>
+                                  <Pencil />
+                                </button>
                                 <span className={`collapse-arrow${open ? " open" : ""}`} aria-hidden="true" />
-                              </button>
+                              </div>
                               {open && rs.map((r) => row(r, true))}
-                              {open && <button className="pill-btn ghost" style={{ marginLeft: 22 }} onClick={() => select(g.id)}>Gruba git</button>}
                             </div>
                           );
                         }
@@ -350,6 +334,36 @@ export default function Tasks() {
                   );
                 })}
               </div>
+
+              {(otherGroups.length > 0 || otherSingles.length > 0) && (
+                <div className="card">
+                  <div className="section-collapse-head collapse-title" role="button" tabIndex={0} onClick={() => setOthersOpen((v) => !v)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOthersOpen((v) => !v); } }} aria-expanded={othersOpen}>
+                    <span>Bugün olmayan görevler ({otherGroups.length + otherSingles.length}) <Info>Kapalı gruplar, bugün günü olmayan ya da ileri tarihli görevler. Düzenlemek için dokun.</Info></span>
+                    <span className={`collapse-arrow${othersOpen ? " open" : ""}`} aria-hidden="true" />
+                  </div>
+                  {othersOpen && otherGroups.map((g) => (
+                    <button key={g.id} className="app-row" onClick={() => select(g.id)}>
+                      <Folder />
+                      <div className="grow">
+                        <b>{g.name}</b>
+                        <div className="muted tiny">{tasks.filter((t) => t.group_id === g.id).length} görev · {repeatText(g)}{g.active ? "" : " · kapalı"}</div>
+                      </div>
+                      {g.recurrence !== "once" && <span className="repeat-badge" aria-label="Tekrarlı">↻</span>}
+                      <span className="icon-pill" aria-hidden="true"><Pencil /></span>
+                    </button>
+                  ))}
+                  {othersOpen && otherSingles.map((t) => (
+                    <Link key={t.id} to={`/tasks/${t.id}`} className="app-row">
+                      <div className="grow">
+                        <b>{t.title}</b>
+                        <div className="muted tiny">{winText(taskWindow(t, null, t.recurrence === "days" ? today : t.start_date))} · {t.child_ids.map(childName).join(", ")}{t.active ? "" : " · kapalı"}</div>
+                      </div>
+                      {badges(t)}
+                      <span className="icon-pill" aria-hidden="true"><Pencil /></span>
+                    </Link>
+                  ))}
+                </div>
+              )}
 
               {rewards.length > 0 && (
                 <div className="card soft">
@@ -379,7 +393,7 @@ export default function Tasks() {
 
               <div className="card">
                 <div className="row between wrap">
-                  <h2>Görev geçmişi <Info>Bugün, son 7 gün, bu ay veya seçtiğin tarih aralığındaki görev kayıtları.</Info></h2>
+                  <h2>Görev geçmişi <Info>Yalnızca biten (onaylanan, kardeşi yapan) ya da süresi dolan görevler. Devam edenler “Bugün” bölümündedir.</Info></h2>
                   <div className="chips">
                     {(["day", "week", "month", "range"] as const).map((v) => (
                       <button key={v} className={`chip-btn ${historyView === v ? "on" : ""}`} onClick={() => setHistoryView(v)}>
@@ -395,7 +409,7 @@ export default function Tasks() {
                     <DateField value={rangeTo} onChange={setRangeTo} />
                   </div>
                 )}
-                {!history.length && <p className="muted small">Bu görünümde görev yok.</p>}
+                {!historyRows.length && <p className="muted small">{historyView === "day" ? "Bugün biten ya da süresi dolan görev yok." : "Bu aralıkta biten görev yok."}</p>}
                 {historyRows.map((row) => {
                   if (row.kind === "task") {
                     const r = row.run;
@@ -404,7 +418,7 @@ export default function Tasks() {
                       <Link to={t ? `/tasks/${t.id}` : "/tasks"} className="app-row" key={row.key}>
                         <div className="grow">
                           <b>{t?.title ?? "Görev"}</b>
-                          <div className="muted tiny">{childName(r.child_id)} · {r.day} · {STATUS_LABEL[r.status]}{t?.due_date ? ` · ${agendaDateText(t.due_date)}` : ""}</div>
+                          <div className="muted tiny">{childName(r.child_id)} · {t ? winText(taskWindow(t, null, r.day)) : dShort(r.day)} · {STATUS_LABEL[r.status]}</div>
                         </div>
                         {badges(t)}
                         <Icon name="chevron" size={18} />
@@ -417,11 +431,13 @@ export default function Tasks() {
                   return (
                     <div key={row.key} className="hist-group">
                       <button className="app-row hist-group-head" onClick={() => setOpenHist(open ? null : row.key)} aria-expanded={open}>
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
+                        <Folder />
                         <div className="grow">
-                          <b>{row.group.name} {row.group.recurrence !== "once" && <span className="repeat-badge" title={`Tekrarlı · ${repeatText(row.group)}`}>↻</span>}</b>
-                          <div className="muted tiny">{childName(row.child)} · {row.day} · {pr.approved}/{pr.need} görev{gr?.status === "met" ? " · koşul sağlandı" : gr?.status === "failed" ? " · koşul sağlanmadı" : ""}</div>
+                          <b>{row.group.name}</b>
+                          <div className="muted tiny">{childName(row.child)} · {(() => { const t0 = taskById[row.runs[0].task_id]; return t0 ? winText(taskWindow(t0, row.group, row.day)) : dShort(row.day); })()} · {pr.approved}/{pr.need} görev{gr?.status === "met" ? " · koşul sağlandı" : gr?.status === "failed" ? " · koşul sağlanmadı" : ""}</div>
                         </div>
+                        {row.group.recurrence !== "once" && <span className="repeat-badge" title={`Tekrarlı · ${repeatText(row.group)}`} aria-label="Tekrarlı">↻</span>}
+                        <span className="reward-chip">+{pr.all} dk</span>
                         <span className={`collapse-arrow${open ? " open" : ""}`} aria-hidden="true" />
                       </button>
                       {open && row.runs.map((r) => {
@@ -432,7 +448,7 @@ export default function Tasks() {
                               <b>{t?.title ?? "Görev"}</b>
                               <div className="muted tiny">{STATUS_LABEL[r.status]}{r.granted_minutes ? ` · ${r.granted_minutes} dk verildi` : ""}</div>
                             </div>
-                            {badges(t)}
+                            {badges(t, true)}
                             <Icon name="chevron" size={18} />
                           </Link>
                         );

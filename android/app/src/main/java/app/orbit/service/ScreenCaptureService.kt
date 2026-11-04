@@ -60,6 +60,9 @@ class ScreenCaptureService : Service() {
         private const val CH = "orbit-screen"
         @Volatile var running = false
             private set
+        /** İzin penceresi açılırken (servis henüz başlamadan) kilit yumuşasın */
+        @Volatile var preparingUntil = 0L
+        fun active(now: Long) = running || now < preparingUntil
     }
 
     private lateinit var wm: WindowManager
@@ -109,6 +112,7 @@ class ScreenCaptureService : Service() {
     override fun onCreate() {
         super.onCreate()
         running = true
+        preparingUntil = 0L
         wm = getSystemService(WindowManager::class.java)
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CH, "Ekran yakalama", NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) }

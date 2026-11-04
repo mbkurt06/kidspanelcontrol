@@ -28,6 +28,14 @@ class ScreenCaptureActivity : Activity() {
                 }
                 return
             }
+            // Tam kilitteyse ekran sabitlemeyi bırak: sistem izin penceresi ancak böyle açılır.
+            // Kilit yine sürer: Orbit ve görevin izinli uygulamaları dışındakiler kapalı kalır.
+            ScreenCaptureService.preparingUntil = System.currentTimeMillis() + 90_000
+            (ctx as? Activity)?.let { a ->
+                val am = a.getSystemService(android.app.ActivityManager::class.java)
+                if (am.lockTaskModeState != android.app.ActivityManager.LOCK_TASK_MODE_NONE) runCatching { a.stopLockTask() }
+            }
+            app.orbit.service.Live.syncRequested = true
             val i = Intent(ctx, ScreenCaptureActivity::class.java)
                 .putExtra("mode", mode)
                 .putExtra("runId", t.runId)
@@ -65,6 +73,7 @@ class ScreenCaptureActivity : Activity() {
                 packageManager.getLaunchIntentForPackage(pkg)?.let { runCatching { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
             }
         } else if (requestCode == REQ) {
+            ScreenCaptureService.preparingUntil = 0L
             Toast.makeText(this, "İzin verilmedi", Toast.LENGTH_SHORT).show()
         }
         finish()

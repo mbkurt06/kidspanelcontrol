@@ -59,6 +59,8 @@ data class LiveState(
     val kiosk: app.orbit.engine.KioskNow? = null,
     /** Ebeveyn PIN'i ile açıldıysa bitiş (ms) */
     val pinUntil: Long? = null,
+    /** Ekran yakalama sürerken kilit yumuşar: ekran sabitleme kalkar, yalnızca Orbit + görevin izinli uygulamaları açık */
+    val kioskSoft: Boolean = false,
 )
 
 object Live {
@@ -323,7 +325,8 @@ class OrbitService : Service() {
             lastMediaLocked = mediaLocked
             Policy.setLockedMediaControls(this, mediaLocked)
         }
-        val kioskKey = if (kiosk != null) "on:${rules.kiosk.calls}:${rules.taskAllowedPackages.sorted().joinToString(",")}" else "off"
+        val captureOn = ScreenCaptureService.active(nowMs)
+        val kioskKey = if (kiosk != null) "on:$captureOn:${rules.kiosk.calls}:${rules.taskAllowedPackages.sorted().joinToString(",")}" else "off"
         if (kioskKey != lastKioskKey) {
             lastKioskKey = kioskKey
             Policy.setKiosk(this, kiosk != null, rules.kiosk.calls == "all", rules.taskAllowedPackages)
@@ -368,6 +371,8 @@ class OrbitService : Service() {
         if (kiosk != null) {
             lockReason = "🔒 ${kiosk.name}"
             val ok = mutableSetOf(packageName, "android", "com.android.systemui", "com.android.phone", "com.android.emergency", "com.android.server.telecom")
+            ok += rules.taskAllowedPackages
+            if (captureOn) ok += listOf("com.android.permissioncontroller", "com.google.android.permissioncontroller")
             if (rules.kiosk.calls == "all") runCatching { getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull()?.let { ok += it }
             if (interactive && fg != null && fg !in ok && nowMs - lastKioskFront > 2_000) {
                 lastKioskFront = nowMs
@@ -397,7 +402,7 @@ class OrbitService : Service() {
         // 7) Kapalı uygulamaya dokununca çıkan sistem penceresinin ("Blocked by work policy") altındaki açıklama
         Policy.setBlockedMessage(this, blockedMessage(snap, rules.mandatoryOpen))
 
-        Live.set(LiveState(snap, usage, allowed, lockReason, online, Store.lastSync, kiosk, pinUntil))
+        Live.set(LiveState(snap, usage, allowed, lockReason, online, Store.lastSync, kiosk, pinUntil, kiosk != null && captureOn))
         updateNotification(snap)
 
         // 7) Durum gönder

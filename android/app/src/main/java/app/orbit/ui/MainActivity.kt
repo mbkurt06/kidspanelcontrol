@@ -87,7 +87,7 @@ class MainActivity : ComponentActivity() {
         // Tam kilit: Orbit ekrana kilitlenir (cihaz sahibi izniyle, sabitleme sorusu çıkmadan)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                Live.state.collect { syncLockTask(it.kiosk != null) }
+                Live.state.collect { syncLockTask(it.kiosk != null && !it.kioskSoft && !app.orbit.service.ScreenCaptureService.active(System.currentTimeMillis())) }
             }
         }
         setContent {

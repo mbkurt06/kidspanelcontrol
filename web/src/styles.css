@@ -1918,3 +1918,6 @@ textarea { border-radius: 12px; font-size: 15px; }
 .sheet { gap: 14px; }
 .sheet h2 { font-size: 18px; font-weight: 700; }
 .extra-group .pop-label + .chips, .extra-group .pop-label + .extra-row { margin-top: -2px; }
+/* Saat / tarih kapsülü sütun içinde de içeriği kadar genişlikte */
+.tf, .df { align-self: flex-start; flex: 0 0 auto; }
+.extra-row .tf, .extra-row .df { align-self: center; }

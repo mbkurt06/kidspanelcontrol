@@ -423,59 +423,74 @@ function AlarmsCard({ childId }: { childId: string }) {
   return (
     <div className="card">
       <div className="row between">
-        <h2>Hatırlatıcılar <Info>Alarm tam ekran ve sesli çalışır; hatırlatıcı yalnızca bildirim gönderir.</Info></h2>
+        <h2>Hatırlatıcılar <Info>Alarm tam ekran ve sesli çalışır; hatırlatıcı yalnızca bildirim gönderir. Alarm telefonda internet olmasa da çalar (bir kez telefona ulaşmış olması yeter).</Info></h2>
       </div>
       {edit && (
-        <div className="sub-card">
-          <input value={edit.title ?? ""} onChange={(e) => setEdit({ ...edit, title: e.target.value })} placeholder="Başlık (ör. Kalk 🌞, İlacını iç)" />
-          <div className="row gap-s wrap">
-            <button className={`chip ${edit.kind === "alarm" ? "on" : ""}`} onClick={() => setEdit({ ...edit, kind: "alarm" })}>
-              ⏰ Alarm (tam ekran, sesli)
-            </button>
-            <button className={`chip ${edit.kind === "reminder" ? "on" : ""}`} onClick={() => setEdit({ ...edit, kind: "reminder" })}>
-              🔔 Hatırlatıcı (bildirim)
-            </button>
-          </div>
-          <TimeField value={(edit.at_time ?? "07:00").slice(0, 5)} onChange={(v) => setEdit({ ...edit, at_time: v })} />
-          <div className="row gap-xs wrap">
-            {DAYS.map((n, i) => {
-              const d = i + 1;
-              const on = (edit.days ?? []).includes(d);
-              return (
-                <button key={d} className={`chip small ${on ? "on" : ""}`} onClick={() => setEdit({ ...edit, days: on ? (edit.days ?? []).filter((x) => x !== d) : [...(edit.days ?? []), d] })}>
-                  {n}
-                </button>
-              );
-            })}
-          </div>
-          {!(edit.days ?? []).length && (
-            <div className="field">
-              <span>Tek seferlik: tarih</span>
-              <DateField value={edit.on_date ?? todayISO("Europe/Berlin", 1)} onChange={(v) => setEdit({ ...edit, on_date: v })} />
+        <div className="sub-card extra-card">
+          <input className="compact-input" value={edit.title ?? ""} onChange={(e) => setEdit({ ...edit, title: e.target.value })} placeholder="Başlık (ör. Kalk 🌞, İlacını iç)" />
+          <div className="extra-group">
+            <span className="pop-label">
+              TÜR <Info>Alarm tam ekran ve sesli çalar; hatırlatıcı yalnızca bildirim gönderir.</Info>
+            </span>
+            <div className="chips">
+              <button type="button" className={`chip-btn ${edit.kind === "alarm" ? "on" : ""}`} onClick={() => setEdit({ ...edit, kind: "alarm" })}>
+                ⏰ Alarm
+              </button>
+              <button type="button" className={`chip-btn ${edit.kind === "reminder" ? "on" : ""}`} onClick={() => setEdit({ ...edit, kind: "reminder" })}>
+                🔔 Hatırlatıcı
+              </button>
             </div>
-          )}
-          <label className="check">
-            <input type="checkbox" checked={!!edit.child_can_edit} onChange={(e) => setEdit({ ...edit, child_can_edit: e.target.checked })} /> {child.name} değiştirebilir
-          </label>
-          <label className="check">
-            <input type="checkbox" checked={!!edit.child_can_delete} onChange={(e) => setEdit({ ...edit, child_can_delete: e.target.checked })} /> {child.name} silebilir
-          </label>
+          </div>
+          <div className="extra-group">
+            <span className="pop-label">
+              NE ZAMAN <Info>Gün seçmezsen tek seferlik çalar; o zaman tarih seçersin.</Info>
+            </span>
+            <div className="extra-row">
+              <TimeField value={(edit.at_time ?? "07:00").slice(0, 5)} onChange={(v) => setEdit({ ...edit, at_time: v })} />
+              {!(edit.days ?? []).length && <DateField value={edit.on_date ?? todayISO("Europe/Berlin", 1)} onChange={(v) => setEdit({ ...edit, on_date: v })} />}
+            </div>
+            <div className="chips">
+              {DAYS.map((n, i) => {
+                const d = i + 1;
+                const on = (edit.days ?? []).includes(d);
+                return (
+                  <button key={d} type="button" className={`chip-btn ${on ? "on" : ""}`} onClick={() => setEdit({ ...edit, days: on ? (edit.days ?? []).filter((x) => x !== d) : [...(edit.days ?? []), d] })}>
+                    {n}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="extra-group">
+            <span className="pop-label">{child.name.toLocaleUpperCase("tr-TR")} NE YAPABİLİR</span>
+            <div className="chips">
+              <button type="button" className={`chip-btn ${edit.child_can_edit ? "on" : ""}`} aria-pressed={!!edit.child_can_edit} onClick={() => setEdit({ ...edit, child_can_edit: !edit.child_can_edit })}>
+                {edit.child_can_edit ? "✓ " : ""}Değiştirebilir
+              </button>
+              <button type="button" className={`chip-btn ${edit.child_can_delete ? "on" : ""}`} aria-pressed={!!edit.child_can_delete} onClick={() => setEdit({ ...edit, child_can_delete: !edit.child_can_delete })}>
+                {edit.child_can_delete ? "✓ " : ""}Silebilir
+              </button>
+            </div>
+          </div>
           {edit.kind === "alarm" && (
-            <div className="row gap-s wrap" style={{ alignItems: "center" }}>
-              <span className="small">Erteleme:</span>
-              <input className="mini" type="number" min={0} max={10} value={edit.snooze_max ?? 2} onChange={(e) => setEdit({ ...edit, snooze_max: Number(e.target.value) })} aria-label="Kaç kez" />
-              <span className="small">kez,</span>
-              <input className="mini" type="number" min={1} max={30} value={edit.snooze_minutes ?? 5} onChange={(e) => setEdit({ ...edit, snooze_minutes: Number(e.target.value) })} aria-label="Kaç dakika" />
-              <span className="small">dk</span>
+            <div className="extra-group">
+              <span className="pop-label">
+                ERTELEME <Info>Çocuk alarmı en fazla bu kadar kez, her seferinde bu kadar dakika erteleyebilir. 0 kez = ertelenemez.</Info>
+              </span>
+              <div className="extra-row">
+                <MinuteStepper value={edit.snooze_max ?? 2} onChange={(v) => setEdit({ ...edit, snooze_max: v })} max={10} unit="kez" label="Kaç kez" />
+                <MinuteStepper value={edit.snooze_minutes ?? 5} onChange={(v) => setEdit({ ...edit, snooze_minutes: v })} min={1} max={30} label="Kaç dakika" />
+              </div>
             </div>
           )}
           {err && <p className="error">{err}</p>}
-          <div className="row gap-s">
-            <button className="btn primary" onClick={save}>
-              Kaydet
-            </button>
-            <button className="btn ghost" onClick={() => setEdit(null)}>
+          <div className="extra-actions">
+            <span className="grow" />
+            <button type="button" className="pill-btn" onClick={() => setEdit(null)}>
               Vazgeç
+            </button>
+            <button type="button" className="pill-btn primary" onClick={save}>
+              Kaydet
             </button>
           </div>
         </div>
@@ -518,7 +533,6 @@ function AlarmsCard({ childId }: { childId: string }) {
           ))}
         </details>
       )}
-      <p className="muted tiny">Alarm telefonda internet olmasa da çalar (bir kez telefona ulaşmış olması yeter).</p>
       <button className="agenda-fab" aria-label="Hatırlatıcı ekle" onClick={() => setEdit(emptyAlarm(childId, child.family_id))}>+</button>
     </div>
   );

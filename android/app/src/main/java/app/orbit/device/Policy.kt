@@ -72,7 +72,7 @@ object Policy {
         else @Suppress("DEPRECATION") runCatching { d.setAutoTimeRequired(a, true) }
         // Bildirim, kamera ve mikrofon (görev kanıtı) izinleri kendiliğinden verilsin
         val perms = mutableListOf("android.permission.CAMERA", "android.permission.RECORD_AUDIO")
-        if (Build.VERSION.SDK_INT >= 33) perms += listOf("android.permission.POST_NOTIFICATIONS", "android.permission.READ_MEDIA_AUDIO")
+        if (Build.VERSION.SDK_INT >= 33) perms += listOf("android.permission.POST_NOTIFICATIONS", "android.permission.READ_MEDIA_AUDIO", "android.permission.READ_MEDIA_IMAGES")
         else perms += "android.permission.READ_EXTERNAL_STORAGE"
         for (perm in perms) runCatching {
             d.setPermissionGrantState(a, ctx.packageName, perm, DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED)

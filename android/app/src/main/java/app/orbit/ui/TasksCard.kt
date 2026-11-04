@@ -132,6 +132,25 @@ fun TasksCard(tasks: List<TaskItem>) {
     var busyRun by remember { mutableStateOf<String?>(null) }
     var optimisticSubmitted by remember { mutableStateOf<Set<String>>(emptySet()) }
     var msg by remember { mutableStateOf("") }
+    var shotFor by remember { mutableStateOf<TaskItem?>(null) }
+
+    fun addShots(t: TaskItem, uris: List<android.net.Uri>) {
+        busyRun = t.runId
+        msg = "Ekran görüntüleri yükleniyor…"
+        scope.launch {
+            val r = withContext(Dispatchers.IO) {
+                runCatching {
+                    for (u in uris) {
+                        val bytes = Screenshots.jpeg(ctx, u) ?: continue
+                        Sync.uploadProof(t.runId, "screenshot", "photo", bytes, "image/jpeg")
+                    }
+                }
+            }
+            busyRun = null
+            msg = if (r.isSuccess) "${uris.size} ekran görüntüsü eklendi" else "Yüklenemedi: ${r.exceptionOrNull()?.message ?: "internet?"}"
+            Live.syncRequested = true
+        }
+    }
 
     fun submit(t: TaskItem) {
         optimisticSubmitted = optimisticSubmitted + t.runId
@@ -142,6 +161,7 @@ fun TasksCard(tasks: List<TaskItem>) {
             if (ok.isFailure) optimisticSubmitted = optimisticSubmitted - t.runId
             msg = if (ok.isSuccess) "\"${t.title}\" gönderildi, onay bekleniyor"
                 else if ("recording_missing" in (ok.exceptionOrNull()?.message ?: "")) "Önce kaydı tamamla"
+                else if ("screenshot_missing" in (ok.exceptionOrNull()?.message ?: "")) "Önce ekran görüntüsü ekle"
                 else if ("recording_short" in (ok.exceptionOrNull()?.message ?: "")) "Kayıt en az süreden kısa"
                 else if ("locked" in (ok.exceptionOrNull()?.message ?: "")) "Bu görev henüz açılmadı"
                 else "Gönderilemedi: ${ok.exceptionOrNull()?.message ?: "internet?"}"
@@ -157,7 +177,8 @@ fun TasksCard(tasks: List<TaskItem>) {
         val media = res.data?.getStringExtra("media") ?: "photo"
         val (task, stage) = p
         busyRun = task.runId
-        if (stage != "before") optimisticSubmitted = optimisticSubmitted + task.runId
+        val thenSubmit = stage != "before" && !task.needsScreenshot
+        if (thenSubmit) optimisticSubmitted = optimisticSubmitted + task.runId
         msg = "Yükleniyor…"
         scope.launch {
             val r = withContext(Dispatchers.IO) {
@@ -167,14 +188,15 @@ fun TasksCard(tasks: List<TaskItem>) {
                         Sync.uploadProof(task.runId, stage, media, f.readBytes(), if (media == "video") "video/mp4" else "image/jpeg")
                         f.delete()
                     }
-                    if (stage != "before") Sync.submitTask(task.runId)
+                    if (thenSubmit) Sync.submitTask(task.runId)
                 }
             }
             busyRun = null
-            if (r.isFailure && stage != "before") optimisticSubmitted = optimisticSubmitted - task.runId
+            if (r.isFailure && thenSubmit) optimisticSubmitted = optimisticSubmitted - task.runId
             msg = when {
                 r.isFailure -> "Yüklenemedi: ${r.exceptionOrNull()?.message ?: "internet?"}"
                 stage == "before" -> "${paths.size} öncesi fotoğrafı kaydedildi. Görevi yap, sonra \"Tamamladım\"a bas."
+                !thenSubmit -> "Fotoğraflar eklendi. Şimdi ekran görüntüsünü ekle."
                 else -> "\"${task.title}\" gönderildi, onay bekleniyor"
             }
             Live.syncRequested = true
@@ -258,6 +280,16 @@ fun TasksCard(tasks: List<TaskItem>) {
                         t.recordingDone -> Text("📹 Kayıt tamam (${t.recSeconds / 60} dk)", color = C.good, fontSize = 13.sp)
                     }
                 }
+                if (t.open && t.screenshotMin != null) {
+                    val mx = t.screenshotMax ?: t.screenshotMin
+                    if (t.screenshotCount < mx) Button(
+                        onClick = { shotFor = t },
+                        enabled = busyRun != t.runId,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = if (t.needsScreenshot) C.blue else C.surface),
+                    ) { Text("📱 Ekran görüntüsü ekle (${t.screenshotCount}/${t.screenshotMin}${if (mx > t.screenshotMin) "–$mx" else ""})") }
+                    else Text("📱 ${t.screenshotCount} ekran görüntüsü eklendi", color = C.good, fontSize = 13.sp)
+                }
                 val needBefore = t.needsProof && t.beforeCount < t.beforePhotoMin
                 val needAfter = t.needsProof && t.afterCount < t.afterPhotoMin
                 val recordFirst = t.needsRecording && !t.recordingDone && !needBefore
@@ -268,6 +300,7 @@ fun TasksCard(tasks: List<TaskItem>) {
                             when {
                                 needBefore -> capture(t, "before", t.beforePhotoMin, t.beforePhotoMax)
                                 needAfter -> capture(t, if (t.beforeAfter) "after" else "single", t.afterPhotoMin, t.afterPhotoMax)
+                                t.needsScreenshot -> shotFor = t
                                 else -> submit(t)
                             }
                         },
@@ -280,6 +313,7 @@ fun TasksCard(tasks: List<TaskItem>) {
                                 busy -> "Gönderiliyor…"
                                 needBefore -> "Başla (${t.beforeCount}/${t.beforePhotoMin} öncesi)"
                                 needAfter -> "Tamamladım (${t.afterCount}/${t.afterPhotoMin} sonrası)"
+                                t.needsScreenshot -> "Önce ekran görüntüsü ekle"
                                 else -> "Tamamladım"
                             }
                         )
@@ -288,5 +322,9 @@ fun TasksCard(tasks: List<TaskItem>) {
             }
         }
         if (msg.isNotEmpty()) Text(msg, color = C.good, fontSize = 13.sp)
+        shotFor?.let { t ->
+            val mx = (t.screenshotMax ?: t.screenshotMin ?: 1) - t.screenshotCount
+            ScreenshotPicker(max = mx.coerceAtLeast(1), onDismiss = { shotFor = null }) { uris -> shotFor = null; addShots(t, uris) }
+        }
     }
 }

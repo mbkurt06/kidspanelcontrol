@@ -31,6 +31,10 @@ data class TaskItem(
     val recordMinutes: Int? = null,
     /** En az kayıt süresi (dk); null = sabit süre */
     val recordMinMinutes: Int? = null,
+    /** Ekran görüntüsü kanıtı: en az / en fazla / şimdiye kadar eklenen */
+    val screenshotMin: Int? = null,
+    val screenshotMax: Int? = null,
+    val screenshotCount: Int = 0,
     /** back | front | choose */
     val recordCamera: String = "back",
     /** none | limit | child */
@@ -65,6 +69,7 @@ data class TaskItem(
     val recordingDone get() = recStatus == "done"
     val open get() = status in setOf("open", "started", "rejected")
     val needsProof get() = proof != "none"
+    val needsScreenshot get() = screenshotMin != null && screenshotCount < screenshotMin
     /** Görevler artık tek başına süreli uygulamaları engellemez; kısıtlar odak profillerinden gelir. */
     val blocking get() = false
 }
@@ -99,6 +104,9 @@ object Tasks {
             createdAt = o.s("created_at"),
             firstWins = o.optString("assign_mode") == "first",
             recordMinutes = if (o.isNull("record_minutes") || !o.has("record_minutes")) null else o.optInt("record_minutes"),
+            screenshotMin = if (o.isNull("screenshot_min") || !o.has("screenshot_min")) null else o.optInt("screenshot_min"),
+            screenshotMax = if (o.isNull("screenshot_max") || !o.has("screenshot_max")) null else o.optInt("screenshot_max"),
+            screenshotCount = stages.count { it == "screenshot" },
             recordMinMinutes = if (o.isNull("record_min_minutes") || !o.has("record_min_minutes")) null else o.optInt("record_min_minutes"),
             recordCamera = o.optString("record_camera", "back"),
             recordPause = o.optString("record_pause", "child"),

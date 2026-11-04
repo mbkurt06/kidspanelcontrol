@@ -25,9 +25,15 @@ function useRepeat(fn: () => void) {
       e.preventDefault();
       fn();
       stop();
-      t.current = window.setTimeout(() => {
-        t.current = window.setInterval(fn, 90);
-      }, 400);
+      let d = 300;
+      const loop = () => {
+        t.current = window.setTimeout(() => {
+          fn();
+          d = Math.max(45, d * 0.85);
+          loop();
+        }, d);
+      };
+      t.current = window.setTimeout(loop, 100);
     },
     onPointerUp: stop,
     onPointerLeave: stop,
@@ -117,6 +123,9 @@ export function TimeField({
     const max = kind === "h" ? 23 : 59;
     return (
       <div className="tf-seg">
+        <button type="button" className="tf-arrow" aria-label={kind === "h" ? "Saati artır" : "Dakikayı artır"} {...(kind === "h" ? hUp : mUp)}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 15l6-6 6 6" /></svg>
+        </button>
         <input
           className="tf-num"
           inputMode="numeric"
@@ -159,6 +168,9 @@ export function TimeField({
             if (e.key === "Enter") (e.target as HTMLInputElement).blur();
           }}
         />
+        <button type="button" className="tf-arrow" aria-label={kind === "h" ? "Saati azalt" : "Dakikayı azalt"} {...(kind === "h" ? hDown : mDown)}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6" /></svg>
+        </button>
       </div>
     );
   };

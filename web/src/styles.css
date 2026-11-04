@@ -1921,3 +1921,13 @@ textarea { border-radius: 12px; font-size: 15px; }
 /* Saat / tarih kapsülü sütun içinde de içeriği kadar genişlikte */
 .tf, .df { align-self: flex-start; flex: 0 0 auto; }
 .extra-row .tf, .extra-row .df { align-self: center; }
+
+/* Saat seçici (B): saat ve dakika ayrı küçük kutular, üstte ve altta ok; dakika 1'er */
+.tf { height: auto; padding: 0; border: 0; background: transparent; gap: 4px; }
+.tf-seg { flex-direction: column; width: 46px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.tf-arrow { display: flex; align-items: center; justify-content: center; width: 100%; height: 20px; border: 0; background: none; color: var(--muted); padding: 0; cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.tf-arrow:hover { color: var(--text); }
+.tf-arrow:active { color: var(--accent); background: none; }
+.tf-num { width: 100%; height: 24px; font-size: 17px; }
+.tf-colon { font-size: 17px; }
+.tf-more { width: 32px; height: 32px; border: 1px solid var(--line); background: var(--surface-2); margin-left: 4px; }

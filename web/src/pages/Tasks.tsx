@@ -56,6 +56,18 @@ function taskWindow(t: Task, g: TaskGroup | null | undefined, day: string): Win 
   const [sDate, sTime] = startOf(t.created_at, t.start_date, null);
   return { sDate, sTime, eDate: t.due_date ?? t.end_date ?? t.start_date, eTime: hm(t.due_time) ?? "23:59" };
 }
+/** Liste için tüm süre: başlangıç (oluşturulma ya da ileri tarih) → son yapılması gereken gün ve saat */
+function taskSpan(t: Task, g: TaskGroup | null | undefined): Win | (Omit<Win, "eDate" | "eTime"> & { eDate: null; eTime: null }) {
+  if (g) {
+    const [sDate, sTime] = startOf(g.created_at, g.start_date, g.start_time);
+    const eDate = g.recurrence === "once" ? g.end_date ?? g.start_date : g.end_date;
+    return eDate ? { sDate, sTime, eDate, eTime: hm(g.due_time) ?? "23:59" } : { sDate, sTime, eDate: null, eTime: null };
+  }
+  const [sDate, sTime] = startOf(t.created_at, t.start_date, null);
+  const eDate = t.recurrence === "days" ? t.end_date : t.due_date ?? t.end_date ?? t.start_date;
+  return eDate ? { sDate, sTime, eDate, eTime: hm(t.due_time) ?? "23:59" } : { sDate, sTime, eDate: null, eTime: null };
+}
+const spanText = (w: ReturnType<typeof taskSpan>) => (w.eDate ? winText(w as Win) : `${dShort(w.sDate)} ${w.sTime} – süresiz`);
 const winText = (w: Win) =>
   w.sDate === w.eDate ? `${dShort(w.sDate)} ${w.sTime}–${w.eTime}` : `${dShort(w.sDate)} ${w.sTime} – ${dShort(w.eDate)} ${w.eTime}`;
 const winEnded = (w: Win) => new Date(`${w.eDate}T${w.eTime}:00`).getTime() < Date.now();
@@ -283,12 +295,14 @@ export default function Tasks() {
                               <div className="grow">
                                 <b>{t?.title}</b>
                                 <div className="muted tiny">
-                                  {t && !sub ? winText(taskWindow(t, null, r.day)) : t?.mandatory ? "Zorunlu" : ""}
+                                  {t && !sub ? spanText(taskSpan(t, null)) : t?.mandatory ? "Zorunlu" : ""}
                                 </div>
                               </div>
-                              {badges(t, sub)}
-                              <span className={`pill ${r.status === "approved" ? "" : r.status === "submitted" ? "accent" : r.status === "rejected" ? "warn" : "quiet"}`}>
-                                {STATUS_LABEL[r.status]}
+                              <span className="row-meta">
+                                {badges(t, sub)}
+                                <span className={`pill ${r.status === "approved" ? "" : r.status === "submitted" ? "accent" : r.status === "rejected" ? "warn" : "quiet"}`}>
+                                  {STATUS_LABEL[r.status]}
+                                </span>
                               </span>
                             </Link>
                           );
@@ -311,9 +325,10 @@ export default function Tasks() {
                                 <div className="grow">
                                   <b>{g.name}</b>
                                   <div className="muted tiny">
-                                    {(() => { const t0 = taskById[rs[0].task_id]; return t0 ? winText(taskWindow(t0, g, rs[0].day)) : ""; })()} · {rs.length} görev · {pr.approved}/{pr.need} tamam{pr.submitted ? ` · ${pr.submitted} onay bekliyor` : ""}
+                                    {(() => { const t0 = taskById[rs[0].task_id]; return t0 ? spanText(taskSpan(t0, g)) : ""; })()} · {rs.length} görev · {pr.approved}/{pr.need} tamam{pr.submitted ? ` · ${pr.submitted} onay bekliyor` : ""}
                                   </div>
                                 </div>
+                                <span className="row-meta">
                                 {g.recurrence !== "once" && <span className="repeat-badge" title={`Tekrarlı · ${repeatText(g)}`} aria-label="Tekrarlı">↻</span>}
                                 <span className="reward-chip" title="Gruptaki toplam ödül">+{pr.all} dk</span>
                                 <span className={`pill ${pr.status === "met" ? "" : pr.submitted ? "accent" : pr.status === "failed" ? "warn" : "quiet"}`}>
@@ -323,6 +338,7 @@ export default function Tasks() {
                                   <Pencil />
                                 </button>
                                 <span className={`collapse-arrow${open ? " open" : ""}`} aria-hidden="true" />
+                                </span>
                               </div>
                               {open && rs.map((r) => row(r, true))}
                             </div>
@@ -348,18 +364,22 @@ export default function Tasks() {
                         <b>{g.name}</b>
                         <div className="muted tiny">{tasks.filter((t) => t.group_id === g.id).length} görev · {repeatText(g)}{g.active ? "" : " · kapalı"}</div>
                       </div>
-                      {g.recurrence !== "once" && <span className="repeat-badge" aria-label="Tekrarlı">↻</span>}
-                      <span className="icon-pill" aria-hidden="true"><Pencil /></span>
+                      <span className="row-meta">
+                        {g.recurrence !== "once" && <span className="repeat-badge" aria-label="Tekrarlı">↻</span>}
+                        <span className="icon-pill" aria-hidden="true"><Pencil /></span>
+                      </span>
                     </button>
                   ))}
                   {othersOpen && otherSingles.map((t) => (
                     <Link key={t.id} to={`/tasks/${t.id}`} className="app-row">
                       <div className="grow">
                         <b>{t.title}</b>
-                        <div className="muted tiny">{winText(taskWindow(t, null, t.recurrence === "days" ? today : t.start_date))} · {t.child_ids.map(childName).join(", ")}{t.active ? "" : " · kapalı"}</div>
+                        <div className="muted tiny">{spanText(taskSpan(t, null))} · {t.child_ids.map(childName).join(", ")}{t.active ? "" : " · kapalı"}</div>
                       </div>
-                      {badges(t)}
-                      <span className="icon-pill" aria-hidden="true"><Pencil /></span>
+                      <span className="row-meta">
+                        {badges(t)}
+                        <span className="icon-pill" aria-hidden="true"><Pencil /></span>
+                      </span>
                     </Link>
                   ))}
                 </div>
@@ -420,8 +440,10 @@ export default function Tasks() {
                           <b>{t?.title ?? "Görev"}</b>
                           <div className="muted tiny">{childName(r.child_id)} · {t ? winText(taskWindow(t, null, r.day)) : dShort(r.day)} · {STATUS_LABEL[r.status]}</div>
                         </div>
-                        {badges(t)}
-                        <Icon name="chevron" size={18} />
+                        <span className="row-meta">
+                          {badges(t)}
+                          <Icon name="chevron" size={18} />
+                        </span>
                       </Link>
                     );
                   }
@@ -436,9 +458,11 @@ export default function Tasks() {
                           <b>{row.group.name}</b>
                           <div className="muted tiny">{childName(row.child)} · {(() => { const t0 = taskById[row.runs[0].task_id]; return t0 ? winText(taskWindow(t0, row.group, row.day)) : dShort(row.day); })()} · {pr.approved}/{pr.need} görev{gr?.status === "met" ? " · koşul sağlandı" : gr?.status === "failed" ? " · koşul sağlanmadı" : ""}</div>
                         </div>
-                        {row.group.recurrence !== "once" && <span className="repeat-badge" title={`Tekrarlı · ${repeatText(row.group)}`} aria-label="Tekrarlı">↻</span>}
-                        <span className="reward-chip">+{pr.all} dk</span>
-                        <span className={`collapse-arrow${open ? " open" : ""}`} aria-hidden="true" />
+                        <span className="row-meta">
+                          {row.group.recurrence !== "once" && <span className="repeat-badge" title={`Tekrarlı · ${repeatText(row.group)}`} aria-label="Tekrarlı">↻</span>}
+                          <span className="reward-chip">+{pr.all} dk</span>
+                          <span className={`collapse-arrow${open ? " open" : ""}`} aria-hidden="true" />
+                        </span>
                       </button>
                       {open && row.runs.map((r) => {
                         const t = taskById[r.task_id];
@@ -448,8 +472,10 @@ export default function Tasks() {
                               <b>{t?.title ?? "Görev"}</b>
                               <div className="muted tiny">{STATUS_LABEL[r.status]}{r.granted_minutes ? ` · ${r.granted_minutes} dk verildi` : ""}</div>
                             </div>
-                            {badges(t, true)}
-                            <Icon name="chevron" size={18} />
+                            <span className="row-meta">
+                              {badges(t, true)}
+                              <Icon name="chevron" size={18} />
+                            </span>
                           </Link>
                         );
                       })}

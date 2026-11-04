@@ -417,7 +417,11 @@ class RuleEngine(private val rules: Rules) {
 
     fun verdict(pkg: String, s: Snapshot, usage: DayUsage): AppVerdict {
         // Görevin izinli uygulaması: görev açıkken her durumda açık, süreden düşmez
-        if (pkg in rules.taskAllowedPackages) return AppVerdict(true)
+        // Kısıtlı zamanda açılır (süreden düşmez); serbest zamanda normal kuralıyla sayılır
+        if (pkg in rules.taskAllowedPackages) {
+            val b = baseVerdict(pkg, s, usage)
+            return if (b.allowed) b else AppVerdict(true)
+        }
         val v = baseVerdict(pkg, s, usage)
         if (s.parentMode || !v.allowed) return v
         // Sayaç odak modu: kuralların açtıklarından sadece odak profilindekiler açık kalır

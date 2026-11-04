@@ -56,7 +56,7 @@ object Parse {
 
     private fun taskAllowed(tasks: JSONArray?): Set<String> = (0 until (tasks?.length() ?: 0)).flatMap { i ->
         val t = tasks!!.getJSONObject(i)
-        if (t.optString("status") in setOf("open", "started", "rejected") && !t.optBoolean("locked")) strings(t.optJSONArray("allowed_packages")) else emptyList()
+        if (t.optString("status") in setOf("open", "started", "rejected") && !t.optBoolean("locked") && t.optString("allowed_mode", "keep") != "focus") strings(t.optJSONArray("allowed_packages")) else emptyList()
     }.filter { it.isNotBlank() }.toSet()
 
     private fun windows(a: JSONArray?): List<TimeWindow> = (0 until (a?.length() ?: 0)).mapNotNull {

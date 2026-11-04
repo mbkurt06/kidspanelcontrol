@@ -45,6 +45,7 @@ type Form = {
   srec_minutes: string;
   srec_min_minutes: string;
   allowed_packages: string[];
+  allowed_mode: "keep" | "focus";
   record_camera: "back" | "front" | "choose";
   record_pause: "none" | "limit" | "child";
   record_pause_max: string;
@@ -76,6 +77,7 @@ function defaultsOf(f: Form): TaskDefaults {
     screen_record_minutes: f.srec_on ? Number(f.srec_minutes) || 30 : null,
     screen_record_min_minutes: f.srec_on && f.srec_min_minutes ? Number(f.srec_min_minutes) : null,
     allowed_packages: f.allowed_packages,
+    allowed_mode: f.allowed_mode,
     record_camera: f.record_camera,
     record_pause: f.record_pause,
     record_pause_max: f.record_pause === "limit" ? Number(f.record_pause_max) || 10 : null,
@@ -110,6 +112,7 @@ function applyDefaults(f: Form, d: TaskDefaults | null | undefined, allChildren:
     srec_minutes: String(d.screen_record_minutes ?? f.srec_minutes),
     srec_min_minutes: d.screen_record_min_minutes == null ? "" : String(d.screen_record_min_minutes),
     allowed_packages: d.allowed_packages ?? f.allowed_packages,
+    allowed_mode: d.allowed_mode ?? f.allowed_mode,
     record_camera: d.record_camera ?? f.record_camera,
     record_pause: d.record_pause ?? f.record_pause,
     record_pause_max: String(d.record_pause_max ?? f.record_pause_max),
@@ -153,6 +156,7 @@ const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; 
   srec_minutes: "30",
   srec_min_minutes: "",
   allowed_packages: [],
+  allowed_mode: "keep",
   record_camera: "back",
   record_pause: "child",
   record_pause_max: "10",
@@ -162,7 +166,7 @@ const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; 
   mandatory: false,
 });
 
-type RecFields = { screen_record_minutes?: number | null; screen_record_min_minutes?: number | null; allowed_packages?: string[] | null; screenshot_min?: number | null; screenshot_max?: number | null; record_minutes?: number | null; record_min_minutes?: number | null; record_camera?: Form["record_camera"]; record_pause?: Form["record_pause"]; record_pause_max?: number | null };
+type RecFields = { screen_record_minutes?: number | null; screen_record_min_minutes?: number | null; allowed_packages?: string[] | null; allowed_mode?: "keep" | "focus" | null; screenshot_min?: number | null; screenshot_max?: number | null; record_minutes?: number | null; record_min_minutes?: number | null; record_camera?: Form["record_camera"]; record_pause?: Form["record_pause"]; record_pause_max?: number | null };
 const recForm = (t: RecFields) => ({
   record_on: t.record_minutes != null,
   record_minutes: t.record_minutes?.toString() ?? "60",
@@ -174,6 +178,7 @@ const recForm = (t: RecFields) => ({
   srec_minutes: t.screen_record_minutes?.toString() ?? "30",
   srec_min_minutes: t.screen_record_min_minutes?.toString() ?? "",
   allowed_packages: t.allowed_packages ?? [],
+  allowed_mode: t.allowed_mode ?? "keep",
   record_camera: t.record_camera ?? "back",
   record_pause: t.record_pause ?? "child",
   record_pause_max: t.record_pause_max?.toString() ?? "10",
@@ -377,6 +382,7 @@ export default function TaskEdit() {
       screen_record_minutes: f.srec_on ? Math.min(240, Math.max(1, Number(f.srec_minutes) || 30)) : null,
       screen_record_min_minutes: f.srec_on && f.srec_min_minutes ? Math.min(Math.max(1, Number(f.srec_minutes) || 30), Math.max(1, Number(f.srec_min_minutes))) : null,
       allowed_packages: f.allowed_packages,
+      allowed_mode: f.allowed_mode,
       record_camera: f.record_camera,
       record_pause: f.record_pause,
       record_pause_max: f.record_pause === "limit" ? Math.max(1, Number(f.record_pause_max) || 10) : null,
@@ -417,6 +423,7 @@ export default function TaskEdit() {
         screen_record_minutes: row.screen_record_minutes,
         screen_record_min_minutes: row.screen_record_min_minutes,
         allowed_packages: row.allowed_packages,
+        allowed_mode: row.allowed_mode,
         record_camera: row.record_camera,
         record_pause: row.record_pause,
         record_pause_max: row.record_pause_max,
@@ -686,13 +693,13 @@ export default function TaskEdit() {
       </div>
 
       <div className="card">
-        <h2>Kısıtlamalar <Info>Bu görev onaylanana kadar geçerlidir. Telefon kısıtı ile Orbit içindeki menü kısıtı birbirinden bağımsızdır.</Info></h2>
+        <h2>Kısıtlamalar <Info>Görev onaylanana kadar geçerlidir. “Değiştirme” hiçbir kısıtı kaldırmaz: telefon o an hangi kuraldaysa (serbest, Sınırla, Kilitle) öyle kalır.</Info></h2>
         <label className="field">
-          <span>Telefon</span>
+          <span>Telefon (görev bitene kadar)</span>
           <select value={f.phone_restriction} onChange={(e) => set("phone_restriction", e.target.value as TaskPhoneRestriction)}>
-            <option value="none">Kısıtlama yok</option>
-            <option value="limit">Sınırlı kullanım</option>
-            <option value="kiosk">Tam kilit</option>
+            <option value="none">Değiştirme — o anki kural geçerli</option>
+            <option value="limit">Sınırla — sadece temel uygulamalar</option>
+            <option value="kiosk">Kilitle — sadece Orbit</option>
           </select>
         </label>
         <label className="field">
@@ -710,6 +717,21 @@ export default function TaskEdit() {
           onQuery={setAppQuery}
           onChange={(v) => set("allowed_packages", v)}
         />
+        {f.allowed_packages.length > 0 && (
+          <div className="field">
+            <span>Görevi yaparken</span>
+            <div className="chips">
+              <button type="button" className={`chip-btn ${f.allowed_mode === "keep" ? "on" : ""}`} onClick={() => set("allowed_mode", "keep")}>O anki durumu koru</button>
+              <button type="button" className={`chip-btn ${f.allowed_mode === "focus" ? "on" : ""}`} onClick={() => set("allowed_mode", "focus")}>Sadece izinli uygulamalar</button>
+            </div>
+            <span className="muted tiny">
+              {f.allowed_mode === "keep"
+                ? "Kısıtlı zamanda (Sınırla / Kilitle) izinli uygulamalar açılır; serbest zamanda diğer uygulamalara dokunulmaz."
+                : "Çocuk telefonda “Göreve başla”ya basınca, duraklatana ya da bitirene kadar sadece izinli uygulamalar açık kalır; bu süre günlük süresinden düşmez."}
+              {f.srec_on ? " Ekran kaydı sürerken her durumda sadece izinli uygulamalar açıktır, kayıt süresi günlük süreden düşmez; duraklatınca diğer uygulamalar açılır ve normal sayılır." : ""}
+            </span>
+          </div>
+        )}
       </div>
 
       <div className="card">

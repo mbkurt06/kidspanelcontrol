@@ -126,6 +126,7 @@ export type TaskDefaults = Partial<{
   screen_record_minutes: number | null;
   screen_record_min_minutes: number | null;
   allowed_packages: string[];
+  allowed_mode: "keep" | "focus";
   record_camera: "back" | "front" | "choose";
   record_pause: "none" | "limit" | "child";
   record_pause_max: number | null;
@@ -370,6 +371,7 @@ export type TaskTemplate = {
   screen_record_minutes?: number | null;
   screen_record_min_minutes?: number | null;
   allowed_packages?: string[] | null;
+  allowed_mode?: "keep" | "focus" | null;
   record_camera?: "back" | "front" | "choose";
   record_pause?: "none" | "limit" | "child";
   record_pause_max?: number | null;

@@ -47,6 +47,7 @@ class ScreenCaptureActivity : Activity() {
                 .putExtra("recMin", (t.screenRecMinMinutes ?: 0) * 60)
                 .putExtra("autoSubmit", t.proof == "none" && t.recordMinutes == null && (mode == "record" && t.screenshotMin == null || mode == "shot" && t.screenRecMinutes == null))
                 .putExtra("openPkg", t.allowedPackages.firstOrNull())
+                .putStringArrayListExtra("allowed", ArrayList(if (mode == "record") t.allowedPackages else emptyList()))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             ctx.startActivity(i)
         }

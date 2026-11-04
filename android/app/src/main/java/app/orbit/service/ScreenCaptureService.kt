@@ -97,6 +97,10 @@ class ScreenCaptureService : Service() {
     private var encoder: ScreenEncoder? = null
     private var segStart = 0L
     private var stopping = false
+    private var paused = false
+    private var pausedSec = 0
+    private var pauseCount = 0
+    private var allowed: List<String> = emptyList()
 
     // Yüzen düğme
     private var bubble: LinearLayout? = null
@@ -130,6 +134,7 @@ class ScreenCaptureService : Service() {
         recMin = intent.getIntExtra("recMin", 0)
         recMax = intent.getIntExtra("recMax", 1800).coerceAtLeast(60)
         autoSubmit = intent.getBooleanExtra("autoSubmit", false)
+        allowed = intent.getStringArrayListExtra("allowed")?.toList().orEmpty()
         val n = Notification.Builder(this, CH)
             .setSmallIcon(R.drawable.ic_orbit)
             .setContentTitle(if (mode == "record") "🎬 Ekran kaydı: $title" else "📱 Ekran görüntüsü: $title")
@@ -270,6 +275,10 @@ class ScreenCaptureService : Service() {
                 if (r == null) { toast("Kayıt başlatılamadı (internet?)"); stopAll(); return@post }
                 recId = r.getString("id")
                 recorded = r.optInt("recorded_seconds")
+                pausedSec = r.optInt("paused_seconds")
+                pauseCount = r.optInt("pause_count")
+                paused = false
+                lockToTask()
                 minReached = recorded >= recMin
                 updateBubble()
                 main.post(tick)
@@ -281,6 +290,7 @@ class ScreenCaptureService : Service() {
     private val frameLoop = object : Runnable {
         override fun run() {
             if (stopping || recId == null) return
+            if (paused) { bg.postDelayed(this, Recorder.CAPTURE_INTERVAL_MS); return }
             val px = lastFrame
             if (px != null) {
                 runCatching {
@@ -310,6 +320,7 @@ class ScreenCaptureService : Service() {
     private val tick = object : Runnable {
         override fun run() {
             if (stopping || recId == null) return
+            if (paused) { pausedSec++; updateBubble(); main.postDelayed(this, 1000); return }
             if (lastFrame != null) recorded++
             if (!minReached && recorded >= recMin) {
                 minReached = true
@@ -330,9 +341,33 @@ class ScreenCaptureService : Service() {
         bg.post {
             runCatching {
                 Api.rpc("device_record_update", JSONObject().put("p_id", id).put("p_status", status).put("p_recorded", sec)
-                    .put("p_paused", 0).put("p_pause_count", 0).put("p_event", event?.let { JSONObject().put("type", it) } ?: JSONObject.NULL))
+                    .put("p_paused", pausedSec).put("p_pause_count", pauseCount).put("p_event", event?.let { JSONObject().put("type", it) } ?: JSONObject.NULL))
             }.onFailure { Log.w(TAG, "durum", it) }
         }
+    }
+
+    /** Kayıt sürerken telefonda sadece görevin izinli uygulamaları açık; süre sayılmaz */
+    private fun lockToTask() {
+        if (allowed.isEmpty()) return
+        app.orbit.data.TaskSession.start(runId, title, allowed, screen = true)
+    }
+
+    private fun togglePause() {
+        if (recId == null || stopping) return
+        paused = !paused
+        if (paused) {
+            pauseCount++
+            push("paused", "pause")
+            bg.post { closeSegment() }
+            app.orbit.data.TaskSession.stop(runId)
+            toast("Duraklatıldı: diğer uygulamalar açık ve süreden düşer")
+        } else {
+            push("recording", "resume")
+            lockToTask()
+            allowed.firstOrNull()?.let { pkg -> packageManager.getLaunchIntentForPackage(pkg)?.let { runCatching { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } } }
+            toast("Kayıt devam ediyor")
+        }
+        updateBubble()
     }
 
     private fun finishRecording() {
@@ -421,8 +456,8 @@ class ScreenCaptureService : Service() {
             t.text = "📷 $shotCount"
             bubbleSub?.text = if (shotMax > shotMin) "$shotMin–$shotMax" else "/ $shotMin"
         } else {
-            t.text = "%d:%02d".format(recorded / 60, recorded % 60)
-            bubbleSub?.text = if (minReached) "✓ bitirebilirsin" else "en az ${recMin / 60} dk"
+            t.text = if (paused) "⏸" else "%d:%02d".format(recorded / 60, recorded % 60)
+            bubbleSub?.text = if (paused) "duraklatıldı" else if (minReached) "✓ bitirebilirsin" else "en az ${recMin / 60} dk"
         }
         (t.parent as? View)?.background = round(
             Color.parseColor(
@@ -456,6 +491,7 @@ class ScreenCaptureService : Service() {
             setTextColor(Color.WHITE); textSize = 14f
         })
         box.addView(btn("Bitir ve kaydet", "#7C5CFF") { togglePanel(); finishRecording() }, LinearLayout.LayoutParams(dp(220), dp(46)).apply { topMargin = dp(10) })
+        box.addView(btn(if (paused) "▶ Devam et" else "⏸ Duraklat", "#2B3157") { togglePanel(); togglePause() }, LinearLayout.LayoutParams(dp(220), dp(46)).apply { topMargin = dp(8) })
         box.addView(btn("Baştan başla", "#2B3157") { togglePanel(); restartRecording() }, LinearLayout.LayoutParams(dp(220), dp(46)).apply { topMargin = dp(8) })
         box.addView(btn("Küçült", "#2B3157") { togglePanel(); setSmall(true) }, LinearLayout.LayoutParams(dp(220), dp(46)).apply { topMargin = dp(8) })
         box.addView(btn("Kapat", "#00000000") { togglePanel() }, LinearLayout.LayoutParams(dp(220), dp(40)).apply { topMargin = dp(4) })
@@ -529,6 +565,7 @@ class ScreenCaptureService : Service() {
 
     private fun stopAll() {
         stopping = true
+        if (mode == "record") app.orbit.data.TaskSession.stop(runId)
         main.removeCallbacks(tick)
         bg.removeCallbacks(frameLoop)
         closePreview()

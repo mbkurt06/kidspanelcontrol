@@ -18,6 +18,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -129,6 +130,7 @@ private fun GroupHeader(t: TaskItem) {
 @Composable
 fun TasksCard(tasks: List<TaskItem>) {
     val ctx = LocalContext.current
+    val session by app.orbit.data.TaskSession.flow.collectAsState()
     val scope = rememberCoroutineScope()
     var pending by remember { mutableStateOf<Pair<TaskItem, String>?>(null) }
     var busyRun by remember { mutableStateOf<String?>(null) }
@@ -155,6 +157,7 @@ fun TasksCard(tasks: List<TaskItem>) {
     }
 
     fun submit(t: TaskItem) {
+        app.orbit.data.TaskSession.stop(t.runId)
         optimisticSubmitted = optimisticSubmitted + t.runId
         busyRun = t.runId
         scope.launch {
@@ -283,7 +286,22 @@ fun TasksCard(tasks: List<TaskItem>) {
                         t.recordingDone -> Text("📹 Kayıt tamam (${t.recSeconds / 60} dk)", color = C.good, fontSize = 13.sp)
                     }
                 }
-                if (t.open && t.allowedPackages.isNotEmpty()) {
+                if (t.open && t.allowedPackages.isNotEmpty() && t.allowedMode == "focus" && t.screenRecMinutes == null) {
+                    val label = remember(t.allowedPackages) { t.allowedPackages.joinToString(", ") { pkg -> runCatching { ctx.packageManager.getApplicationLabel(ctx.packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg.substringAfterLast('.')) } }
+                    val openApp = { ctx.packageManager.getLaunchIntentForPackage(t.allowedPackages.first())?.let { runCatching { ctx.startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } } ?: run { msg = "Uygulama telefonda yüklü değil" } }
+                    if (session?.runId == t.runId) {
+                        Text("▶ Görev sürüyor: sadece $label açık, süren düşmüyor", color = C.good, fontSize = 13.sp)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(onClick = { openApp() }, modifier = Modifier.weight(1f), colors = ButtonDefaults.buttonColors(containerColor = C.accent)) { Text("Uygulamaya dön") }
+                            OutlinedButton(onClick = { app.orbit.data.TaskSession.stop(t.runId) }, modifier = Modifier.weight(1f)) { Text("⏸ Duraklat", color = C.text) }
+                        }
+                    } else Button(
+                        onClick = { app.orbit.data.TaskSession.start(t.runId, t.title, t.allowedPackages, screen = false); openApp() },
+                        enabled = session == null && !t.locked,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = C.blue),
+                    ) { Text("▶ Göreve başla ($label)") }
+                } else if (t.open && t.allowedPackages.isNotEmpty() && t.screenRecMinutes == null) {
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         t.allowedPackages.forEach { pkg ->
                             val label = remember(pkg) { runCatching { ctx.packageManager.getApplicationLabel(ctx.packageManager.getApplicationInfo(pkg, 0)).toString() }.getOrDefault(pkg.substringAfterLast('.')) }

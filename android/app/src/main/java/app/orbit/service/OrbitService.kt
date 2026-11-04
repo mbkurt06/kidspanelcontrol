@@ -240,7 +240,17 @@ class OrbitService : Service() {
         // Kameralı görev kaydı sürerken telefon sadece kayıt ekranına (ve her zaman açık olanlara) açık
         val rec = app.orbit.data.Recorder.current()
         val baseRules = Store.rules()
-        val rules = if (rec?.status == "recording") baseRules.copy(focus = app.orbit.engine.Focus("Kamera kaydı", emptySet(), emptySet())) else baseRules
+        // Görev oturumu (ekran kaydı ya da "Göreve başla"): sadece Orbit + görevin izinli uygulamaları, süre sayılmaz
+        val session = app.orbit.data.TaskSession.current()?.let { s ->
+            val open = app.orbit.data.Tasks.current().any { it.runId == s.runId && it.status in setOf("open", "started", "rejected") }
+            val stale = s.screen && !ScreenCaptureService.active(nowMs)
+            if (open && !stale) s else { app.orbit.data.TaskSession.stop(s.runId); null }
+        }
+        val rules = when {
+            rec?.status == "recording" -> baseRules.copy(focus = app.orbit.engine.Focus("Kamera kaydı", emptySet(), emptySet()))
+            session != null -> baseRules.copy(focus = app.orbit.engine.Focus("Görev: ${session.title}", emptySet(), session.packages))
+            else -> baseRules
+        }
         recordingTick(rec, nowMs)
         val engine = RuleEngine(rules)
         val zone = engine.zone()
@@ -281,7 +291,8 @@ class OrbitService : Service() {
             runCatching { getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull() else null
         val exempt = if (dialer != null) Policy.exempt(this) - dialer else Policy.exempt(this)
         if (interactive && fg != null && fg !in exempt) {
-            val v = engine.verdict(fg, snap, usage)
+            val v0 = engine.verdict(fg, snap, usage)
+            val v = if (session != null) v0.copy(countsDaily = false, countsMode = null, buckets = emptyList()) else v0
             usage = engine.account(usage, fg, v, dt)
             snap = engine.snapshot(now, usage)
         }
@@ -325,7 +336,7 @@ class OrbitService : Service() {
             lastMediaLocked = mediaLocked
             Policy.setLockedMediaControls(this, mediaLocked)
         }
-        val captureOn = ScreenCaptureService.active(nowMs)
+        val captureOn = ScreenCaptureService.active(nowMs) || session != null
         val kioskKey = if (kiosk != null) "on:$captureOn:${rules.kiosk.calls}:${rules.taskAllowedPackages.sorted().joinToString(",")}" else "off"
         if (kioskKey != lastKioskKey) {
             lastKioskKey = kioskKey
@@ -376,6 +387,18 @@ class OrbitService : Service() {
             if (rules.kiosk.calls == "all") runCatching { getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull()?.let { ok += it }
             if (interactive && fg != null && fg !in ok && nowMs - lastKioskFront > 2_000) {
                 lastKioskFront = nowMs
+                runCatching {
+                    startActivity(Intent(this, MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+                }
+            }
+        } else if (session != null && interactive && fg != null && fg !in session.packages && fg != packageName &&
+            fg !in setOf("android", "com.android.systemui", "com.android.phone", "com.android.server.telecom", "com.android.permissioncontroller", "com.google.android.permissioncontroller") &&
+            fg != runCatching { getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull()) {
+            // Görev sürerken başka uygulamaya geçilemez: Orbit'e dön (orada duraklat / bitir)
+            lockReason = "Görev sürüyor: ${session.title}"
+            if (nowMs - lastRecFront > 2_000) {
+                lastRecFront = nowMs
                 runCatching {
                     startActivity(Intent(this, MainActivity::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))

@@ -43,6 +43,8 @@ data class TaskItem(
     val screenRecSeconds: Int = 0,
     /** Görev sürerken açık olan uygulamalar */
     val allowedPackages: List<String> = emptyList(),
+    /** keep = o anki durumu koru, focus = görev sırasında sadece izinli uygulamalar */
+    val allowedMode: String = "keep",
     /** back | front | choose */
     val recordCamera: String = "back",
     /** none | limit | child */
@@ -121,6 +123,7 @@ object Tasks {
             screenRecId = o.optJSONObject("screen_recording")?.optString("id"),
             screenRecStatus = o.optJSONObject("screen_recording")?.optString("status"),
             screenRecSeconds = o.optJSONObject("screen_recording")?.optInt("recorded_seconds") ?: 0,
+            allowedMode = o.optString("allowed_mode", "keep"),
             allowedPackages = o.optJSONArray("allowed_packages")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() } } ?: emptyList(),
             recordMinMinutes = if (o.isNull("record_min_minutes") || !o.has("record_min_minutes")) null else o.optInt("record_min_minutes"),
             recordCamera = o.optString("record_camera", "back"),

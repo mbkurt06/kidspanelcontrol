@@ -59,7 +59,7 @@ fun KioskToday(k: KioskNow, open: (Screen) -> Unit) {
         )
     }
     val tasks = remember(live.lastSync) { Tasks.current().count { it.open && it.inWindow() } }
-    val tiles = Screen.entries.filter { it != Screen.TODAY && it != Screen.ABOUT && it.kioskKey() in k.screens }
+    val tiles = Screen.entries.filter { it != Screen.TODAY && (it == Screen.ABOUT || it.kioskKey() in k.screens) }
     if (tiles.isNotEmpty()) {
         FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             for (s in tiles) {

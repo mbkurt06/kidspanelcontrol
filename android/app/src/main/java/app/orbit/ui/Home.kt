@@ -100,8 +100,9 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
     val taskScreens = taskScreenSets.reduceOrNull { a, b -> a intersect b }
     // Tam kilit: sadece izin verilen ekranlar
     val kiosk = live.kiosk
-    fun visible(s: Screen) =
-        (kiosk == null || s == Screen.TODAY || (s != Screen.ABOUT && s.kioskKey() in kiosk.screens)) &&
+    // "Hakkında" (sürüm, son güncelleme) her durumda görünür
+    fun visible(s: Screen) = s == Screen.ABOUT ||
+        (kiosk == null || s == Screen.TODAY || s.kioskKey() in kiosk.screens) &&
             (focusNow == null || focusNow.screens.isEmpty() || s == Screen.TODAY || s.kioskKey() in focusNow.screens) &&
             (taskScreens == null || s == Screen.TODAY || s.kioskKey() in taskScreens)
     LaunchedEffect(kiosk?.screens, taskScreens) { if (!visible(screen)) screen = Screen.TODAY }

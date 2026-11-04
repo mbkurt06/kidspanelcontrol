@@ -225,7 +225,7 @@ export default function TaskGroupDetail(p: Props) {
                 <span className="drag-handle" aria-hidden="true">⋮⋮</span>
                 <span className="order-badge">{i + 1}</span>
                 <Link to={`/tasks/${t.id}`} className="grow group-row-title">
-                  <b>{t.title}</b>
+                  <b>{t.title} {bundleNo(g, t.id) && <span className="bundle-tag" title="Bağlı görev">🔗{bundleNo(g, t.id)}</span>}</b>
                   <span className="muted tiny">{settingsText(t)}</span>
                 </Link>
                 {g.recurrence !== "once" && <span className="repeat-badge" title={`Tekrarlı · ${repeatText(g)}`}>↻</span>}
@@ -353,6 +353,8 @@ function GroupSettings({ group, tasks, onSaved, onRemove }: { group: TaskGroup; 
       fail_mode: f.fail_mode,
       penalty_minutes: f.fail_mode === "penalty" ? f.penalty_minutes ?? 15 : null,
       mandatory_release: f.mandatory_release ?? "each",
+      bundles: cleanBundles(f.bundles ?? [], tasks),
+      bundles_sequential: f.bundles_sequential ?? true,
       use_mode: f.use_mode ?? "usage",
       use_within_minutes: f.use_mode === "within" ? f.use_within_minutes ?? 120 : null,
     };
@@ -444,13 +446,13 @@ function GroupSettings({ group, tasks, onSaved, onRemove }: { group: TaskGroup; 
 
       <section className="card extra-card">
         <b className="card-title">Ödül</b>
-        <div className="extra-group">
-          <span className="pop-label">ZORUNLU GÖREVLERİN SÜRESİ <Info>Her biri hemen: zorunlu görev onaylanınca kendi süresi hemen açılır ve o süre boyunca kısıtlama kalkar; süre bitince yapılmamış zorunlu görev varsa kısıtlama geri gelir. Koşul sağlanınca: en az görev sayısı ve bütün zorunlular onaylanınca yapılanların toplamı birlikte açılır. Seçmeli görevlerin süresi her iki durumda da zorunlular bitene kadar bekler.</Info></span>
-          <div className="chips">
-            {chip((f.mandatory_release ?? "each") === "each", "Her biri onaylanınca hemen", () => set("mandatory_release", "each"))}
-            {chip(f.mandatory_release === "all", "Koşul sağlanınca birlikte", () => set("mandatory_release", "all"))}
-          </div>
-        </div>
+        <BundleEditor
+          tasks={tasks}
+          value={f.bundles ?? []}
+          sequential={f.bundles_sequential ?? true}
+          onChange={(v) => set("bundles", v)}
+          onSequential={(v) => set("bundles_sequential", v)}
+        />
         <div className="extra-group">
           <span className="pop-label">KOŞUL SAĞLANINCA AÇILAN <Info>Yaptığı görevlerin süresi ya da koşul sağlanınca grubun tamamı (yapmadığı seçmelilerin süresi de dahil).</Info></span>
           <div className="chips">
@@ -494,6 +496,112 @@ function GroupSettings({ group, tasks, onSaved, onRemove }: { group: TaskGroup; 
         <button className="pill-btn" onClick={() => { setF(group); setRepeat(repeatChoice(group)); }}>Vazgeç</button>
         <button className="pill-btn primary" disabled={busy} onClick={save}>Kaydet</button>
       </div>
+    </div>
+  );
+}
+
+/** Görevin bağ numarası (1'den) */
+function bundleNo(g: TaskGroup, id: string): number | null {
+  const i = (g.bundles ?? []).findIndex((b) => b.tasks.includes(id));
+  return i < 0 ? null : i + 1;
+}
+
+const isMandBundle = (b: { tasks: string[] }, tasks: Task[]) => b.tasks.some((id) => tasks.find((t) => t.id === id)?.mandatory);
+/** Silinmiş görevleri at, boş bağları kaldır, zorunlu bağları seçmelilerin önüne al */
+function cleanBundles(v: Array<{ tasks: string[] }>, tasks: Task[]) {
+  const ids = new Set(tasks.map((t) => t.id));
+  const list = v.map((b) => ({ tasks: b.tasks.filter((id) => ids.has(id)) })).filter((b) => b.tasks.length);
+  return [...list.filter((b) => isMandBundle(b, tasks)), ...list.filter((b) => !isMandBundle(b, tasks))];
+}
+
+/** Bağlı görevler düzenleyici: artıya bas, numaralara dokun; sürükleyerek sırala */
+function BundleEditor({ tasks, value, sequential, onChange, onSequential }: {
+  tasks: Task[];
+  value: Array<{ tasks: string[] }>;
+  sequential: boolean;
+  onChange: (v: Array<{ tasks: string[] }>) => void;
+  onSequential: (v: boolean) => void;
+}) {
+  const [picking, setPicking] = useState<string[] | null>(null);
+  const [drag, setDrag] = useState<number | null>(null);
+  const num = (id: string) => tasks.findIndex((t) => t.id === id) + 1;
+  const byId = (id: string) => tasks.find((t) => t.id === id);
+  const used = new Set(value.flatMap((b) => b.tasks));
+  const pickType = picking?.length ? !!byId(picking[0])?.mandatory : null;
+  const minutes = (b: { tasks: string[] }) => b.tasks.reduce((a, id) => a + Math.max(0, byId(id)?.reward_minutes ?? 0), 0);
+  const mixed = (b: { tasks: string[] }) => b.tasks.some((id) => byId(id)?.mandatory) && b.tasks.some((id) => byId(id) && !byId(id)!.mandatory);
+  const list = cleanBundles(value, tasks);
+  const firstOpt = list.findIndex((b) => !isMandBundle(b, tasks));
+
+  function drop(to: number) {
+    if (drag == null || drag === to) return setDrag(null);
+    const v = [...list];
+    const [x] = v.splice(drag, 1);
+    v.splice(to, 0, x);
+    onChange(cleanBundles(v, tasks));
+    setDrag(null);
+  }
+
+  return (
+    <div className="extra-group">
+      <span className="pop-label">
+        BAĞLI GÖREVLER{" "}
+        <Info>Bir bağdaki görevlerin hepsi onaylanınca toplam süreleri birlikte açılır. Zorunlu görevler kendi arasında, seçmeliler kendi arasında bağlanır; zorunlu bağlar her zaman önce gelir. Bağa konmayan zorunlu görevin süresi onaylanınca hemen açılır; bağsız seçmelilerin süresi bütün zorunlular bitince açılır. Telefonda çocuk bağları bu sırayla, numaralı kutular halinde görür.</Info>
+      </span>
+      {!list.length && !picking && <span className="muted tiny">Bağ yok: her zorunlu görevin süresi onaylanınca hemen açılır.</span>}
+      {list.map((b, i) => (
+        <div
+          key={b.tasks.join(",")}
+          className={`bundle-row ${drag === i ? "dragging" : ""} ${i === firstOpt && i > 0 ? "first-opt" : ""}`}
+          draggable
+          onDragStart={() => setDrag(i)}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={() => drop(i)}
+          onDragEnd={() => setDrag(null)}
+        >
+          <span className="drag-handle" aria-hidden="true">⠿</span>
+          <b className="bundle-no">{i + 1}.</b>
+          <span className="chips grow">
+            {b.tasks.map((id) => <span key={id} className="chip-btn small-chip on">{num(id)} · {byId(id)?.title}</span>)}
+          </span>
+          <span className={`tag ${isMandBundle(b, tasks) ? "danger-text" : ""}`}>{isMandBundle(b, tasks) ? "Zorunlu" : "Seçmeli"}</span>
+          <span className="reward-chip">+{minutes(b)} dk</span>
+          {mixed(b) && <span className="warn-text tiny">Zorunlu ve seçmeli karışık</span>}
+          <span className="row gap-xs">
+            <button type="button" className="icon-pill" aria-label="Yukarı" disabled={i === 0} onClick={() => { setDrag(i); const v = [...list]; [v[i - 1], v[i]] = [v[i], v[i - 1]]; onChange(cleanBundles(v, tasks)); setDrag(null); }}>↑</button>
+            <button type="button" className="icon-pill" aria-label="Aşağı" disabled={i === list.length - 1} onClick={() => { const v = [...list]; [v[i + 1], v[i]] = [v[i], v[i + 1]]; onChange(cleanBundles(v, tasks)); }}>↓</button>
+            <button type="button" className="icon-pill" aria-label="Bağı sil" onClick={() => onChange(list.filter((_, k) => k !== i))}>×</button>
+          </span>
+        </div>
+      ))}
+      {picking ? (
+        <div className="bundle-pick">
+          <span className="muted tiny">Bağlanacak görevlere dokun{pickType == null ? "" : pickType ? " (zorunlular)" : " (seçmeliler)"}:</span>
+          <div className="chips">
+            {tasks.map((t) => {
+              const on = picking.includes(t.id);
+              const disabled = !on && (used.has(t.id) || (pickType != null && pickType !== t.mandatory));
+              return (
+                <button key={t.id} type="button" disabled={disabled} className={`chip-btn ${on ? "on" : ""}`} onClick={() => setPicking(on ? picking.filter((x) => x !== t.id) : [...picking, t.id])}>
+                  {num(t.id)} · {t.title}{t.mandatory ? " ●" : ""}
+                </button>
+              );
+            })}
+          </div>
+          <div className="row gap-s">
+            <button type="button" className="pill-btn primary" disabled={!picking.length} onClick={() => { onChange(cleanBundles([...list, { tasks: picking }], tasks)); setPicking(null); }}>Bağı ekle</button>
+            <button type="button" className="pill-btn ghost" onClick={() => setPicking(null)}>Vazgeç</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" className="pill-btn" onClick={() => setPicking([])} disabled={used.size >= tasks.length}>+ Bağ ekle</button>
+      )}
+      {list.length > 0 && (
+        <label className="check">
+          <input type="checkbox" checked={sequential} onChange={(e) => onSequential(e.target.checked)} />
+          Bağlar sırayla açılsın <Info>İşaretliyse her bağın süresi, kendinden önceki bağların hepsi bitince açılır. Çocuk sonraki bağın görevlerini yine yapabilir, puanı birikir ve sırası gelince açılır.</Info>
+        </label>
+      )}
     </div>
   );
 }

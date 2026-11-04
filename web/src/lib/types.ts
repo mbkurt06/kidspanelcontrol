@@ -159,6 +159,9 @@ export type TaskGroup = {
   fail_mode: "vault" | "burn" | "penalty";
   penalty_minutes: number | null;
   mandatory_release: "each" | "all";
+  /** Bağlı görevler: sıralı; her bağın görevleri birlikte açılır */
+  bundles: Array<{ tasks: string[] }>;
+  bundles_sequential: boolean;
   use_mode: UseMode;
   use_within_minutes: number | null;
   defaults: TaskDefaults | null;

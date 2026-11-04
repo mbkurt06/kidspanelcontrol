@@ -126,6 +126,39 @@ private fun GroupHeader(t: TaskItem) {
     }
 }
 
+private val CIRCLED = listOf("①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩")
+
+/** Bağ başlığı: sıra numarası, birlikte açılacak süre, bekleyen puan, sıra uyarısı */
+@Composable
+private fun BundleHeader(t: TaskItem) {
+    val n = t.bundlePos ?: return
+    val mark = CIRCLED.getOrElse(n - 1) { "$n." }
+    val label = when {
+        t.bundleDone && t.bundleReady -> "TAMAM"
+        t.bundleOptional -> "SEÇMELİ"
+        t.bundleCurrent -> "SIRADA"
+        else -> "SONRA"
+    }
+    val what = if (t.bundleSize > 1) "hepsi bitince ${t.bundleMinutes} dk açılır" else "${t.bundleMinutes} dk"
+    val color = when (label) { "TAMAM" -> C.good; "SIRADA" -> C.accent; else -> C.muted }
+    Column(
+        Modifier.fillMaxWidth().padding(top = 6.dp).clip(RoundedCornerShape(12.dp))
+            .background(if (label == "SIRADA") C.accent.copy(alpha = 0.16f) else C.surface).padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("$mark $label", color = color, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text("  ·  $what", color = C.muted, fontSize = 13.sp, modifier = Modifier.weight(1f))
+            if (t.bundleHeld > 0) Text("🔒 ${t.bundleHeld} dk bekliyor", color = C.warn, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+        }
+        when {
+            t.bundleDone && !t.bundleReady -> Muted("Bu bağ bitti. Puanın önceki bağlar bitince açılır.", 12)
+            !t.bundleDone && !t.bundleReady -> Muted("Önce önceki bağı bitir. Şimdi yaparsan puanın birikir, sırası gelince açılır.", 12)
+            t.bundleOptional && !t.bundleDone -> Muted("Zorunlu görevler bitince açılır.", 12)
+        }
+    }
+}
+
 /** Görevler: başla (öncesi kanıtı), tamamladım (sonrası/kanıt), gönder. */
 @Composable
 fun TasksCard(tasks: List<TaskItem>) {
@@ -230,10 +263,14 @@ fun TasksCard(tasks: List<TaskItem>) {
         if (tasks.isEmpty()) Muted("Bugün görev yok.")
         val focus = TaskFocus.taskId
         var lastGroup: String? = null
+        var lastBundle: Int? = null
         for (raw in tasks) {
             val t = if (raw.runId in optimisticSubmitted) raw.copy(status = "submitted") else raw
-            if (t.groupId != null && t.groupId != lastGroup) GroupHeader(t)
+            if (t.groupId != null && t.groupId != lastGroup) { GroupHeader(t); lastBundle = null }
             lastGroup = t.groupId
+            if (t.bundlePos != null && t.bundlePos != lastBundle) BundleHeader(t)
+            else if (t.bundlePos == null && lastBundle != null && t.groupId != null) Muted("Diğer görevler", 12)
+            lastBundle = t.bundlePos
             if (t.locked && t.open) {
                 Row(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).padding(12.dp),

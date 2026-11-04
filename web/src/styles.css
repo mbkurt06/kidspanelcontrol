@@ -2037,3 +2037,12 @@ button.app-row { width: 100%; text-align: left; background: none; border: 0; col
   .tasks-main .app-row > .row-meta { grid-template-columns: 30px 70px 1fr 36px 22px; justify-content: stretch; }
 }
 .pill.good { border-color: var(--good); color: var(--good); }
+/* Bağlı görevler */
+.bundle-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); cursor: grab; }
+.bundle-row.dragging { opacity: .4; }
+.bundle-row.first-opt { margin-top: 10px; }
+.bundle-row .bundle-no { min-width: 22px; }
+.bundle-row .drag-handle { color: var(--muted); }
+.bundle-pick { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px dashed var(--line); border-radius: 12px; }
+.bundle-tag { font-size: 12px; color: var(--accent); font-weight: 600; margin-left: 4px; }
+.danger-text { color: var(--bad); }

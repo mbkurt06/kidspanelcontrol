@@ -2046,3 +2046,11 @@ button.app-row { width: 100%; text-align: left; background: none; border: 0; col
 .bundle-pick { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px dashed var(--line); border-radius: 12px; }
 .bundle-tag { font-size: 12px; color: var(--accent); font-weight: 600; margin-left: 4px; }
 .danger-text { color: var(--bad); }
+/* Kısıtlıyken izinli uygulamalar */
+.ra-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ra-row:last-of-type { border-bottom: 0; }
+.ra-chip { position: relative; padding-right: 30px; }
+.ra-chip .ra-x { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); opacity: .55; font-size: 15px; line-height: 1; }
+.ra-chip:hover .ra-x, .ra-chip:focus-visible .ra-x { opacity: 1; }
+.ra-chip:hover { background: var(--bad); border-color: var(--bad); }
+.ra-unl { margin: 0; }

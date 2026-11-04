@@ -945,16 +945,27 @@ function RestrictedApps({ apps, value, onChange }: { apps: Array<{ package: stri
         Kısıtlıyken izinli uygulamalar{" "}
         <Info>Görev yapılmadığı sürece de açık kalır (ör. sözlük, WhatsApp). İstersen günlük dakika sınırı koy; bu süre ayrıdır, kasaya gitmez ve ertesi güne devretmez.</Info>
       </span>
-      {value.map((v) => (
-        <div className="extra-row" key={v.package}>
-          <span className="grow">{byPkg.get(v.package) ?? v.package}</span>
-          <select value={v.minutes == null ? "" : String(v.minutes)} onChange={(e) => onChange(value.map((x) => (x.package === v.package ? { ...x, minutes: e.target.value ? Number(e.target.value) : null } : x)))}>
-            <option value="">Sınırsız</option>
-            {[5, 10, 15, 20, 30, 45, 60, 90, 120].map((m) => <option key={m} value={m}>Günde {m} dk</option>)}
-          </select>
-          <button type="button" className="icon-pill" aria-label="Kaldır" onClick={() => onChange(value.filter((x) => x.package !== v.package))}>×</button>
-        </div>
-      ))}
+      {value.map((v) => {
+        const setMin = (m: number | null) => onChange(value.map((x) => (x.package === v.package ? { ...x, minutes: m } : x)));
+        return (
+          <div className="ra-row" key={v.package}>
+            <button type="button" className="chip-btn on ra-chip" title="Kaldırmak için tıkla" onClick={() => onChange(value.filter((x) => x.package !== v.package))}>
+              {byPkg.get(v.package) ?? v.package}
+              <span className="ra-x" aria-hidden="true">×</span>
+            </button>
+            <label className="check ra-unl">
+              <input type="checkbox" checked={v.minutes == null} onChange={(e) => setMin(e.target.checked ? null : 30)} />
+              Sınırsız
+            </label>
+            {v.minutes != null && (
+              <span className="row gap-s ra-time">
+                <span className="muted small">Günde</span>
+                <MinuteStepper value={v.minutes} onChange={(m) => setMin(Math.max(1, m))} min={1} max={600} label={`${byPkg.get(v.package) ?? v.package} günlük süre`} />
+              </span>
+            )}
+          </div>
+        );
+      })}
       <input placeholder="Uygulama ara" value={q} onChange={(e) => setQ(e.target.value)} />
       {list.length > 0 && (
         <div className="chips">

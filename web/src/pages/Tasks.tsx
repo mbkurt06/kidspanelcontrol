@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { DateField } from "../components/DateTime";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
@@ -75,6 +75,45 @@ const FINAL = new Set(["approved", "expired", "claimed"]);
 const Pencil = () => (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
 );
+/** Kanıt özeti: fotoğraf, kamera kaydı, ekran görüntüsü, ekran kaydı */
+const proofText = (t?: Task) =>
+  !t
+    ? ""
+    : [
+        t.proof === "none" ? null : t.before_after ? "önce + sonra fotoğraf" : "fotoğraf",
+        t.record_minutes != null ? "kamera kaydı" : null,
+        t.screenshot_min != null ? "ekran görüntüsü" : null,
+        t.screen_record_minutes != null ? "ekran kaydı" : null,
+      ].filter(Boolean).join(" · ");
+const runTone = (st: string) => (st === "approved" ? "good" : st === "submitted" ? "accent" : st === "rejected" || st === "expired" ? "warn" : "quiet");
+const rewardText = (n: number | null | undefined) => (n ? `${n > 0 ? "+" : ""}${n} dk` : "—");
+/** Satır sonu sütunları: tekrar · puan · durum · düzenle · aç/kapa — her satırda aynı hizada */
+function Meta({ repeat, repeatTitle, reward, status, edit, arrow }: { repeat?: boolean; repeatTitle?: string; reward?: string | null; status?: string | null; edit?: JSX.Element | null; arrow?: JSX.Element | null }) {
+  return (
+    <span className="row-meta">
+      <span className="m-repeat">{repeat && <span className="repeat-badge" title={repeatTitle ?? "Tekrarlı"} aria-label="Tekrarlı">↻</span>}</span>
+      <span className="m-reward">{reward != null && <span className="reward-chip">{reward}</span>}</span>
+      <span className="m-status">{status && <span className={`pill ${runTone(status)}`}>{STATUS_LABEL[status as keyof typeof STATUS_LABEL] ?? status}</span>}</span>
+      <span className="m-edit">{edit}</span>
+      <span className="m-arrow">{arrow}</span>
+    </span>
+  );
+}
+/** Grubun durumu, tek görevlerle aynı sözcüklerle */
+function groupStatus(pr: { status: string }, rs: TaskRun[]): string {
+  if (pr.status === "met") return "approved";
+  if (pr.status === "failed") return "expired";
+  if (rs.some((r) => r.status === "submitted")) return "submitted";
+  if (rs.some((r) => r.status === "rejected")) return "rejected";
+  if (rs.some((r) => r.status === "approved" || r.status === "started")) return "started";
+  return "open";
+}
+const EditIcon = ({ onClick, label }: { onClick?: (e: MouseEvent) => void; label: string }) =>
+  onClick ? (
+    <button className="icon-pill" aria-label={label} title={label} onClick={onClick}><Pencil /></button>
+  ) : (
+    <span className="icon-pill" aria-hidden="true" title={label}><Pencil /></span>
+  );
 const Folder = () => (
   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /></svg>
 );
@@ -185,16 +224,27 @@ export default function Tasks() {
   const shownGroups = groups.filter((g) => forChild(g.child_ids));
   const otherGroups = shownGroups.filter((g) => !todays.some((r) => taskById[r.task_id]?.group_id === g.id));
   const selected = groups.find((g) => g.id === selectedId) ?? null;
-  const badges = (t?: Task, sub = false) => {
-    if (!t) return null;
-    const g = t.group_id ? groups.find((x) => x.id === t.group_id) : null;
-    const repeat = !sub && (g ? g.recurrence !== "once" : t.recurrence === "days");
-    return (
-      <>
-        {repeat && <span className="repeat-badge" title={g ? `Tekrarlı · ${repeatText(g)}` : "Tekrarlı görev"} aria-label="Tekrarlı">↻</span>}
-        <span className="reward-chip">{t.reward_minutes ? `${t.reward_minutes > 0 ? "+" : ""}${t.reward_minutes} dk` : "—"}</span>
-      </>
-    );
+  const taskMeta = (t: Task | undefined, status: string | null, arrow: JSX.Element | null = null) => {
+    const g = t?.group_id ? groups.find((x) => x.id === t.group_id) : null;
+    const repeat = !!t && !g && t.recurrence === "days";
+    return <Meta repeat={repeat} repeatTitle="Tekrarlı görev" reward={t ? rewardText(t.reward_minutes) : null} status={status} edit={<EditIcon label="Görevi düzenle" />} arrow={arrow} />;
+  };
+  const groupMeta = (g: TaskGroup, pr: { all: number }, status: string | null, open: boolean | null) => (
+    <Meta
+      repeat={g.recurrence !== "once"}
+      repeatTitle={`Tekrarlı · ${repeatText(g)}`}
+      reward={`+${pr.all} dk`}
+      status={status}
+      edit={<EditIcon label={`${g.name} grubunu düzenle`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); select(g.id); }} />}
+      arrow={open == null ? null : <span className={`collapse-arrow${open ? " open" : ""}`} aria-hidden="true" />}
+    />
+  );
+  const groupText = (g: TaskGroup, rs: TaskRun[], pr: { approved: number; need: number }) => {
+    const mand = rs.filter((r) => taskById[r.task_id]?.mandatory).length;
+    const parts = [`${pr.approved}/${rs.length} tamam`];
+    if (mand) parts.push(`${mand} zorunlu`);
+    if (g.min_count && pr.need > mand && pr.need < rs.length) parts.push(`en az ${pr.need}`);
+    return parts.join(" · ");
   };
 
   const select = (id: string | null, tab?: string) => {
@@ -221,7 +271,12 @@ export default function Tasks() {
   return (
     <div className="page wide-page">
       <header className="page-head">
-        <h1>Görevler</h1>
+        <h1 className="row gap-s">
+          {selected && (
+            <button className="icon-pill" aria-label="Görevlere dön" title="Görevlere dön" onClick={() => select(null)}>←</button>
+          )}
+          Görevler
+        </h1>
         <div className="row gap-s">
           <button className="pill-btn" onClick={createGroup}>
             <Icon name="plus" size={14} /> Grup
@@ -257,7 +312,6 @@ export default function Tasks() {
         <main className="tasks-main">
           {selected ? (
             <>
-            <button className="pill-btn ghost back-btn" onClick={() => select(null)}>← Görevler</button>
             <TaskGroupDetail
               group={selected}
               groups={groups}
@@ -295,15 +349,10 @@ export default function Tasks() {
                               <div className="grow">
                                 <b>{t?.title}</b>
                                 <div className="muted tiny">
-                                  {t && !sub ? spanText(taskSpan(t, null)) : t?.mandatory ? "Zorunlu" : ""}
+                                  {[t && !sub ? spanText(taskSpan(t, null)) : t?.mandatory ? "Zorunlu" : "Seçmeli", proofText(t)].filter(Boolean).join(" · ")}
                                 </div>
                               </div>
-                              <span className="row-meta">
-                                {badges(t, sub)}
-                                <span className={`pill ${r.status === "approved" ? "" : r.status === "submitted" ? "accent" : r.status === "rejected" ? "warn" : "quiet"}`}>
-                                  {STATUS_LABEL[r.status]}
-                                </span>
-                              </span>
+                              {taskMeta(t, r.status)}
                             </Link>
                           );
                         };
@@ -325,20 +374,10 @@ export default function Tasks() {
                                 <div className="grow">
                                   <b>{g.name}</b>
                                   <div className="muted tiny">
-                                    {(() => { const t0 = taskById[rs[0].task_id]; return t0 ? spanText(taskSpan(t0, g)) : ""; })()} · {rs.length} görev · {pr.approved}/{pr.need} tamam{pr.submitted ? ` · ${pr.submitted} onay bekliyor` : ""}
+                                    {(() => { const t0 = taskById[rs[0].task_id]; return t0 ? spanText(taskSpan(t0, g)) : ""; })()} · {groupText(g, rs, pr)}
                                   </div>
                                 </div>
-                                <span className="row-meta">
-                                {g.recurrence !== "once" && <span className="repeat-badge" title={`Tekrarlı · ${repeatText(g)}`} aria-label="Tekrarlı">↻</span>}
-                                <span className="reward-chip" title="Gruptaki toplam ödül">+{pr.all} dk</span>
-                                <span className={`pill ${pr.status === "met" ? "" : pr.submitted ? "accent" : pr.status === "failed" ? "warn" : "quiet"}`}>
-                                  {pr.status === "met" ? "Tamam" : pr.status === "failed" ? "Olmadı" : pr.submitted ? "Onay bekliyor" : "Devam ediyor"}
-                                </span>
-                                <button className="icon-pill" aria-label={`${g.name} grubunu düzenle`} title="Grubu düzenle" onClick={(e) => { e.stopPropagation(); select(g.id); }}>
-                                  <Pencil />
-                                </button>
-                                <span className={`collapse-arrow${open ? " open" : ""}`} aria-hidden="true" />
-                                </span>
+                                {groupMeta(g, pr, groupStatus(pr, rs), open)}
                               </div>
                               {open && rs.map((r) => row(r, true))}
                             </div>
@@ -364,10 +403,7 @@ export default function Tasks() {
                         <b>{g.name}</b>
                         <div className="muted tiny">{tasks.filter((t) => t.group_id === g.id).length} görev · {repeatText(g)}{g.active ? "" : " · kapalı"}</div>
                       </div>
-                      <span className="row-meta">
-                        {g.recurrence !== "once" && <span className="repeat-badge" aria-label="Tekrarlı">↻</span>}
-                        <span className="icon-pill" aria-hidden="true"><Pencil /></span>
-                      </span>
+                      <Meta repeat={g.recurrence !== "once"} repeatTitle={`Tekrarlı · ${repeatText(g)}`} reward={`+${tasks.filter((t) => t.group_id === g.id).reduce((a, t) => a + Math.max(0, t.reward_minutes ?? 0), 0)} dk`} status={null} edit={<EditIcon label="Grubu düzenle" />} />
                     </button>
                   ))}
                   {othersOpen && otherSingles.map((t) => (
@@ -376,10 +412,7 @@ export default function Tasks() {
                         <b>{t.title}</b>
                         <div className="muted tiny">{spanText(taskSpan(t, null))} · {t.child_ids.map(childName).join(", ")}{t.active ? "" : " · kapalı"}</div>
                       </div>
-                      <span className="row-meta">
-                        {badges(t)}
-                        <span className="icon-pill" aria-hidden="true"><Pencil /></span>
-                      </span>
+                      {taskMeta(t, null)}
                     </Link>
                   ))}
                 </div>
@@ -438,12 +471,9 @@ export default function Tasks() {
                       <Link to={t ? `/tasks/${t.id}` : "/tasks"} className="app-row" key={row.key}>
                         <div className="grow">
                           <b>{t?.title ?? "Görev"}</b>
-                          <div className="muted tiny">{childName(r.child_id)} · {t ? winText(taskWindow(t, null, r.day)) : dShort(r.day)} · {STATUS_LABEL[r.status]}</div>
+                          <div className="muted tiny">{childName(r.child_id)} · {t ? winText(taskWindow(t, null, r.day)) : dShort(r.day)}</div>
                         </div>
-                        <span className="row-meta">
-                          {badges(t)}
-                          <Icon name="chevron" size={18} />
-                        </span>
+                        {taskMeta(t, r.status)}
                       </Link>
                     );
                   }
@@ -452,30 +482,23 @@ export default function Tasks() {
                   const open = openHist === row.key;
                   return (
                     <div key={row.key} className="hist-group">
-                      <button className="app-row hist-group-head" onClick={() => setOpenHist(open ? null : row.key)} aria-expanded={open}>
+                      <div className="app-row hist-group-head" role="button" tabIndex={0} onClick={() => setOpenHist(open ? null : row.key)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenHist(open ? null : row.key); } }} aria-expanded={open}>
                         <Folder />
                         <div className="grow">
                           <b>{row.group.name}</b>
-                          <div className="muted tiny">{childName(row.child)} · {(() => { const t0 = taskById[row.runs[0].task_id]; return t0 ? winText(taskWindow(t0, row.group, row.day)) : dShort(row.day); })()} · {pr.approved}/{pr.need} görev{gr?.status === "met" ? " · koşul sağlandı" : gr?.status === "failed" ? " · koşul sağlanmadı" : ""}</div>
+                          <div className="muted tiny">{childName(row.child)} · {(() => { const t0 = taskById[row.runs[0].task_id]; return t0 ? winText(taskWindow(t0, row.group, row.day)) : dShort(row.day); })()} · {groupText(row.group, row.runs, pr)}{gr?.status === "met" ? " · koşul sağlandı" : gr?.status === "failed" ? " · koşul sağlanmadı" : ""}</div>
                         </div>
-                        <span className="row-meta">
-                          {row.group.recurrence !== "once" && <span className="repeat-badge" title={`Tekrarlı · ${repeatText(row.group)}`} aria-label="Tekrarlı">↻</span>}
-                          <span className="reward-chip">+{pr.all} dk</span>
-                          <span className={`collapse-arrow${open ? " open" : ""}`} aria-hidden="true" />
-                        </span>
-                      </button>
+                        {groupMeta(row.group, pr, groupStatus(gr ? { status: gr.status } : pr, row.runs), open)}
+                      </div>
                       {open && row.runs.map((r) => {
                         const t = taskById[r.task_id];
                         return (
                           <Link to={t ? `/tasks/${t.id}` : "/tasks"} className="app-row hist-sub" key={r.id}>
                             <div className="grow">
                               <b>{t?.title ?? "Görev"}</b>
-                              <div className="muted tiny">{STATUS_LABEL[r.status]}{r.granted_minutes ? ` · ${r.granted_minutes} dk verildi` : ""}</div>
+                              <div className="muted tiny">{[t?.mandatory ? "Zorunlu" : "Seçmeli", proofText(t)].filter(Boolean).join(" · ")}{r.granted_minutes ? ` · ${r.granted_minutes} dk verildi` : ""}</div>
                             </div>
-                            <span className="row-meta">
-                              {badges(t, true)}
-                              <Icon name="chevron" size={18} />
-                            </span>
+                            {taskMeta(t, r.status)}
                           </Link>
                         );
                       })}

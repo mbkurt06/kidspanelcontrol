@@ -26,6 +26,14 @@ const STATUS_COLOR: Record<string, string> = { approved: "var(--good)", submitte
 
 export default function TaskGroupDetail(p: Props) {
   const fam = useFamily();
+  const [appLabel, setAppLabel] = useState<Record<string, string>>({});
+  useEffect(() => {
+    supabase.from("child_apps").select("package, label").then(({ data }) => {
+      const m: Record<string, string> = {};
+      ((data ?? []) as Array<{ package: string; label: string }>).forEach((a) => { if (a.label) m[a.package] = a.label; });
+      setAppLabel(m);
+    });
+  }, []);
   const nav = useNavigate();
   const [tab, setTab] = useState<"tasks" | "settings" | "history">(p.initialTab ?? "tasks");
   const [err, setErr] = useState("");
@@ -103,7 +111,10 @@ export default function TaskGroupDetail(p: Props) {
   const settingsText = (t: Task) =>
     [
       t.proof === "none" ? null : t.before_after ? "önce + sonra fotoğraf" : "fotoğraf",
-      t.record_minutes != null ? "kamera kaydı" : null,
+      t.record_minutes != null ? (t.record_min_minutes ? `kamera kaydı ${t.record_min_minutes}–${t.record_minutes} dk` : `kamera kaydı ${t.record_minutes} dk`) : null,
+      t.screenshot_min != null ? `ekran görüntüsü ${t.screenshot_min}${t.screenshot_max && t.screenshot_max > t.screenshot_min ? `–${t.screenshot_max}` : ""}` : null,
+      t.screen_record_minutes != null ? (t.screen_record_min_minutes ? `ekran kaydı ${t.screen_record_min_minutes}–${t.screen_record_minutes} dk` : `ekran kaydı ${t.screen_record_minutes} dk`) : null,
+      t.allowed_packages?.length ? `izinli: ${t.allowed_packages.map((p) => appLabel[p] ?? p.split(".").pop()).join(", ")}` : null,
       "onay",
     ]
       .filter(Boolean)

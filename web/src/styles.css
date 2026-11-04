@@ -2026,3 +2026,14 @@ button.app-row { width: 100%; text-align: left; background: none; border: 0; col
   .group-head { flex-wrap: wrap; row-gap: 8px; }
   .group-head .group-title { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 }
+/* Görev satırı sütunları: aynı hizada */
+.row-meta { display: grid; grid-template-columns: 34px 78px 124px 40px 22px; align-items: center; gap: 8px; justify-items: center; }
+.row-meta .m-status { justify-self: stretch; display: flex; justify-content: center; }
+.row-meta .m-status .pill { white-space: nowrap; }
+.row-meta .reward-chip { white-space: nowrap; }
+.row-meta .icon-pill { width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.page-head h1 .icon-pill { width: 36px; height: 36px; font-size: 18px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+@media (max-width: 640px) {
+  .tasks-main .app-row > .row-meta { grid-template-columns: 30px 70px 1fr 36px 22px; justify-content: stretch; }
+}
+.pill.good { border-color: var(--good); color: var(--good); }

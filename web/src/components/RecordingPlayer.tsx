@@ -69,6 +69,7 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
   const idxRef = useRef(0);
   const video = useMemo(() => ({ get current() { return els.current[idxRef.current % 2]; } }), []);
   const [open, setOpen] = useState(last);
+  const [big, setBig] = useState(false);
   const [idx, setIdx] = useState(0);
   // Gerçek zamanlı video (yeni kayıtlar) ya da zaman atlamalı (eski kayıtlar)
   const realtime = (rec.video_fps || 40) === (rec.capture_fps || 2);
@@ -172,8 +173,8 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
   const early = rec.status === "done" && rec.planned_seconds != null && rec.recorded_seconds < rec.planned_seconds - 30;
 
   return (
-    <div className="rec-box">
-      <button className="rec-head" onClick={() => setOpen(!open)}>
+    <div className={`rec-box ${big && open ? "big" : ""}`}>
+      <button className="rec-head" onClick={() => { if (big) setBig(false); else setOpen(!open); }}>
         <span>{rec.camera === "screen" ? "🎬" : "📹"} {label ? `${label} · ` : ""}{rec.camera === "screen" ? "Ekran kaydı" : "Kayıt"}</span>
         <span className={`small ${early || alerts ? "warn-text" : "muted"}`}>
           {mm(rec.recorded_seconds)}
@@ -211,6 +212,9 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
                   );
                 })}
                 {nowMs != null && <span className="rec-clock">{clock(nowMs)}</span>}
+                <button className="rec-size" onClick={(e) => { e.stopPropagation(); setBig(!big); }} aria-label={big ? "Küçült" : "Büyüt"} title={big ? "Küçült" : "Büyüt"}>
+                  {big ? "✕" : "⤢"}
+                </button>
                 {!playing && (
                   <button className="rec-play" onClick={toggle} aria-label="Oynat">
                     ▶

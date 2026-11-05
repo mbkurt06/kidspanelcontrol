@@ -24,6 +24,7 @@ import { MinuteStepper } from "../components/MinuteStepper";
 import { RecordingList } from "../components/RecordingPlayer";
 import { STARTER_TEMPLATES } from "../lib/templates";
 import { mediaUrls } from "../lib/media";
+import { PhotoZoom } from "../components/PhotoZoom";
 
 // --- Görev zaman aralığı: başlangıç (oluşturulma ya da ileri tarih) → bitiş ---
 const BERLIN = "Europe/Berlin";
@@ -601,7 +602,7 @@ function RunProofs({ run, task }: { run: TaskRun; task?: Task }) {
             {proofs.map((p) => (
               <figure key={p.id}>
                 {p.url ? (
-                  p.media === "video" ? <video src={p.url} controls playsInline preload="metadata" /> : <a href={p.url} target="_blank" rel="noreferrer"><img src={p.url} alt="" /></a>
+                  p.media === "video" ? <video src={p.url} controls playsInline preload="metadata" /> : <PhotoZoom src={p.url} />
                 ) : (
                   <div className="proof-missing">silinmiş</div>
                 )}
@@ -686,9 +687,7 @@ function ReviewCard({ run, task, group, childName, color, onDone }: { run: TaskR
         p.media === "video" ? (
           <video src={p.url} controls playsInline preload="metadata" />
         ) : (
-          <a href={p.url} target="_blank" rel="noreferrer">
-            <img src={p.url} alt="" />
-          </a>
+          <PhotoZoom src={p.url} />
         )
       ) : (
         <div className="proof-missing">yükleniyor…</div>

@@ -2063,3 +2063,9 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .photo-zoom { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,.92); display: flex; align-items: center; justify-content: center; padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)); }
 .photo-zoom img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; touch-action: pinch-zoom; }
 .photo-zoom-x { position: absolute; top: max(12px, env(safe-area-inset-top)); right: 12px; width: 44px; height: 44px; border-radius: 50%; border: 0; background: rgba(255,255,255,.15); color: #fff; font-size: 28px; line-height: 1; cursor: pointer; }
+.photo-zoom-top { position: absolute; top: max(12px, env(safe-area-inset-top)); left: 16px; right: 68px; height: 44px; display: flex; align-items: center; gap: 10px; color: #fff; font-size: 17px; }
+.photo-zoom-top span { opacity: .7; font-size: 14px; }
+.photo-zoom-nav { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 64px; border: 0; border-radius: 10px; background: rgba(255,255,255,.12); color: #fff; font-size: 34px; line-height: 1; cursor: pointer; }
+.photo-zoom-nav.prev { left: 8px; }
+.photo-zoom-nav.next { right: 8px; }
+@media (hover: none) { .photo-zoom-nav { background: transparent; opacity: .55; } }

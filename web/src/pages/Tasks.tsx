@@ -24,7 +24,7 @@ import { MinuteStepper } from "../components/MinuteStepper";
 import { RecordingList } from "../components/RecordingPlayer";
 import { STARTER_TEMPLATES } from "../lib/templates";
 import { mediaUrls } from "../lib/media";
-import { PhotoZoom } from "../components/PhotoZoom";
+import { PhotoZoom, galleryOf, proofLabels } from "../components/PhotoZoom";
 
 // --- Görev zaman aralığı: başlangıç (oluşturulma ya da ileri tarih) → bitiş ---
 const BERLIN = "Europe/Berlin";
@@ -591,7 +591,9 @@ function RunProofs({ run, task }: { run: TaskRun; task?: Task }) {
       setProofs(list.map((p, i) => ({ ...p, url: urls[i] })));
     })();
   }, [run.id]);
-  const label = (p: TaskProof) => (p.stage === "before" ? "Öncesi" : p.stage === "screenshot" ? "Ekran görüntüsü" : p.attempt < run.attempts ? `${p.attempt + 1}. deneme` : "Sonrası");
+  const labels = proofLabels(proofs ?? [], run.attempts);
+  const gallery = galleryOf(proofs ?? [], labels);
+  const label = (p: TaskProof) => labels.get(p.id) ?? "";
   return (
     <div className="run-proofs">
       {proofs == null ? (
@@ -602,7 +604,7 @@ function RunProofs({ run, task }: { run: TaskRun; task?: Task }) {
             {proofs.map((p) => (
               <figure key={p.id}>
                 {p.url ? (
-                  p.media === "video" ? <video src={p.url} controls playsInline preload="metadata" /> : <PhotoZoom src={p.url} />
+                  p.media === "video" ? <video src={p.url} controls playsInline preload="metadata" /> : <PhotoZoom items={gallery} id={p.id} />
                 ) : (
                   <div className="proof-missing">silinmiş</div>
                 )}
@@ -679,7 +681,10 @@ function ReviewCard({ run, task, group, childName, color, onDone }: { run: TaskR
   }
 
   // Öncesi (ilk) + her denemenin sonrası; en yenisi en sonda
-  const before = proofs.filter((p) => p.stage === "before").slice(0, 1);
+  const before = proofs.filter((p) => p.stage === "before");
+  const ordered = [...before, ...proofs.filter((p) => p.stage !== "before").sort((a, b) => a.attempt - b.attempt)];
+  const labels = proofLabels(ordered, run.attempts);
+  const gallery = galleryOf(ordered, labels);
   const attempts = [...new Set(proofs.filter((p) => p.stage !== "before").map((p) => p.attempt))].sort((a, b) => a - b);
   const proofFig = (p: TaskProof & { url?: string }, caption: string) => (
     <figure key={p.id}>
@@ -687,7 +692,7 @@ function ReviewCard({ run, task, group, childName, color, onDone }: { run: TaskR
         p.media === "video" ? (
           <video src={p.url} controls playsInline preload="metadata" />
         ) : (
-          <PhotoZoom src={p.url} />
+          <PhotoZoom items={gallery} id={p.id} />
         )
       ) : (
         <div className="proof-missing">yükleniyor…</div>
@@ -709,13 +714,13 @@ function ReviewCard({ run, task, group, childName, color, onDone }: { run: TaskR
       {(task?.record_minutes != null || task?.screen_record_minutes != null) && <RecordingList runId={run.id} />}
       {proofs.length > 0 ? (
         <div className="proof-timeline">
-          {before.map((p) => proofFig(p, "Öncesi"))}
+          {before.map((p) => proofFig(p, labels.get(p.id) ?? "Öncesi"))}
           {attempts.map((a) => {
             const last = a === run.attempts;
             const n = notes.find((x) => x.attempt === a);
             return (
               <div key={a} className={`proof-attempt ${last ? "current" : ""}`}>
-                {proofs.filter((p) => p.stage !== "before" && p.attempt === a).map((p) => proofFig(p, p.stage === "screenshot" ? "Ekran görüntüsü" : last ? (attempts.length > 1 ? `${a + 1}. deneme · şimdi` : "Sonrası") : `${a + 1}. deneme`))}
+                {proofs.filter((p) => p.stage !== "before" && p.attempt === a).map((p) => proofFig(p, `${labels.get(p.id) ?? ""}${last && attempts.length > 1 ? " · şimdi" : ""}`))}
                 {!last && <p className="small warn-text">↩ {n?.note ? `Reddedildi: ${n.note}` : "Reddedildi"}</p>}
               </div>
             );

@@ -21,7 +21,7 @@ const PANEL = "https://orbit-panel-nu.vercel.app";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-orbit-hook",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-orbit-hook, x-orbit-device",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
 };
 class HttpErr extends Error { constructor(public status: number, msg: string) { super(msg); } }
@@ -30,7 +30,11 @@ const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { sta
 function asUser(req: Request) {
   const h = req.headers.get("Authorization");
   if (!h) throw new HttpErr(401, "no_auth");
-  return createClient(SB, ANON, { global: { headers: { Authorization: h } }, auth: { persistSession: false }, db: { schema: "orbit" } });
+  // Ebeveyn cihaz doğrulaması (onaylı cihaz) bu başlıkla yapılır
+  const headers: Record<string, string> = { Authorization: h };
+  const dev = req.headers.get("x-orbit-device");
+  if (dev) headers["x-orbit-device"] = dev;
+  return createClient(SB, ANON, { global: { headers }, auth: { persistSession: false }, db: { schema: "orbit" } });
 }
 async function parentFamily(req: Request): Promise<string> {
   const { data, error } = await asUser(req).rpc("parent_family");

@@ -130,7 +130,9 @@ export default function Tasks() {
   const [groupRuns, setGroupRuns] = useState<TaskGroupRun[]>([]);
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [templatesOpen, setTemplatesOpen] = useState(false);
-  const [childFilter, setChildFilter] = useState<string>("all");
+  // Çocuk seçimi menüdeki seçimle aynı (ayrı tutulunca menüde başka çocuk seçiliyken görevler "bugün olmayan" görünüyordu)
+  const childFilter = fam.selectedChildId;
+  const setChildFilter = fam.setSelectedChildId;
   const [err, setErr] = useState("");
   const today = todayISO();
   const [historyView, setHistoryView] = useState<"day" | "week" | "month" | "range">("day");

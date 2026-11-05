@@ -212,6 +212,12 @@ export default function Tasks() {
     proofRuns.has(r.id) ? (
       <button className={`icon-pill proof-btn ${openProof === r.id ? "on" : ""}`} title="Kanıtları göster" aria-label="Kanıtları göster" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpenProof(openProof === r.id ? null : r.id); }}>📎</button>
     ) : null;
+  // Bugün kartı: bitenler (onaylanan, süresi dolan) burada değil, Görev geçmişinde. Grupta bitmemiş görev varsa grup kalır.
+  const todaysOpen = todays.filter((r) => {
+    const gid = taskById[r.task_id]?.group_id;
+    if (!gid) return !FINAL.has(r.status);
+    return todays.some((x) => x.child_id === r.child_id && taskById[x.task_id]?.group_id === gid && !FINAL.has(x.status));
+  });
   const todayTaskIds = new Set(todays.map((r) => r.task_id));
   const otherSingles = singles.filter((t) => !todayTaskIds.has(t.id));
   // Geçmiş: gruptaki görevler grup adıyla tek satır
@@ -343,9 +349,10 @@ export default function Tasks() {
             <>
               <div className="card">
                 <h2>Bugün</h2>
-                {!todays.length && <p className="muted small">Bugün için görev yok.</p>}
+                {!todaysOpen.length && <p className="muted small">{todays.length ? "Bugünkü görevlerin hepsi bitti. Görev geçmişinde görünür." : "Bugün için görev yok."}</p>}
                 {fam.visibleChildren.filter((c) => childFilter === "all" || c.id === childFilter).map((c) => {
-                  const list = todays.filter((r) => r.child_id === c.id);
+                  const list = todaysOpen.filter((r) => r.child_id === c.id);
+                  const all = todays.filter((r) => r.child_id === c.id);
                   if (!list.length) return null;
                   return (
                     <div key={c.id} className="stack-s">
@@ -353,7 +360,7 @@ export default function Tasks() {
                         <span className="dot" style={{ background: c.color, marginTop: 0 }} />
                         <b>{c.name}</b>
                         <span className="muted small">
-                          {list.filter((r) => r.status === "approved").length}/{list.filter((r) => r.status !== "claimed").length} görev tamam
+                          {all.filter((r) => r.status === "approved").length}/{all.filter((r) => r.status !== "claimed").length} görev tamam
                         </span>
                       </div>
                       {(() => {

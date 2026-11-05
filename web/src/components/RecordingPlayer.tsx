@@ -64,7 +64,10 @@ export function RecordingList({ runId }: { runId: string }) {
 }
 
 function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs: Seg[]; label?: string; last: boolean }) {
-  const video = useRef<HTMLVideoElement>(null);
+  // İki oynatıcı: biri oynarken diğeri sıradaki parçayı önceden yükler (geçişte kesinti olmaz)
+  const els = useRef<(HTMLVideoElement | null)[]>([null, null]);
+  const idxRef = useRef(0);
+  const video = useMemo(() => ({ get current() { return els.current[idxRef.current % 2]; } }), []);
   const [open, setOpen] = useState(last);
   const [idx, setIdx] = useState(0);
   // Gerçek zamanlı video (yeni kayıtlar) ya da zaman atlamalı (eski kayıtlar)
@@ -104,9 +107,22 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
     return () => clearInterval(t);
   }, [playing, want, idx]);
 
-  function onLoaded() {
+  // Parça değişince: önceden yüklenmiş oynatıcıya geç
+  useEffect(() => {
+    idxRef.current = idx;
     const v = video.current;
-    if (!v) return;
+    const other = els.current[(idx + 1) % 2];
+    if (other && !other.paused) other.pause();
+    if (!v || v.readyState < 1) return;
+    applyRate(v);
+    if (seekTo.current != null) { v.currentTime = seekTo.current; seekTo.current = null; }
+    else if (v.currentTime > 0 && v.ended) v.currentTime = 0;
+    if (playing) v.play().catch(() => setPlaying(false));
+  }, [idx]);
+
+  function onLoaded(e: React.SyntheticEvent<HTMLVideoElement>) {
+    const v = video.current;
+    if (!v || e.currentTarget !== v) return;
     applyRate(v);
     if (seekTo.current != null) {
       v.currentTime = seekTo.current;
@@ -115,12 +131,13 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
     if (playing) v.play().catch(() => setPlaying(false));
   }
 
-  function onTime() {
+  function onTime(e: React.SyntheticEvent<HTMLVideoElement>) {
     const v = video.current;
-    if (v && seg) setNowMs(seg.startMs + v.currentTime * ratio * 1000);
+    if (v && e.currentTarget === v && seg) setNowMs(seg.startMs + v.currentTime * ratio * 1000);
   }
 
-  function onEnded() {
+  function onEnded(e: React.SyntheticEvent<HTMLVideoElement>) {
+    if (e.currentTarget !== video.current) return;
     if (idx + 1 < segs.length) setIdx(idx + 1);
     else setPlaying(false);
   }
@@ -173,17 +190,26 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
           ) : (
             <>
               <div className="rec-video">
-                <video
-                  ref={video}
-                  src={seg?.url}
-                  muted={!(realtime && speed === 1)}
-                  playsInline
-                  preload="auto"
-                  onLoadedMetadata={onLoaded}
-                  onTimeUpdate={onTime}
-                  onEnded={onEnded}
-                  onClick={toggle}
-                />
+                {[0, 1].map((k) => {
+                  // Bu oynatıcının parçası: etkinse şimdiki, değilse sıradaki
+                  const si = idx % 2 === k ? idx : idx + 1;
+                  const s = segs[si];
+                  return (
+                    <video
+                      key={k}
+                      ref={(el) => { els.current[k] = el; }}
+                      src={s?.url}
+                      muted={!(realtime && speed === 1) || idx % 2 !== k}
+                      playsInline
+                      preload="auto"
+                      style={idx % 2 === k ? undefined : { display: "none" }}
+                      onLoadedMetadata={onLoaded}
+                      onTimeUpdate={onTime}
+                      onEnded={onEnded}
+                      onClick={toggle}
+                    />
+                  );
+                })}
                 {nowMs != null && <span className="rec-clock">{clock(nowMs)}</span>}
                 {!playing && (
                   <button className="rec-play" onClick={toggle} aria-label="Oynat">

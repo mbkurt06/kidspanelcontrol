@@ -198,6 +198,17 @@ export default function Tasks() {
   });
   const [openHist, setOpenHist] = useState<string | null>(null);
   const [othersOpen, setOthersOpen] = useState(false);
+  // Kanıtı (fotoğraf, ekran görüntüsü, kayıt) hâlâ duran koşular: geçmişten de açılabilir
+  const [proofRuns, setProofRuns] = useState<Set<string>>(new Set());
+  const [openProof, setOpenProof] = useState<string | null>(null);
+  useEffect(() => {
+    supabase.from("task_proofs").select("run_id").is("removed_at", null).gte("created_at", new Date(Date.now() - 45 * 86400_000).toISOString()).limit(2000)
+      .then(({ data }) => setProofRuns(new Set(((data ?? []) as { run_id: string }[]).map((x) => x.run_id))));
+  }, [runs]);
+  const proofBtn = (r: TaskRun) =>
+    proofRuns.has(r.id) ? (
+      <button className={`icon-pill proof-btn ${openProof === r.id ? "on" : ""}`} title="Kanıtları göster" aria-label="Kanıtları göster" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpenProof(openProof === r.id ? null : r.id); }}>📎</button>
+    ) : null;
   const todayTaskIds = new Set(todays.map((r) => r.task_id));
   const otherSingles = singles.filter((t) => !todayTaskIds.has(t.id));
   // Geçmiş: gruptaki görevler grup adıyla tek satır
@@ -346,15 +357,19 @@ export default function Tasks() {
                         const row = (r: TaskRun, sub = false) => {
                           const t = taskById[r.task_id];
                           return (
-                            <Link to={t ? `/tasks/${t.id}` : "/tasks"} className={`app-row ${sub ? "hist-sub" : ""}`} key={r.id}>
-                              <div className="grow">
-                                <b>{t?.title}</b>
-                                <div className="muted tiny">
-                                  {[t && !sub ? spanText(taskSpan(t, null)) : t?.mandatory ? "Zorunlu" : "Seçmeli", proofText(t)].filter(Boolean).join(" · ")}
+                            <div key={r.id}>
+                              <Link to={t ? `/tasks/${t.id}` : "/tasks"} className={`app-row ${sub ? "hist-sub" : ""}`}>
+                                <div className="grow">
+                                  <b>{t?.title}</b>
+                                  <div className="muted tiny">
+                                    {[t && !sub ? spanText(taskSpan(t, null)) : t?.mandatory ? "Zorunlu" : "Seçmeli", proofText(t)].filter(Boolean).join(" · ")}
+                                  </div>
                                 </div>
-                              </div>
-                              {taskMeta(t, r.status)}
-                            </Link>
+                                {r.status !== "submitted" && proofBtn(r)}
+                                {taskMeta(t, r.status)}
+                              </Link>
+                              {openProof === r.id && <RunProofs run={r} task={t} />}
+                            </div>
                           );
                         };
                         const out: JSX.Element[] = [];
@@ -469,13 +484,17 @@ export default function Tasks() {
                     const r = row.run;
                     const t = taskById[r.task_id];
                     return (
-                      <Link to={t ? `/tasks/${t.id}` : "/tasks"} className="app-row" key={row.key}>
-                        <div className="grow">
-                          <b>{t?.title ?? "Görev"}</b>
-                          <div className="muted tiny">{childName(r.child_id)} · {t ? winText(taskWindow(t, null, r.day)) : dShort(r.day)}</div>
-                        </div>
-                        {taskMeta(t, r.status)}
-                      </Link>
+                      <div key={row.key}>
+                        <Link to={t ? `/tasks/${t.id}` : "/tasks"} className="app-row">
+                          <div className="grow">
+                            <b>{t?.title ?? "Görev"}</b>
+                            <div className="muted tiny">{childName(r.child_id)} · {t ? winText(taskWindow(t, null, r.day)) : dShort(r.day)}</div>
+                          </div>
+                          {proofBtn(r)}
+                          {taskMeta(t, r.status)}
+                        </Link>
+                        {openProof === r.id && <RunProofs run={r} task={t} />}
+                      </div>
                     );
                   }
                   const gr = groupRuns.find((x) => x.group_id === row.group.id && x.child_id === row.child && x.day === row.day);
@@ -494,13 +513,17 @@ export default function Tasks() {
                       {open && row.runs.map((r) => {
                         const t = taskById[r.task_id];
                         return (
-                          <Link to={t ? `/tasks/${t.id}` : "/tasks"} className="app-row hist-sub" key={r.id}>
+                          <div key={r.id}>
+                          <Link to={t ? `/tasks/${t.id}` : "/tasks"} className="app-row hist-sub">
                             <div className="grow">
                               <b>{t?.title ?? "Görev"}</b>
                               <div className="muted tiny">{[t?.mandatory ? "Zorunlu" : "Seçmeli", proofText(t)].filter(Boolean).join(" · ")}{r.granted_minutes ? ` · ${r.granted_minutes} dk verildi` : ""}</div>
                             </div>
+                            {proofBtn(r)}
                             {taskMeta(t, r.status)}
                           </Link>
+                          {openProof === r.id && <RunProofs run={r} task={t} />}
+                          </div>
                         );
                       })}
                     </div>
@@ -555,6 +578,44 @@ export default function Tasks() {
 }
 
 // ---------------------------------------------------------------------------
+
+/** Bir görev koşusunun kanıtları (onaydan sonra da, silinene kadar): fotoğraf, ekran görüntüsü, kayıtlar */
+function RunProofs({ run, task }: { run: TaskRun; task?: Task }) {
+  const [proofs, setProofs] = useState<Array<TaskProof & { url?: string }> | null>(null);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("task_proofs").select("*").eq("run_id", run.id).neq("stage", "record").is("removed_at", null).order("attempt").order("created_at");
+      const list = (data ?? []) as TaskProof[];
+      const urls = list.length ? await mediaUrls(list.map((p) => p.path), 3600) : [];
+      setProofs(list.map((p, i) => ({ ...p, url: urls[i] })));
+    })();
+  }, [run.id]);
+  const label = (p: TaskProof) => (p.stage === "before" ? "Öncesi" : p.stage === "screenshot" ? "Ekran görüntüsü" : p.attempt < run.attempts ? `${p.attempt + 1}. deneme` : "Sonrası");
+  return (
+    <div className="run-proofs">
+      {proofs == null ? (
+        <p className="muted small">Yükleniyor…</p>
+      ) : (
+        proofs.length > 0 && (
+          <div className="proof-attempt current">
+            {proofs.map((p) => (
+              <figure key={p.id}>
+                {p.url ? (
+                  p.media === "video" ? <video src={p.url} controls playsInline preload="metadata" /> : <a href={p.url} target="_blank" rel="noreferrer"><img src={p.url} alt="" /></a>
+                ) : (
+                  <div className="proof-missing">silinmiş</div>
+                )}
+                <figcaption>{label(p)}</figcaption>
+              </figure>
+            ))}
+          </div>
+        )
+      )}
+      <RecordingList runId={run.id} />
+      {proofs != null && !proofs.length && !task?.record_minutes && !task?.screen_record_minutes && <p className="muted small">Kanıt kalmamış (saklama süresi dolmuş).</p>}
+    </div>
+  );
+}
 
 function ReviewCard({ run, task, group, childName, color, onDone }: { run: TaskRun; task?: Task; group?: TaskGroup; childName: string; color: string; onDone: () => void }) {
   const [proofs, setProofs] = useState<(TaskProof & { url?: string })[]>([]);

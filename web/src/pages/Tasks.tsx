@@ -602,7 +602,7 @@ function RunProofs({ run, task }: { run: TaskRun; task?: Task }) {
         <p className="muted small">Yükleniyor…</p>
       ) : (
         proofs.length > 0 && (
-          <div className="proof-attempt current">
+          <div className="proof-timeline">
             {proofs.map((p) => (
               <figure key={p.id}>
                 {p.url ? (

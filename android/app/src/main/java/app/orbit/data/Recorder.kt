@@ -190,7 +190,15 @@ object Recorder {
         if (!::appCtx.isInitialized) emptyList()
         else recDir().listFiles()?.flatMap { d -> d.listFiles()?.filter { it.name.endsWith(".json") } ?: emptyList() }?.sortedBy { it.name } ?: emptyList()
 
+    /** Aynı anda tek yükleme: birden çok yerden çağrılınca aynı parça iki kez gönderiliyordu */
+    private val uploading = java.util.concurrent.atomic.AtomicBoolean(false)
+
     private fun uploadPending() {
+        if (!uploading.compareAndSet(false, true)) return
+        try { uploadPendingOnce() } finally { uploading.set(false) }
+    }
+
+    private fun uploadPendingOnce() {
         val c = Store.creds ?: return
         for (meta in pendingFiles()) {
             val recId = meta.parentFile?.name ?: continue

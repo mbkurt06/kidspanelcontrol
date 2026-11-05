@@ -39,6 +39,7 @@ object Cloud {
     fun uploadFile(file: File, uploadUrl: String, contentType: String, onProgress: (Long) -> Unit = {}): String {
         val total = file.length()
         var offset = resumeOffset(uploadUrl)
+        var resyncs = 0
         RandomAccessFile(file, "r").use { raf ->
             while (true) {
                 val len = minOf(CHUNK.toLong(), total - offset).toInt()
@@ -56,6 +57,8 @@ object Cloud {
                             offset += len
                             onProgress(offset)
                         }
+                        // Sunucu başka bir yerden devam bekliyor: beklediği yeri sor, oradan sürdür
+                        416, 409 -> { offset = resumeOffset(uploadUrl); if (++resyncs > 5) throw Api.ApiError(r.code, "OneDrive yükleme sırası bozuldu") }
                         else -> throw Api.ApiError(r.code, "OneDrive yükleme hatası (${r.code}) ${txt.take(160)}")
                     }
                 }

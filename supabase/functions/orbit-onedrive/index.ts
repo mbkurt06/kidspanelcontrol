@@ -132,13 +132,19 @@ Deno.serve(async (req) => {
       const paths: string[] = Array.isArray(body.paths) ? body.paths.slice(0, 200) : [];
       const token = await accessToken(fam);
       const out: Record<string, string | null> = {};
+      const thumbs: Record<string, string | null> = {};
       await Promise.all(paths.map(async (p) => {
         const id = itemId(p);
         if (!id || !p.startsWith(`${fam}/`)) { out[p] = null; return; }
-        const r = await fetch(`${GRAPH}/me/drive/items/${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${token}` } });
-        out[p] = r.ok ? ((await r.json())["@microsoft.graph.downloadUrl"] ?? null) : null;
+        // Küçük resim de istenir: panelde ızgara hızlı açılsın, tam boy sadece büyütünce
+        const r = await fetch(`${GRAPH}/me/drive/items/${encodeURIComponent(id)}?$expand=thumbnails($select=c300x300_crop,medium)`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!r.ok) { out[p] = null; return; }
+        const j = await r.json();
+        out[p] = j["@microsoft.graph.downloadUrl"] ?? null;
+        const t = j.thumbnails?.[0];
+        thumbs[p] = t?.c300x300_crop?.url ?? t?.medium?.url ?? null;
       }));
-      return json({ urls: out });
+      return json({ urls: out, thumbs });
     }
     if (action === "session") {
       const d = await device(req);

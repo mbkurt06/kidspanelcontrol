@@ -23,8 +23,8 @@ import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
 import { RecordingList } from "../components/RecordingPlayer";
 import { STARTER_TEMPLATES } from "../lib/templates";
-import { mediaUrls } from "../lib/media";
-import { PhotoZoom, galleryOf, proofLabels } from "../components/PhotoZoom";
+import { mediaLinks } from "../lib/media";
+import { ProofGrid } from "../components/ProofGrid";
 
 // --- Görev zaman aralığı: başlangıç (oluşturulma ya da ileri tarih) → bitiş ---
 const BERLIN = "Europe/Berlin";
@@ -591,38 +591,18 @@ export default function Tasks() {
 
 /** Bir görev koşusunun kanıtları (onaydan sonra da, silinene kadar): fotoğraf, ekran görüntüsü, kayıtlar */
 function RunProofs({ run, task }: { run: TaskRun; task?: Task }) {
-  const [proofs, setProofs] = useState<Array<TaskProof & { url?: string }> | null>(null);
+  const [proofs, setProofs] = useState<Array<TaskProof & { url?: string; thumb?: string }> | null>(null);
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from("task_proofs").select("*").eq("run_id", run.id).neq("stage", "record").is("removed_at", null).order("attempt").order("created_at");
       const list = (data ?? []) as TaskProof[];
-      const urls = list.length ? await mediaUrls(list.map((p) => p.path), 3600) : [];
-      setProofs(list.map((p, i) => ({ ...p, url: urls[i] })));
+      const links = list.length ? await mediaLinks(list.map((p) => p.path), 3600) : [];
+      setProofs(list.map((p, i) => ({ ...p, ...links[i] })));
     })();
   }, [run.id]);
-  const labels = proofLabels(proofs ?? [], run.attempts);
-  const gallery = galleryOf(proofs ?? [], labels);
-  const label = (p: TaskProof) => labels.get(p.id) ?? "";
   return (
     <div className="run-proofs">
-      {proofs == null ? (
-        <p className="muted small">Yükleniyor…</p>
-      ) : (
-        proofs.length > 0 && (
-          <div className="proof-timeline">
-            {proofs.map((p) => (
-              <figure key={p.id}>
-                {p.url ? (
-                  p.media === "video" ? <video src={p.url} controls playsInline preload="metadata" /> : <PhotoZoom items={gallery} id={p.id} />
-                ) : (
-                  <div className="proof-missing">silinmiş</div>
-                )}
-                <figcaption>{label(p)}</figcaption>
-              </figure>
-            ))}
-          </div>
-        )
-      )}
+      {proofs == null ? <p className="muted small">Yükleniyor…</p> : proofs.length > 0 && <ProofGrid proofs={proofs} attempt={run.attempts} />}
       <RecordingList runId={run.id} />
       {proofs != null && !proofs.length && !task?.record_minutes && !task?.screen_record_minutes && <p className="muted small">Kanıt kalmamış (saklama süresi dolmuş).</p>}
     </div>
@@ -630,7 +610,8 @@ function RunProofs({ run, task }: { run: TaskRun; task?: Task }) {
 }
 
 function ReviewCard({ run, task, group, childName, color, onDone }: { run: TaskRun; task?: Task; group?: TaskGroup; childName: string; color: string; onDone: () => void }) {
-  const [proofs, setProofs] = useState<(TaskProof & { url?: string })[]>([]);
+  const [proofs, setProofs] = useState<(TaskProof & { url?: string; thumb?: string })[]>([]);
+  const [showProofs, setShowProofs] = useState(false);
   const [minutes, setMinutes] = useState(String(task?.reward_minutes ?? ""));
   const [validity, setValidity] = useState<RewardValidity>(task?.reward_validity ?? "today");
   const [date, setDate] = useState(todayISO("Europe/Berlin", 1));
@@ -652,8 +633,8 @@ function ReviewCard({ run, task, group, childName, color, onDone }: { run: TaskR
       setNotes((nt ?? []) as { attempt: number; note: string | null }[]);
       const list = (data ?? []) as TaskProof[];
       if (!list.length) return setProofs([]);
-      const urls = await mediaUrls(list.map((p) => p.path), 600);
-      setProofs(list.map((p, i) => ({ ...p, url: urls[i] })));
+      const links = await mediaLinks(list.map((p) => p.path), 600);
+      setProofs(list.map((p, i) => ({ ...p, ...links[i] })));
     })();
   }, [run.id, run.attempts]);
 
@@ -689,26 +670,9 @@ function ReviewCard({ run, task, group, childName, color, onDone }: { run: TaskR
     onDone();
   }
 
-  // Öncesi (ilk) + her denemenin sonrası; en yenisi en sonda
-  const before = proofs.filter((p) => p.stage === "before");
-  const ordered = [...before, ...proofs.filter((p) => p.stage !== "before").sort((a, b) => a.attempt - b.attempt)];
-  const labels = proofLabels(ordered, run.attempts);
-  const gallery = galleryOf(ordered, labels);
-  const attempts = [...new Set(proofs.filter((p) => p.stage !== "before").map((p) => p.attempt))].sort((a, b) => a - b);
-  const proofFig = (p: TaskProof & { url?: string }, caption: string) => (
-    <figure key={p.id}>
-      {p.url ? (
-        p.media === "video" ? (
-          <video src={p.url} controls playsInline preload="metadata" />
-        ) : (
-          <PhotoZoom items={gallery} id={p.id} />
-        )
-      ) : (
-        <div className="proof-missing">yükleniyor…</div>
-      )}
-      <figcaption>{caption}</figcaption>
-    </figure>
-  );
+  const nBefore = proofs.filter((p) => p.stage === "before").length;
+  const nAfter = proofs.filter((p) => p.stage !== "before" && p.stage !== "screenshot" && p.attempt === run.attempts).length;
+  const nShots = proofs.filter((p) => p.stage === "screenshot").length;
 
   return (
     <div className="card attention">
@@ -722,19 +686,15 @@ function ReviewCard({ run, task, group, childName, color, onDone }: { run: TaskR
       {task?.description && <p className="muted small">{task.description}</p>}
       {(task?.record_minutes != null || task?.screen_record_minutes != null) && <RecordingList runId={run.id} />}
       {proofs.length > 0 ? (
-        <div className="proof-timeline">
-          {before.map((p) => proofFig(p, labels.get(p.id) ?? "Öncesi"))}
-          {attempts.map((a) => {
-            const last = a === run.attempts;
-            const n = notes.find((x) => x.attempt === a);
-            return (
-              <div key={a} className={`proof-attempt ${last ? "current" : ""}`}>
-                {proofs.filter((p) => p.stage !== "before" && p.attempt === a).map((p) => proofFig(p, `${labels.get(p.id) ?? ""}${last && attempts.length > 1 ? " · şimdi" : ""}`))}
-                {!last && <p className="small warn-text">↩ {n?.note ? `Reddedildi: ${n.note}` : "Reddedildi"}</p>}
-              </div>
-            );
-          })}
-        </div>
+        <>
+          <button type="button" className={`proof-toggle ${showProofs ? "on" : ""}`} onClick={() => setShowProofs(!showProofs)} aria-expanded={showProofs}>
+            <span>📷 Fotoğraflar</span>
+            <span className="muted small">{[nBefore && `Öncesi ${nBefore}`, nAfter && `Sonrası ${nAfter}`, nShots && `Ekran ${nShots}`].filter(Boolean).join(" · ")}</span>
+            <span className="grow" />
+            <span aria-hidden>{showProofs ? "▴" : "▾"}</span>
+          </button>
+          {showProofs && <ProofGrid proofs={proofs} attempt={run.attempts} notes={notes} />}
+        </>
       ) : (
         task?.proof !== "none" && <p className="muted small">Kanıt bulunamadı.</p>
       )}

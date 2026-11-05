@@ -28,6 +28,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -43,6 +44,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import app.orbit.data.Recorder
 import app.orbit.data.TaskItem
@@ -155,6 +158,22 @@ class RecordActivity : ComponentActivity() {
         }
     }
 
+    /** Kameranın akıcı canlı görüntüsü (kaydın kendisi serviste sürer) */
+    @Composable
+    private fun LivePreview() {
+        AndroidView(
+            factory = { ctx ->
+                PreviewView(ctx).apply {
+                    implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                    scaleType = PreviewView.ScaleType.FIT_CENTER
+                    Recorder.previewSurface.value = surfaceProvider
+                }
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
+        DisposableEffect(Unit) { onDispose { Recorder.previewSurface.value = null } }
+    }
+
     @Composable
     private fun Recording() {
         val s by Recorder.state.collectAsState()
@@ -176,8 +195,11 @@ class RecordActivity : ComponentActivity() {
                 contentAlignment = Alignment.Center,
             ) {
                 val b = bmp
-                if (b != null && !dim) Image(b.asImageBitmap(), null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
-                else Muted(if (dim) "Ekran karartıldı — kayıt sürüyor. Dokun." else "Kamera açılıyor…")
+                val live by Recorder.livePreview.collectAsState()
+                if (dim) Muted("Ekran karartıldı — kayıt sürüyor. Dokun.")
+                else if (live) LivePreview()
+                else if (b != null) Image(b.asImageBitmap(), null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                else Muted("Kamera açılıyor…")
             }
             err?.let { Text(it, color = C.bad) }
             Text(

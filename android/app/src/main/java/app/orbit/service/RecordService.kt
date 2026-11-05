@@ -18,6 +18,8 @@ import android.util.Log
 import android.util.Size
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.Preview
+import androidx.camera.core.UseCase
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
@@ -79,6 +81,7 @@ class RecordService : LifecycleService() {
     private var provider: ProcessCameraProvider? = null
     private var boundCamera: String? = null
     private var videoCap: VideoCapture<androidx.camera.video.Recorder>? = null
+    private var previewUc: Preview? = null
     private var recording: Recording? = null
     private var segStartMs = 0L
     private var rollover = false
@@ -86,6 +89,8 @@ class RecordService : LifecycleService() {
     private var realtimeSent = false
     private var lastPreviewMs = 0L
     private var lastFrameSeen = 0L
+    private var hasAnalysis = false
+    private var surfaceWatch = false
     private var wake: PowerManager.WakeLock? = null
     private var ticking = false
 
@@ -117,6 +122,10 @@ class RecordService : LifecycleService() {
         if (!ticking) {
             ticking = true
             lifecycleScope.launch { tickLoop() }
+            if (!surfaceWatch) {
+                surfaceWatch = true
+                lifecycleScope.launch { Recorder.previewSurface.collect { sp -> previewUc?.setSurfaceProvider(sp) } }
+            }
         }
         return START_NOT_STICKY
     }
@@ -163,7 +172,20 @@ class RecordService : LifecycleService() {
                     .build()
                 val vc = VideoCapture.withOutput(recorder)
                 val sel = if (s.camera == "front") CameraSelector.DEFAULT_FRONT_CAMERA else CameraSelector.DEFAULT_BACK_CAMERA
-                p.bindToLifecycle(this, sel, analysis, vc)
+                // Akıcı önizleme (Preview) + canlılık (ImageAnalysis) + video; zayıf kameralarda üçü birden olmazsa adım adım azalt
+                val pv = Preview.Builder().build()
+                val combos: List<Array<UseCase>> = listOf(arrayOf(pv, analysis, vc), arrayOf(pv, vc), arrayOf(analysis, vc))
+                var bound: Array<UseCase>? = null
+                for (c in combos) {
+                    val ok = runCatching { p.unbindAll(); p.bindToLifecycle(this, sel, *c) }
+                    if (ok.isSuccess) { bound = c; break } else Log.w(TAG, "kamera eşleşmesi olmadı: ${c.size}", ok.exceptionOrNull())
+                }
+                if (bound == null) throw IllegalStateException("kamera kullanılamıyor")
+                previewUc = if (pv in bound) pv else null
+                hasAnalysis = analysis in bound
+                Recorder.livePreview.value = previewUc != null
+                previewUc?.setSurfaceProvider(Recorder.previewSurface.value)
+                if (previewUc != null) Recorder.preview.value = null
                 videoCap = vc
                 boundCamera = s.camera
                 Recorder.error.value = null
@@ -180,7 +202,7 @@ class RecordService : LifecycleService() {
         try {
             val now = System.currentTimeMillis()
             lastFrameSeen = now
-            if (now - lastPreviewMs < 1000) return
+            if (previewUc != null || now - lastPreviewMs < 1000) return
             lastPreviewMs = now
             val rot = img.imageInfo.rotationDegrees
             runCatching {
@@ -211,7 +233,11 @@ class RecordService : LifecycleService() {
         var pending = vc.output.prepareRecording(this, FileOutputOptions.Builder(file).build())
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) pending = pending.withAudioEnabled()
         recording = runCatching {
-            pending.start(ContextCompat.getMainExecutor(this)) { ev -> if (ev is VideoRecordEvent.Finalize) onFinalized(ev, file, start, s.id, s.runId) }
+            pending.start(ContextCompat.getMainExecutor(this)) { ev ->
+                // Kamera analizi yoksa canlılık video kaydının ilerlemesinden anlaşılır
+                if (ev is VideoRecordEvent.Status && !hasAnalysis) lastFrameSeen = System.currentTimeMillis()
+                if (ev is VideoRecordEvent.Finalize) onFinalized(ev, file, start, s.id, s.runId)
+            }
         }.onFailure { Log.e(TAG, "kayıt başlatılamadı", it); Recorder.error.value = "Kayıt başlatılamadı" }.getOrNull()
         if (!realtimeSent) {
             realtimeSent = true

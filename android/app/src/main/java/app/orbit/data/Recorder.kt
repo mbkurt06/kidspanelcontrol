@@ -63,6 +63,10 @@ object Recorder {
     val state: StateFlow<RecState?> = _state
     /** Ekranda gösterilecek son kare */
     val preview = MutableStateFlow<Bitmap?>(null)
+    /** Canlı önizleme yüzeyi (kayıt ekranı açıkken); varsa saniyede bir kare yerine akıcı görüntü */
+    val previewSurface = MutableStateFlow<androidx.camera.core.Preview.SurfaceProvider?>(null)
+    /** Kamera canlı önizlemeyi destekliyor mu (desteklemiyorsa ekran saniyede bir kareye döner) */
+    val livePreview = MutableStateFlow(false)
     /** Kamera hatası (çocuğa gösterilir) */
     val error = MutableStateFlow<String?>(null)
     /** Yüklenmeyi bekleyen parça sayısı */

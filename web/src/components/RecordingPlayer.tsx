@@ -200,7 +200,7 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
                       key={k}
                       ref={(el) => { els.current[k] = el; }}
                       src={s?.url}
-                      muted={!(realtime && speed === 1) || idx % 2 !== k}
+                      muted={!(realtime && speed <= 2) || idx % 2 !== k}
                       playsInline
                       preload="auto"
                       style={idx % 2 === k ? undefined : { display: "none" }}

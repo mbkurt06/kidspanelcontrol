@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
       await Promise.all(paths.map(async (p) => {
         const id = itemId(p);
         if (!id || !p.startsWith(`${fam}/`)) { out[p] = null; return; }
-        const r = await fetch(`${GRAPH}/me/drive/items/${encodeURIComponent(id)}?$select=id,@microsoft.graph.downloadUrl`, { headers: { Authorization: `Bearer ${token}` } });
+        const r = await fetch(`${GRAPH}/me/drive/items/${encodeURIComponent(id)}`, { headers: { Authorization: `Bearer ${token}` } });
         out[p] = r.ok ? ((await r.json())["@microsoft.graph.downloadUrl"] ?? null) : null;
       }));
       return json({ urls: out });

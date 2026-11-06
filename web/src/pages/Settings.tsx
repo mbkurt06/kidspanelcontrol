@@ -373,7 +373,7 @@ export default function Settings() {
           Çıkış yap
         </button>
       </div>
-      <p className="muted tiny center">Orbit panel · {__PANEL_VERSION__}{__PANEL_BUILD__ ? ` · ${__PANEL_BUILD__}` : ""} · {fam.children.length} çocuk</p>
+      <p className="muted tiny center" title={__PANEL_BUILD__}>Orbit panel {__PANEL_VERSION__} · {fam.children.length} çocuk</p>
     </div>
   );
 }

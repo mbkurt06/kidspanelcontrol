@@ -1,0 +1,31 @@
+# Panel sürümü: web/ değişince sayıyı bir artırır (0.1.N). Vercel bu commit'i de yayınlar.
+name: Panel version
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", "!web/panel-version.json", "!web/public/kurulum/**"]
+permissions:
+  contents: write
+concurrency:
+  group: panel-version
+  cancel-in-progress: false
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Sürümü artır
+        run: |
+          set -e
+          for attempt in 1 2 3; do
+            git pull --rebase origin main
+            n=$(jq .version web/panel-version.json)
+            echo "{ \"version\": $((n + 1)) }" > web/panel-version.json
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -am "chore(panel): sürüm 0.1.$((n + 1))" && git push origin HEAD:main && exit 0
+            git reset --hard origin/main
+          done
+          exit 1

@@ -5,6 +5,7 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -258,13 +259,18 @@ fun TasksCard(tasks: List<TaskItem>) {
         )
     }
 
+    // Biten görevler (onaylanan, süresi dolan, kardeşin yaptığı) ayrı "Geçmiş" bölümünde; grup tamamen bitince grup da oraya geçer
+    val finalSet = setOf("approved", "expired", "claimed")
+    val done = tasks.filter { t -> t.runId !in optimisticSubmitted && t.status in finalSet && (t.groupId == null || tasks.filter { it.groupId == t.groupId }.all { it.status in finalSet }) }
+    val active = tasks.filter { it !in done }
+    var showDone by remember { mutableStateOf(false) }
     Card {
         Title("Görevlerim")
-        if (tasks.isEmpty()) Muted("Bugün görev yok.")
+        if (active.isEmpty()) Muted(if (done.isEmpty()) "Bugün görev yok." else "Şu an yapılacak görev yok 🎉")
         val focus = TaskFocus.taskId
         var lastGroup: String? = null
         var lastBundle: Int? = null
-        for (raw in tasks) {
+        for (raw in active) {
             val t = if (raw.runId in optimisticSubmitted) raw.copy(status = "submitted") else raw
             if (t.groupId != null && t.groupId != lastGroup) { GroupHeader(t); lastBundle = null }
             lastGroup = t.groupId
@@ -414,6 +420,28 @@ fun TasksCard(tasks: List<TaskItem>) {
                             }
                         )
                     }
+                }
+            }
+        }
+        if (done.isNotEmpty()) {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable { showDone = !showDone }.padding(vertical = 10.dp, horizontal = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("🕘 Geçmiş (${done.size})", color = C.muted, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                Text(if (showDone) "▴" else "▾", color = C.muted, fontSize = 16.sp)
+            }
+            if (showDone) for (t in done) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(t.title, color = C.text, fontSize = 14.sp)
+                        taskDate(t.dueDate ?: t.createdAt)?.let { Muted(it, 12) }
+                    }
+                    Text(
+                        statusText(t) ?: "",
+                        color = when (t.status) { "approved" -> C.good; "expired" -> C.muted; else -> C.muted },
+                        fontSize = 12.sp,
+                    )
                 }
             }
         }

@@ -2120,3 +2120,9 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .conn-dot.idle { background: var(--warn, #f2b134); }
 .conn-dot.off { background: var(--muted, #8a90a6); opacity: .7; }
 .state-ico { font-size: 13px; margin-right: 2px; }
+
+/* Çocuk sayfası: üstte çocuk seçici */
+.child-switch { display: flex; gap: 6px; overflow-x: auto; min-width: 0; flex: 1 1 auto; scrollbar-width: none; }
+.child-switch::-webkit-scrollbar { display: none; }
+.child-switch .chip { white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+.child-switch .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }

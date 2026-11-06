@@ -1,5 +1,5 @@
 import { FindPhone } from "../components/FindPhone";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DateField, TimeField } from "../components/DateTime";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
@@ -20,11 +20,23 @@ export default function ChildPage() {
   const { id } = useParams();
   const fam = useFamily();
   const child = fam.children.find((c) => c.id === id);
+  const nav = useNavigate();
   const [tab, setTab] = useState<Tab>(() => {
-    const stored = localStorage.getItem(`orbit.childTab.${id}`);
+    let stored: string | null = null;
+    try { stored = localStorage.getItem("orbit.childTab") ?? localStorage.getItem(`orbit.childTab.${id}`); } catch { /* yok */ }
     return stored && ["apps", "program", "time", "timer", "alarms", "report", "device"].includes(stored) ? stored as Tab : "apps";
   });
-  useEffect(() => { if (id) localStorage.setItem(`orbit.childTab.${id}`, tab); }, [id, tab]);
+  // Çocuk değişince aynı sekme açık kalır
+  useEffect(() => { try { localStorage.setItem("orbit.childTab", tab); } catch { /* yok */ } }, [tab]);
+  // Soldaki menüden başka çocuk seçilince bu sayfa o çocuğa geçer
+  const prevSel = useRef(fam.selectedChildId);
+  useEffect(() => {
+    const sel = fam.selectedChildId;
+    if (sel !== prevSel.current) {
+      prevSel.current = sel;
+      if (sel !== "all" && sel !== id) nav(`/child/${sel}`, { replace: true });
+    }
+  }, [fam.selectedChildId, id, nav]);
 
   if (!child) return <div className="page"><p className="muted">Çocuk bulunamadı.</p></div>;
 
@@ -34,12 +46,24 @@ export default function ChildPage() {
         <Link to="/" className="icon-btn" aria-label="Geri">
           <Icon name="back" />
         </Link>
-        <h1>{child.name}</h1>
+        <div className="child-switch" role="tablist" aria-label="Çocuk seç">
+          {fam.children.map((c) => (
+            <button
+              key={c.id}
+              role="tab"
+              aria-selected={c.id === child.id}
+              className={`chip ${c.id === child.id ? "on" : ""}`}
+              onClick={() => c.id !== child.id && nav(`/child/${c.id}`, { replace: true })}
+            >
+              <span className="dot" style={{ background: c.color }} /> {c.name}
+            </button>
+          ))}
+        </div>
         <Link to={`/child/${child.id}/vault`} className="btn small">
           <Icon name="key" size={16} /> Şifreler
         </Link>
       </header>
-      <ParentModeCard childId={child.id} />
+      <ParentModeCard key={`pm-${child.id}`} childId={child.id} />
       <div className="child-tabs-wrap">
         <div className="segmented child-tabs">
         {(
@@ -59,6 +83,7 @@ export default function ChildPage() {
         ))}
         </div>
       </div>
+      <div key={child.id} className="stack">
       {tab === "apps" && <AppsTab childId={child.id} />}
       {tab === "program" && <ProgramTab childId={child.id} />}
       {tab === "time" && <TimeTab childId={child.id} />}
@@ -66,6 +91,7 @@ export default function ChildPage() {
       {tab === "timer" && <TimerTab childId={child.id} />}
       {tab === "alarms" && <TimerTab childId={child.id} only="alarms" />}
       {tab === "device" && <DeviceTab childId={child.id} />}
+      </div>
     </div>
   );
 }

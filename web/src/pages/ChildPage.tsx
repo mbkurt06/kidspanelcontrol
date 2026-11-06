@@ -1,3 +1,4 @@
+import { FindPhone } from "../components/FindPhone";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DateField, TimeField } from "../components/DateTime";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -1252,6 +1253,16 @@ function DeviceTab({ childId }: { childId: string }) {
           </div>
         ))}
       </div>
+      {devices.some((d) => d.status === "active") && (
+        <FindPhone
+          childId={childId}
+          name={name}
+          staleMin={(() => {
+            const d = devices.find((x) => x.status === "active");
+            return d?.last_seen_at ? Math.floor((Date.now() - new Date(d.last_seen_at).getTime()) / 60000) : 999;
+          })()}
+        />
+      )}
       <div className="card">
         <h2>Çocuk bilgileri</h2>
         <label className="field">

@@ -1,4 +1,3 @@
-import { FindPhone } from "../components/FindPhone";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useFamily } from "../lib/family";
@@ -358,7 +357,6 @@ function ChildCard({ child }: { child: Child }) {
         <p className="small warn-text">⚠ Telefon {staleMin >= 60 ? `${Math.floor(staleMin / 60)} saattir` : `${staleMin} dakikadır`} bağlanmadı</p>
       )}
       {msg && <p className="small muted center">{msg}</p>}
-      {st && <FindPhone childId={child.id} name={child.name} staleMin={staleMin} />}
     </div>
   );
 }

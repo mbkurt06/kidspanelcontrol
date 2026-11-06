@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { sendCommand } from "../lib/actions";
 import { supabase } from "../lib/supabase";
 
-type State = "idle" | "sent" | "ringing" | "found" | "stopped" | "timeout";
+type State = "idle" | "countdown" | "sent" | "ringing" | "found" | "stopped" | "timeout";
 const LABEL: Record<State, string> = {
   idle: "",
+  countdown: "",
   sent: "Telefona gönderildi…",
   ringing: "🔊 Çalıyor",
   found: "📍 Bulundu ✓",
@@ -50,6 +51,30 @@ export function FindPhone({ childId, name, staleMin }: { childId: string; name: 
     return () => window.clearInterval(t);
   }, [since, active, childId, state]);
 
+  // Yanlışlıkla basılmasın: "Çaldır"dan sonra 3 sn içinde vazgeçilebilir, komut ancak sonra gider
+  const [count, setCount] = useState(0);
+  const countTimer = useRef<number | null>(null);
+  function arm() {
+    setState("countdown");
+    setCount(3);
+    let n = 3;
+    countTimer.current = window.setInterval(() => {
+      n -= 1;
+      setCount(n);
+      if (n <= 0) {
+        if (countTimer.current) window.clearInterval(countTimer.current);
+        countTimer.current = null;
+        start();
+      }
+    }, 1000);
+  }
+  function cancelArm() {
+    if (countTimer.current) window.clearInterval(countTimer.current);
+    countTimer.current = null;
+    setState("idle");
+  }
+  useEffect(() => () => { if (countTimer.current) window.clearInterval(countTimer.current); }, []);
+
   async function start() {
     const now = new Date(Date.now() - 5000).toISOString();
     setSince(now);
@@ -69,10 +94,13 @@ export function FindPhone({ childId, name, staleMin }: { childId: string; name: 
   }
 
   return (
-    <div className="find-phone">
-      <button type="button" className={`link-btn small ${open ? "on" : ""}`} onClick={() => setOpen(!open)} aria-expanded={open}>
-        🔊 Telefonu bul
-      </button>
+    <div className="card find-phone">
+      <h2>Telefonu bul</h2>
+      {!open && (
+        <button type="button" className="btn ghost" onClick={() => setOpen(true)} aria-expanded={open}>
+          🔊 Telefonu bul
+        </button>
+      )}
       {open && (
         <div className="find-box">
           <div className="row gap-s" style={{ alignItems: "center" }}>
@@ -84,11 +112,18 @@ export function FindPhone({ childId, name, staleMin }: { childId: string; name: 
           <div className="row gap-s" style={{ alignItems: "center" }}>
             {active ? (
               <button className="pill-btn danger" onClick={stop}>■ Durdur</button>
+            ) : state === "countdown" ? (
+              <button className="pill-btn" onClick={cancelArm}>Vazgeç ({count})</button>
             ) : (
-              <button className="pill-btn primary" onClick={start}>🔊 Çaldır</button>
+              <>
+                <button className="pill-btn primary" onClick={arm}>🔊 Çaldır</button>
+                <button className="pill-btn" onClick={() => { setOpen(false); setState("idle"); }}>Kapat</button>
+              </>
             )}
             <span className="small muted grow">
-              {LABEL[state] || `${name}'in telefonu sessizde de çalar; "Buldum" deyince ya da 2 dk sonra durur.`}
+              {state === "countdown"
+                ? `${name}'in telefonu ${count} sn sonra çalacak…`
+                : LABEL[state] || `${name}'in telefonu sessizde de çalar; "Buldum" deyince ya da 2 dk sonra durur.`}
               {state === "sent" && staleMin > 5 ? " Telefon şu an bağlı görünmüyor; bağlanınca çalacak (10 dk içinde)." : ""}
             </span>
           </div>

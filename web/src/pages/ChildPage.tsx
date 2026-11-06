@@ -1427,73 +1427,119 @@ function ReportTab({ childId }: { childId: string }) {
   }, [childId]);
 
   const addDays = (value: string, amount: number) => {
-    const d = new Date(`${value}T12:00:00`);
-    d.setDate(d.getDate() + amount);
+    const d = new Date(`${value}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + amount);
     return d.toISOString().slice(0, 10);
   };
-  // Haftalar her zaman Pazartesi başlar, Pazar biter; gelmemiş günler boş görünür
   const today = todayISO();
-  const isoDow = (v: string) => ((new Date(`${v}T12:00:00`).getDay() + 6) % 7); // 0 = Pzt
-  const monthStart = `${today.slice(0, 8)}01`;
-  const monthEnd = (() => { const d = new Date(`${monthStart}T12:00:00`); d.setMonth(d.getMonth() + 1); d.setDate(0); return d.toISOString().slice(0, 10); })();
-  const weekStart = addDays(today, -isoDow(today));
-  const start = range === "day" ? to : range === "week" ? weekStart : range === "month" ? monthStart : from;
-  const end = range === "day" ? to : range === "week" ? addDays(weekStart, 6) : range === "month" ? monthEnd : to;
-  const lead = range === "day" ? 0 : isoDow(start);
+  const isoDow = (v: string) => ((new Date(`${v}T12:00:00Z`).getUTCDay() + 6) % 7); // 0 = Pzt
+  // Gün / hafta / ay: ‹ › ile geriye gidilir (gelecek yok)
+  const [offset, setOffset] = useState(0);
+  useEffect(() => { setOffset(0); }, [range]);
+  const monthOf = (k: number) => {
+    const [y, m] = today.split("-").map(Number);
+    const d = new Date(Date.UTC(y, m - 1 + k, 1, 12));
+    const s0 = d.toISOString().slice(0, 10);
+    const e = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0, 12)).toISOString().slice(0, 10);
+    return [s0, e] as const;
+  };
+  const weekStart = addDays(today, -isoDow(today) + offset * 7);
+  const [mS, mE] = monthOf(offset);
+  const dayD = addDays(today, offset);
+  const start = range === "day" ? dayD : range === "week" ? weekStart : range === "month" ? mS : (from <= to ? from : to);
+  const end = range === "day" ? dayD : range === "week" ? addDays(weekStart, 6) : range === "month" ? mE : (from <= to ? to : from);
   const days: string[] = [];
   for (let d = start; d <= end && days.length < 366; d = addDays(d, 1)) days.push(d);
-  const totals = days.map((d) => ({
-    d,
-    total: rows.filter((r) => r.day === d).reduce((a, r) => a + r.minutes, 0),
-    counted: rows.filter((r) => r.day === d).reduce((a, r) => a + r.counted_minutes, 0),
-  }));
+  const totals = days.map((d) => {
+    const r = rows.filter((x) => x.day === d);
+    return { d, total: r.reduce((a, x) => a + x.minutes, 0), counted: r.reduce((a, x) => a + x.counted_minutes, 0) };
+  });
   const max = Math.max(60, ...totals.map((t) => t.total));
   const totalMinutes = totals.reduce((a, t) => a + t.total, 0);
   const countedMinutes = totals.reduce((a, t) => a + t.counted, 0);
+  const pastDays = totals.filter((t) => t.d <= today);
+  const avg = pastDays.length ? Math.round(totalMinutes / pastDays.length) : 0;
   const past = days.filter((d) => d <= today);
-  const selectedDay = past.includes(day) ? day : past[past.length - 1] ?? today;
+  const selectedDay = range === "day" ? dayD : past.includes(day) ? day : past[past.length - 1] ?? today;
   const dayRows = rows.filter((r) => r.day === selectedDay && r.minutes > 0).sort((a, b) => b.minutes - a.minutes);
-  const short = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("tr-TR", { weekday: "short" });
+  const dayMax = Math.max(1, ...dayRows.map((r) => r.minutes));
+  // Kısa süre yazısı: 2:35 / 45 dk
+  const compact = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}` : `${m} dk`);
+  const fmt = (d: string, o: Intl.DateTimeFormatOptions) => new Date(`${d}T12:00:00Z`).toLocaleDateString("tr-TR", { timeZone: "UTC", ...o });
+  const periodLabel =
+    range === "day" ? fmt(dayD, { weekday: "long", day: "numeric", month: "long" }) :
+    range === "week" ? `${fmt(start, { day: "numeric", month: "short" })} – ${fmt(end, { day: "numeric", month: "short" })}` :
+    range === "month" ? fmt(mS, { month: "long", year: "numeric" }) : "";
+  const canNext = offset < 0;
+  const lead = isoDow(start);
 
   return (
     <div className="stack">
-      <div className="card">
+      <div className="card report-card">
         <h2>Rapor <Info>Koyu kısım günlük süreden düşen, açık kısım süre dışı kullanımdır.</Info></h2>
-        <div className="row gap-xs wrap">
-          {([["day", "Günlük"], ["week", "Haftalık"], ["month", "Aylık"], ["custom", "Özel"]] as const).map(([key, label]) => <button key={key} className={`chip small ${range === key ? "on" : ""}`} onClick={() => setRange(key)}>{label}</button>)}
+        <div className="seg report-seg">
+          {([["day", "Gün"], ["week", "Hafta"], ["month", "Ay"], ["custom", "Özel"]] as const).map(([key, label]) => <button key={key} className={range === key ? "on" : ""} onClick={() => setRange(key)}>{label}</button>)}
         </div>
-        {range === "custom" && <div className="grid2"><label className="field"><span>Başlangıç</span><DateField value={from} onChange={setFrom} /></label><label className="field"><span>Bitiş</span><DateField value={to} onChange={setTo} /></label></div>}
-        <div className="report-total"><b>{minutesText(totalMinutes)}</b><span className="muted tiny">toplam · {minutesText(countedMinutes)} sınırdan düştü</span></div>
-        {range !== "day" && (
-          <div className="bars bars-head">
-            {["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"].map((w) => <span key={w} className="bar-day">{w}</span>)}
+        {range === "custom" ? (
+          <div className="grid2"><label className="field"><span>Başlangıç</span><DateField value={from} onChange={setFrom} /></label><label className="field"><span>Bitiş</span><DateField value={to} onChange={setTo} /></label></div>
+        ) : (
+          <div className="report-nav">
+            <button className="icon-btn" aria-label="Önceki" onClick={() => setOffset((o) => o - 1)}>‹</button>
+            <b>{periodLabel}</b>
+            <button className="icon-btn" aria-label="Sonraki" disabled={!canNext} onClick={() => setOffset((o) => Math.min(0, o + 1))}>›</button>
           </div>
         )}
-        <div className={`bars ${range === "month" || days.length > 7 ? "bars-month" : ""} ${range === "day" ? "bars-day" : ""}`}>
-          {Array.from({ length: lead }, (_, i) => <span key={`b${i}`} />)}
-          {totals.map((t) => (
-            <button key={t.d} className={`bar ${t.d === selectedDay ? "on" : ""} ${t.d > today ? "future" : ""}`} disabled={t.d > today} onClick={() => setDay(t.d)}>
-              <span className="bar-val">{t.total ? minutesText(t.total) : ""}</span>
-              <span className="bar-track">
-                <span className="bar-all" style={{ height: `${(t.total / max) * 100}%` }}>
-                  <span className="bar-counted" style={{ height: t.total ? `${(t.counted / t.total) * 100}%` : 0 }} />
-                </span>
-              </span>
-              <span className="bar-day">{range === "day" ? short(t.d) : Number(t.d.slice(8))}</span>
-            </button>
-          ))}
+        <div className="report-stats">
+          <div><b>{minutesText(totalMinutes)}</b><span>toplam</span></div>
+          <div><b>{minutesText(countedMinutes)}</b><span>süreden düştü</span></div>
+          {range !== "day" && <div><b>{minutesText(avg)}</b><span>günlük ort.</span></div>}
         </div>
+
+        {range === "week" && (
+          <div className="rw">
+            {totals.map((t) => (
+              <button key={t.d} className={`rw-col ${t.d === selectedDay ? "on" : ""} ${t.d > today ? "future" : ""}`} disabled={t.d > today} onClick={() => setDay(t.d)}>
+                <span className="rw-val">{t.total ? compact(t.total) : ""}</span>
+                <span className="rw-track">
+                  <span className="rw-all" style={{ height: `${(t.total / max) * 100}%` }}>
+                    <span className="rw-counted" style={{ height: t.total ? `${(t.counted / t.total) * 100}%` : 0 }} />
+                  </span>
+                </span>
+                <span className="rw-day">{fmt(t.d, { weekday: "short" })}</span>
+                <span className="rw-date">{Number(t.d.slice(8))}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {(range === "month" || range === "custom") && (
+          <div className="rc">
+            {["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"].map((w) => <span key={w} className="rc-head">{w}</span>)}
+            {Array.from({ length: lead }, (_, i) => <span key={`b${i}`} />)}
+            {totals.map((t) => {
+              const lvl = t.total ? Math.min(1, t.total / max) : 0;
+              return (
+                <button key={t.d} className={`rc-cell ${t.d === selectedDay ? "on" : ""} ${t.d > today ? "future" : ""}`} disabled={t.d > today} onClick={() => setDay(t.d)}
+                  style={{ background: lvl ? `color-mix(in srgb, var(--accent) ${Math.round(12 + lvl * 50)}%, var(--surface))` : undefined }}>
+                  <span className="rc-date">{Number(t.d.slice(8))}{range === "custom" && (t.d === start || t.d.endsWith("-01")) ? ` ${fmt(t.d, { month: "short" })}` : ""}</span>
+                  <span className="rc-val">{t.total ? compact(t.total) : ""}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
       <div className="card">
         <h2>{dateText(selectedDay)}</h2>
         {!dayRows.length && <p className="muted small">Bu gün için kayıt yok.</p>}
         {dayRows.map((r) => (
-          <div className="app-row" key={r.package}>
-            <div className="grow">
+          <div className="ra-row" key={r.package}>
+            <div className="ra-top">
               <b>{labels[r.package] ?? r.package}</b>
-              <div className="muted tiny">{r.counted_minutes ? `${minutesText(r.counted_minutes)} süreden düştü` : "süreden düşmedi"}</div>
+              <b>{minutesText(r.minutes)}</b>
             </div>
-            <b>{minutesText(r.minutes)}</b>
+            <div className="ra-track"><span style={{ width: `${(r.minutes / dayMax) * 100}%` }}><i style={{ width: `${(r.counted_minutes / r.minutes) * 100}%` }} /></span></div>
+            <div className="muted tiny">{r.counted_minutes ? `${minutesText(r.counted_minutes)} süreden düştü` : "süreden düşmedi"}</div>
           </div>
         ))}
       </div>

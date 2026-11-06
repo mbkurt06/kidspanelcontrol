@@ -2209,3 +2209,47 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .agenda-day-row .st.no { color: #ff7a7a; border-color: #ff7a7a55; }
 .agenda-day-row .st.wait { color: #f5b83d; border-color: #f5b83d55; }
 .agenda-today { font-size: 12px; margin-left: 6px; }
+
+/* Rapor (yeniden): segment, gezinme, özet, hafta çubukları, ay takvimi, uygulama çubukları */
+.report-card { display: flex; flex-direction: column; gap: 12px; }
+.report-card h2 { margin: 0; }
+.report-seg { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); }
+.report-seg button { height: 34px; border: 0; border-radius: 9px; background: none; color: var(--muted); font: inherit; font-size: 14px; cursor: pointer; }
+.report-seg button.on { background: var(--accent); color: #fff; font-weight: 600; }
+.report-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.report-nav b { flex: 1; text-align: center; font-size: 15px; text-transform: capitalize; }
+.report-nav .icon-btn { width: 36px; height: 36px; font-size: 20px; }
+.report-nav .icon-btn:disabled { opacity: .3; }
+.report-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px; }
+.report-stats > div { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 10px; background: var(--bg); min-width: 0; }
+.report-stats b { font-size: 15px; white-space: nowrap; }
+.report-stats span { font-size: 11px; color: var(--muted); }
+
+.rw { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; align-items: end; }
+.rw-col { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 4px 0; border: 0; border-radius: 10px; background: none; color: var(--text); font: inherit; cursor: pointer; min-width: 0; }
+.rw-col.on { background: var(--surface-2, rgba(255,255,255,.05)); }
+.rw-col.future { opacity: .35; cursor: default; }
+.rw-val { font-size: 10px; color: var(--muted); height: 13px; line-height: 13px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.rw-track { height: 110px; width: 100%; display: flex; align-items: flex-end; justify-content: center; }
+.rw-all { width: 60%; max-width: 26px; min-height: 2px; display: flex; align-items: flex-end; overflow: hidden; border-radius: 6px; background: color-mix(in srgb, var(--accent) 35%, transparent); }
+.rw-counted { width: 100%; background: var(--accent); }
+.rw-day { font-size: 11px; color: var(--muted); }
+.rw-date { font-size: 13px; font-weight: 600; line-height: 1; }
+.rw-col.on .rw-day, .rw-col.on .rw-val { color: var(--text); }
+
+.rc { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.rc-head { text-align: center; font-size: 11px; color: var(--muted); font-weight: 600; padding-bottom: 2px; }
+.rc-cell { aspect-ratio: 1 / 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--text); font: inherit; padding: 0; cursor: pointer; overflow: hidden; }
+.rc-cell.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.rc-cell.future { opacity: .3; cursor: default; }
+.rc-date { font-size: 12px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.rc-val { font-size: 9px; color: var(--text); opacity: .85; line-height: 1; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.ra-row { display: flex; flex-direction: column; gap: 4px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ra-row:last-child { border-bottom: 0; }
+.ra-top { display: flex; justify-content: space-between; gap: 10px; min-width: 0; }
+.ra-top b:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ra-top b:last-child { white-space: nowrap; }
+.ra-track { height: 6px; border-radius: 999px; background: var(--bg); overflow: hidden; }
+.ra-track > span { display: block; height: 100%; border-radius: 999px; background: color-mix(in srgb, var(--accent) 35%, transparent); overflow: hidden; }
+.ra-track > span > i { display: block; height: 100%; background: var(--accent); }

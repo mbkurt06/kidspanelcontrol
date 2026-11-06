@@ -1010,8 +1010,8 @@ function TimeTab({ childId }: { childId: string }) {
                   className="icon-btn"
                   aria-label="Geri al"
                   onClick={async () => {
-                    if (g.carry_to) await supabase.from("time_grants").delete().eq("id", g.carry_to);
                     await supabase.from("time_grants").delete().eq("id", g.id);
+                    if (g.carry_to) await supabase.from("time_grants").delete().eq("id", g.carry_to);
                     load();
                     fam.reload();
                   }}

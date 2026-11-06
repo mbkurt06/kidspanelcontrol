@@ -2099,3 +2099,4 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .wifi-row { align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
 .wifi-row .grow { min-width: 0; overflow-wrap: anywhere; }
 .wifi-settings { padding-top: 10px; border-top: 1px solid var(--line); }
+.warn-chip { border-color: var(--warn, #f2b134); color: var(--warn, #f2b134); }

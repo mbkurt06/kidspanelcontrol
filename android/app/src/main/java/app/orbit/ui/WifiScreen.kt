@@ -146,6 +146,7 @@ fun WifiScreen() {
                     Column(Modifier.weight(1f)) {
                         Text(s.ssid, color = C.text, fontSize = 16.sp)
                         if (settings.showPasswords && s.password.isNotEmpty()) Text(s.password, color = C.muted, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
+                        if (s.password.isEmpty() && s.security != "open") Text("şifre eksik", color = C.warn, fontSize = 12.sp)
                     }
                     Text(
                         when { on && st.captive -> "onay bekliyor"; on -> "bağlı"; here != null -> bars(here.level); else -> "yakında değil" },

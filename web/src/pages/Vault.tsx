@@ -363,6 +363,11 @@ export default function Vault() {
                       {r.v.hidden ? " · gizli" : ""} · {r.updated_by === "phone" ? child.name : "ebeveyn"} · {relTime(r.updated_at)}
                     </div>
                     {r.v.password && <span className="mono small">{revealed[r.id] ? r.v.password : "••••••••"}</span>}
+                    {!r.v.password && r.v.security !== "open" && (
+                      <button className="chip small warn-chip" onClick={() => setEdit({ id: r.id, v: { ...r.v, note: "" } })}>
+                        Şifre eksik · ekle
+                      </button>
+                    )}
                   </div>
                   {r.v.password && (
                     <button className="btn small" onClick={() => setRevealed({ ...revealed, [r.id]: !revealed[r.id] })}>

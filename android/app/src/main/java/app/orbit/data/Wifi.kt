@@ -271,11 +271,13 @@ object Wifi {
             val isSaved = saved.value.any { it.ssid == ssid }
             if (!isSaved && !settings.value.childAdd) throw WifiError("Yeni ağ eklemek kapalı. Ebeveynin panelden açabilir ya da ağı ekleyebilir.")
             if (security == "eap") throw WifiError("Kurumsal (kullanıcı adlı) ağlar desteklenmiyor.")
-            if (security != "open" && password.length < (if (security == "wep") 5 else 8)) throw WifiError("Şifre çok kısa.")
+            // Şifresi bilinmeyen (telefonda zaten kayıtlı) ağ: Android'deki kaydıyla bağlan
+            val useExisting = password.isEmpty() && security != "open" && existingId(ssid) != null
+            if (!useExisting && security != "open" && password.length < (if (security == "wep") 5 else 8)) throw WifiError(if (password.isEmpty()) "Bu ağın şifresi kayıtlı değil. Şifreyi gir ya da ebeveynin panelden eklesin." else "Şifre çok kısa.")
             grantPerms()
             val w = wm()
             if (!w.isWifiEnabled) runCatching { w.isWifiEnabled = true }
-            val id = configure(ssid, password, security, hidden)
+            val id = if (useExisting) existingId(ssid)!! else configure(ssid, password, security, hidden)
             if (id < 0) throw WifiError("Ağ eklenemedi (Orbit yöneticisi değil mi?).")
             status.value = status.value.copy(connecting = ssid)
             w.disconnect()
@@ -284,7 +286,7 @@ object Wifi {
             val ok = withTimeoutOrNull(30_000) { status.first { it.connected && it.ssid == ssid } } != null
             status.value = status.value.copy(connecting = null)
             if (!ok) throw WifiError("Bağlanamadı. Şifre yanlış ya da ağ çok uzak olabilir.")
-            remember(Saved(saved.value.firstOrNull { it.ssid == ssid }?.vaultId, ssid, password, security, hidden))
+            if (!useExisting) remember(Saved(saved.value.firstOrNull { it.ssid == ssid }?.vaultId, ssid, password, security, hidden))
             if (!isSaved) {
                 val s = settings.value
                 Thread { Sync.event(if (s.notify) "wifi_alert" else "wifi", JSONObject().put("action", "added").put("ssid", ssid).put("how", how)) }.start()
@@ -296,6 +298,7 @@ object Wifi {
     suspend fun connectSaved(s: Saved) = connect(s.ssid, s.password, s.security, s.hidden, "saved")
 
     private fun remember(s: Saved) {
+        setDirty(dirtySet() + s.ssid)
         val list = saved.value.filter { it.ssid != s.ssid } + s
         storeCache(list)
         Thread { runCatching { syncVault(force = true) }.onFailure { Log.w(TAG, "kasa", it) } }.start()
@@ -322,7 +325,7 @@ object Wifi {
         lastVaultSync = now
         var st = Vault.open()
         val local = saved.value
-        if (st is Vault.State.None && local.any { it.vaultId == null }) st = Vault.State.Open(Vault.create())
+        if (st is Vault.State.None && (local.any { it.vaultId == null } || systemNetworks().isNotEmpty())) st = Vault.State.Open(Vault.create())
         val key = (st as? Vault.State.Open)?.key ?: return
         val entries = Vault.list(key).filter { it.kind == "wifi" }
         val bySsid = entries.associateBy { it.app }
@@ -330,11 +333,23 @@ object Wifi {
         for (s in local.filter { it.vaultId == null && it.ssid !in bySsid }) {
             Vault.save(key, Vault.Entry(null, s.ssid, "", s.password, "", "", kind = "wifi", security = s.security, hidden = s.hidden), null)
         }
-        // Şifresi telefonda değişmiş
-        for (s in local) {
+        // Telefonda şifresiyle yeniden bağlanılmış (kasadaki şifre eski ya da eksik)
+        val dirty = dirtySet()
+        for (s in local.filter { it.ssid in dirty }) {
             val e = bySsid[s.ssid] ?: continue
-            if (e.password != s.password || e.security != s.security) Vault.save(key, e.copy(password = s.password, security = s.security, hidden = s.hidden), e)
+            if (s.password.isNotEmpty() && (e.password != s.password || e.security != s.security)) Vault.save(key, e.copy(password = s.password, security = s.security, hidden = s.hidden), e)
         }
+        setDirty(emptySet())
+        // Telefonun Orbit'ten önce bildiği ağlar: adları aktarılır (Android şifreleri vermez → "şifre eksik"), her ağ bir kere
+        val imported = Store.prefs().getStringSet("wifiImported", emptySet())!!.toMutableSet()
+        val have = bySsid.keys + local.map { it.ssid }
+        for ((ssid, sec) in systemNetworks()) {
+            if (ssid in imported) continue
+            imported += ssid
+            if (ssid in have) continue
+            Vault.save(key, Vault.Entry(null, ssid, "", "", "", "Telefonda kayıtlıydı; şifre eksik", kind = "wifi", security = sec, hidden = false), null)
+        }
+        Store.prefs().edit().putStringSet("wifiImported", imported).apply()
         val fresh = Vault.list(key).filter { it.kind == "wifi" }
         val list = fresh.map { Saved(it.id, it.app, it.password, it.security.ifBlank { "wpa" }, it.hidden) }
         // Panelden silinenler: kasada yok ama daha önce kasadan gelmişti
@@ -343,12 +358,29 @@ object Wifi {
         ensureConfigured(gone.map { it.ssid })
     }
 
+    private fun dirtySet(): Set<String> = Store.prefs().getStringSet("wifiDirty", emptySet())!!
+    private fun setDirty(v: Set<String>) = Store.prefs().edit().putStringSet("wifiDirty", v).apply()
+
+    /** Android'de kayıtlı ağlar (ad + güvenlik türü); şifreleri Android vermez */
+    private fun systemNetworks(): List<Pair<String, String>> = runCatching { wm().configuredNetworks }.getOrNull().orEmpty().mapNotNull { c ->
+        val ssid = c.SSID?.removeSurrounding("\"")?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+        val km = c.allowedKeyManagement
+        val sec = when {
+            km.get(WifiConfiguration.KeyMgmt.WPA_EAP) || km.get(WifiConfiguration.KeyMgmt.IEEE8021X) -> "eap"
+            Build.VERSION.SDK_INT >= 29 && km.get(WifiConfiguration.KeyMgmt.SAE) && !km.get(WifiConfiguration.KeyMgmt.WPA_PSK) -> "wpa3"
+            km.get(WifiConfiguration.KeyMgmt.WPA_PSK) -> "wpa"
+            c.wepKeys?.any { !it.isNullOrEmpty() } == true -> "wep"
+            else -> "open"
+        }
+        ssid to sec
+    }.distinctBy { it.first }
+
     private fun ensureConfigured(removed: List<String>) {
         val w = wm()
         val mine = ours()
         for (ssid in removed) if (ssid in mine) { existingId(ssid)?.let { w.removeNetwork(it) }; mine.remove(ssid) }
         setOurs(mine)
-        for (s in saved.value) if (existingId(s.ssid) == null) runCatching { configure(s.ssid, s.password, s.security, s.hidden) }
+        for (s in saved.value) if (existingId(s.ssid) == null && (s.password.isNotEmpty() || s.security == "open")) runCatching { configure(s.ssid, s.password, s.security, s.hidden) }
         runCatching { if (!w.isWifiEnabled) w.isWifiEnabled = true }
     }
 

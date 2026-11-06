@@ -70,7 +70,7 @@ export function disableBiometric() {
 const GRACE_KEY = "orbit.face-id.grace.v1";
 const SEEN_KEY = "orbit.face-id.seen.v1";
 export function biometricGrace(): number {
-  try { const v = Number(localStorage.getItem(GRACE_KEY)); return Number.isFinite(v) && v >= 0 && localStorage.getItem(GRACE_KEY) != null ? v : 5; } catch { return 5; }
+  try { const raw = localStorage.getItem(GRACE_KEY); const v = Number(raw); return raw != null && Number.isFinite(v) ? v : 5; } catch { return 5; }
 }
 export function setBiometricGrace(min: number) {
   try { localStorage.setItem(GRACE_KEY, String(min)); } catch { /* yok */ }
@@ -83,7 +83,8 @@ export function markSeen() {
 export function biometricDue(): boolean {
   if (!biometricEnabled()) return false;
   const g = biometricGrace();
-  if (g <= 0) return true;
+  if (g < 0) return false; // süresiz: tekrar sorulmaz
+  if (g === 0) return true;
   let seen = 0;
   try { seen = Number(localStorage.getItem(SEEN_KEY)) || 0; } catch { /* yok */ }
   return Date.now() - seen > g * 60_000;

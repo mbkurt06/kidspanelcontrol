@@ -1,5 +1,6 @@
 import { getTheme, setTheme, type ThemeChoice } from "../lib/theme";
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useFamily } from "../lib/family";
 import { errorText, localDevice, supabase } from "../lib/supabase";
 import { relTime } from "../lib/util";
@@ -727,21 +728,58 @@ function BiometricCard() {
 }
 
 /** Face ID ne zaman tekrar sorulsun (bu cihazda) */
+const GRACE_PRESETS = [0, 1, 5, 15, 30, 60, 240, 1440];
+function graceText(m: number) {
+  if (m < 0) return "Süresiz";
+  if (m === 0) return "Her açılışta";
+  const d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
+  return [d && `${d} gün`, h && `${h} sa`, mm && `${mm} dk`].filter(Boolean).join(" ") + " sonra";
+}
 function GraceSelect() {
   const [v, setV] = useState(biometricGrace());
+  const [custom, setCustom] = useState(false);
+  const [d, setD] = useState(0);
+  const [h, setH] = useState(0);
+  const [m, setM] = useState(0);
+  const set = (n: number) => { setV(n); setBiometricGrace(n); };
+  function openCustom() {
+    const cur = v > 0 ? v : 120;
+    setD(Math.floor(cur / 1440)); setH(Math.floor((cur % 1440) / 60)); setM(cur % 60);
+    setCustom(true);
+  }
+  const isPreset = v < 0 || GRACE_PRESETS.includes(v);
   return (
-    <label className="field">
-      <span>Tekrar sorulsun <Info>Panelden çıkıp bu süre içinde geri dönersen Face ID sorulmaz. Ayar sadece bu cihaz için.</Info></span>
-      <select value={v} onChange={(e) => { const n = Number(e.target.value); setV(n); setBiometricGrace(n); }}>
-        <option value={0}>Her açılışta</option>
-        <option value={1}>1 dk sonra</option>
-        <option value={5}>5 dk sonra</option>
-        <option value={15}>15 dk sonra</option>
-        <option value={30}>30 dk sonra</option>
-        <option value={60}>1 saat sonra</option>
-        <option value={240}>4 saat sonra</option>
-        <option value={1440}>1 gün sonra</option>
-      </select>
-    </label>
+    <>
+      <label className="field">
+        <span>Tekrar sorulsun <Info>Panelden çıkıp bu süre içinde geri dönersen Face ID sorulmaz. "Süresiz" seçilirse bir kez açtıktan sonra bu cihazda tekrar sorulmaz. Ayar sadece bu cihaz için.</Info></span>
+        <select
+          value={isPreset ? String(v) : "custom-cur"}
+          onChange={(e) => (e.target.value === "custom" ? openCustom() : e.target.value !== "custom-cur" && set(Number(e.target.value)))}
+        >
+          {GRACE_PRESETS.map((p) => <option key={p} value={p}>{graceText(p)}</option>)}
+          <option value={-1}>Süresiz (tekrar sorma)</option>
+          {!isPreset && <option value="custom-cur">Özel: {graceText(v)}</option>}
+          <option value="custom">Özel…</option>
+        </select>
+      </label>
+      {custom && createPortal(
+        <div className="sheet-backdrop" onClick={() => setCustom(false)}>
+          <div className="sheet" onClick={(e) => e.stopPropagation()}>
+            <h2>Face ID ne zaman tekrar sorulsun</h2>
+            <div className="row gap-s wrap">
+              <MinuteStepper value={d} onChange={setD} min={0} max={30} unit="gün" label="Gün" />
+              <MinuteStepper value={h} onChange={setH} min={0} max={23} unit="sa" label="Saat" />
+              <MinuteStepper value={m} onChange={setM} min={0} max={59} unit="dk" label="Dakika" />
+            </div>
+            <p className="muted small">Panelden çıktıktan {graceText(d * 1440 + h * 60 + m).replace(" sonra", "")} sonra tekrar sorar.</p>
+            <div className="row gap-s">
+              <button className="btn primary" disabled={d * 1440 + h * 60 + m <= 0} onClick={() => { set(d * 1440 + h * 60 + m); setCustom(false); }}>Kaydet</button>
+              <button className="btn ghost" onClick={() => setCustom(false)}>Vazgeç</button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
   );
 }

@@ -71,8 +71,10 @@ object Wifi {
     }
 
     private fun grantPerms() {
-        for (p in listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) Policy.grantSelf(ctx, p)
-        if (Build.VERSION.SDK_INT >= 33) Policy.grantSelf(ctx, Manifest.permission.NEARBY_WIFI_DEVICES)
+        // Sadece henüz verilmemişse: her verişte Android "kuruluşunuz konuma izin verdi" uyarısı gösteriyor
+        val perms = listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION) +
+            (if (Build.VERSION.SDK_INT >= 33) listOf(Manifest.permission.NEARBY_WIFI_DEVICES) else emptyList())
+        for (p in perms) if (ctx.checkSelfPermission(p) != android.content.pm.PackageManager.PERMISSION_GRANTED) Policy.grantSelf(ctx, p)
     }
 
     // --- ayarlar ve önbellek ---
@@ -196,7 +198,8 @@ object Wifi {
         scanning.value = true
         try {
             grantPerms()
-            Policy.enableLocation(ctx)
+            val lm = ctx.getSystemService(android.location.LocationManager::class.java)
+            if (Build.VERSION.SDK_INT >= 28 && !lm.isLocationEnabled) Policy.enableLocation(ctx)
             val w = wm()
             if (!w.isWifiEnabled) runCatching { w.isWifiEnabled = true }
             runCatching { w.startScan() }

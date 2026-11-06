@@ -41,6 +41,12 @@ export default function Vault() {
   const [q, setQ] = useState("");
   const [copied, setCopied] = useState("");
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [apps, setApps] = useState<{ package: string; label: string }[]>([]);
+  useEffect(() => {
+    if (!id) return;
+    supabase.from("child_apps").select("package,label").eq("child_id", id).order("label").then(({ data }) => setApps((data ?? []) as { package: string; label: string }[]));
+  }, [id]);
+  const appName = (pkg?: string) => (pkg ? apps.find((a) => a.package === pkg)?.label ?? pkg : "");
 
   const load = useCallback(async () => {
     if (!fam.familyId || !id) return;
@@ -315,6 +321,22 @@ export default function Vault() {
                 </div>
               </label>
               <label className="field">
+                <span>Web sitesi</span>
+                <input value={edit.v.url ?? ""} autoComplete="off" placeholder="roblox.com" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, url: e.target.value.trim() } })} />
+              </label>
+              <label className="field">
+                <span>Telefondaki uygulama</span>
+                <select value={edit.v.pkg ?? ""} onChange={(e) => {
+                  const pkg = e.target.value;
+                  setEdit({ ...edit, v: { ...edit.v, pkg, app: edit.v.app || appName(pkg) } });
+                }}>
+                  <option value="">— Seçilmedi —</option>
+                  {apps.map((a) => (
+                    <option key={a.package} value={a.package}>{a.label}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
                 <span>Hesabın bağlı olduğu e-posta / telefon (kurtarma)</span>
                 <input value={edit.v.recovery} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, recovery: e.target.value } })} />
               </label>
@@ -437,6 +459,16 @@ export default function Vault() {
                       <button className="btn small" onClick={() => copy(r.v.password, r.id + "p")}>
                         {copied === r.id + "p" ? "Kopyalandı" : "Kopyala"}
                       </button>
+                    </div>
+                  )}
+                  {(r.v.url || r.v.pkg) && (
+                    <div className="row gap-s wrap small">
+                      {r.v.url && (
+                        <a href={/^https?:\/\//.test(r.v.url) ? r.v.url : `https://${r.v.url}`} target="_blank" rel="noreferrer">
+                          🌐 {r.v.url.replace(/^https?:\/\//, "")}
+                        </a>
+                      )}
+                      {r.v.pkg && <span className="chip small">📱 {appName(r.v.pkg)}</span>}
                     </div>
                   )}
                   {r.v.recovery && <div className="muted small">Kurtarma: {r.v.recovery}</div>}

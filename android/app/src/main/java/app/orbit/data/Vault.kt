@@ -43,6 +43,9 @@ object Vault {
         /** Wi-Fi: "wpa" | "wpa3" | "wep" | "open" */
         val security: String = "",
         val hidden: Boolean = false,
+        /** Hesap: web sitesi adresi ve telefondaki uygulama paketi */
+        val url: String = "",
+        val pkg: String = "",
     )
 
     fun b64(b: ByteArray): String = Base64.encodeToString(b, Base64.NO_WRAP)
@@ -172,6 +175,7 @@ object Vault {
             o.getString("id"), j.optString("app"), j.optString("username"), j.optString("password"),
             j.optString("recovery"), j.optString("note"), j.optJSONArray("history") ?: JSONArray(), o.optString("updated_by", "phone"),
             j.optString("kind"), j.optString("security"), j.optBoolean("hidden"),
+            j.optString("url"), j.optString("pkg"),
         )
     }.getOrNull()
 
@@ -180,6 +184,8 @@ object Vault {
         val j = JSONObject().put("app", e.app).put("username", e.username).put("password", e.password)
             .put("recovery", e.recovery).put("note", e.note).put("history", e.history)
         if (e.kind.isNotEmpty()) j.put("kind", e.kind).put("security", e.security).put("hidden", e.hidden)
+        if (e.url.isNotEmpty()) j.put("url", e.url)
+        if (e.pkg.isNotEmpty()) j.put("pkg", e.pkg)
         val ct = aes(Cipher.ENCRYPT_MODE, key, iv).doFinal(j.toString().toByteArray(Charsets.UTF_8))
         return b64(iv) to b64(ct)
     }

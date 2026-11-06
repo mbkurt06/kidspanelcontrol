@@ -78,6 +78,7 @@ fun WifiScreen() {
     var qr by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf<Pair<String, Boolean>?>(null) }
     var forget by remember { mutableStateOf<Wifi.Saved?>(null) }
+    var scanned by remember { mutableStateOf<Wifi.QrNet?>(null) }
 
     LaunchedEffect(Unit) {
         Wifi.scan()
@@ -124,7 +125,7 @@ fun WifiScreen() {
             val n = Wifi.parseQr(text)
             if (n == null) { msg = "Bu bir Wi-Fi QR kodu değil" to false; false } else {
                 qr = false
-                run(n.ssid) { Wifi.connect(n.ssid, n.password, n.security, n.hidden, "qr") }
+                scanned = n
                 true
             }
         },
@@ -145,7 +146,6 @@ fun WifiScreen() {
                 ) {
                     Column(Modifier.weight(1f)) {
                         Text(s.ssid, color = C.text, fontSize = 16.sp)
-                        if (settings.showPasswords && s.password.isNotEmpty()) Text(s.password, color = C.muted, fontSize = 12.sp, fontFamily = FontFamily.Monospace)
                         if (s.password.isEmpty() && s.security != "open") Text("şifre eksik", color = C.warn, fontSize = 12.sp)
                     }
                     Text(
@@ -233,6 +233,26 @@ fun WifiScreen() {
         )
     }
 
+    // QR okundu: şimdi bağlan ya da sadece kaydet
+    scanned?.let { n ->
+        val known = saved.any { it.ssid == n.ssid }
+        AlertDialog(
+            onDismissRequest = { scanned = null },
+            title = { Text("📶 ${n.ssid}") },
+            text = { Text(if (known) "Bu ağ zaten kayıtlı; şifresi güncellenecek." else "Şimdi bağlanabilir ya da sadece kaydedebilirsin. Kaydedilen ağa telefon yakınına gelince kendiliğinden bağlanır.") },
+            dismissButton = {
+                TextButton(onClick = {
+                    scanned = null
+                    msg = "Kaydediliyor…" to true
+                    scope.launch { msg = Wifi.saveOnly(n.ssid, n.password, n.security, n.hidden, "qr").fold({ "Kaydedildi ✓" to true }, { (it.message ?: "Kaydedilemedi") to false }) }
+                }) { Text("Sadece kaydet") }
+            },
+            confirmButton = {
+                TextButton(onClick = { scanned = null; run(n.ssid) { Wifi.connect(n.ssid, n.password, n.security, n.hidden, "qr") } }) { Text("Bağlan") }
+            },
+        )
+    }
+
     forget?.let { s ->
         AlertDialog(
             onDismissRequest = { forget = null },
@@ -246,7 +266,7 @@ fun WifiScreen() {
 
 /** Kamera ile Wi-Fi QR kodu okur. onCode true dönerse tarama biter. */
 @Composable
-private fun QrScanner(onCancel: () -> Unit, onCode: (String) -> Boolean) {
+fun QrScanner(onCancel: () -> Unit, onCode: (String) -> Boolean) {
     val ctx = LocalContext.current
     val owner = LocalLifecycleOwner.current
     val exec = remember { Executors.newSingleThreadExecutor() }

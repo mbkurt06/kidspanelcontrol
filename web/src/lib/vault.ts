@@ -24,6 +24,9 @@ export type VaultEntry = {
   /** Wi-Fi: "wpa" | "wpa3" | "wep" | "open" */
   security?: string;
   hidden?: boolean;
+  /** Hesap: web sitesi ve telefondaki uygulama (paket adı) */
+  url?: string;
+  pkg?: string;
 };
 
 export type StoredEntry = { id: string; iv: string; ciphertext: string; updated_by: string; updated_at: string };
@@ -263,6 +266,8 @@ export async function decryptEntry(key: CryptoKey, e: StoredEntry): Promise<Vaul
     note: j.note ?? "",
     history: Array.isArray(j.history) ? j.history : [],
     ...(j.kind ? { kind: String(j.kind), security: String(j.security ?? "wpa"), hidden: !!j.hidden } : {}),
+    ...(j.url ? { url: String(j.url) } : {}),
+    ...(j.pkg ? { pkg: String(j.pkg) } : {}),
   };
 }
 

@@ -294,14 +294,42 @@ object Wifi {
         }.onFailure { status.value = status.value.copy(connecting = null) }
     }
 
+    /**
+     * Bağlanmadan kaydet (QR ya da şifre ile): kasaya yazılır, telefon ağın yakınına gelince kendiliğinden bağlanır.
+     * Aynı ad kayıtlıysa yeni kayıt açılmaz, şifresi güncellenir.
+     */
+    suspend fun saveOnly(ssid: String, password: String, security: String, hidden: Boolean, how: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val isSaved = saved.value.any { it.ssid == ssid }
+            if (!isSaved && !settings.value.childAdd) throw WifiError("Yeni ağ eklemek kapalı. Ebeveynin panelden açabilir ya da ağı ekleyebilir.")
+            if (security == "eap") throw WifiError("Kurumsal (kullanıcı adlı) ağlar desteklenmiyor.")
+            if (security != "open" && password.length < (if (security == "wep") 5 else 8)) throw WifiError("Şifre çok kısa.")
+            grantPerms()
+            runCatching { configure(ssid, password, security, hidden) }
+            remember(Saved(saved.value.firstOrNull { it.ssid == ssid }?.vaultId, ssid, password, security, hidden), async = false)
+            if (!isSaved) {
+                val s = settings.value
+                Sync.event(if (s.notify) "wifi_alert" else "wifi", JSONObject().put("action", "added").put("ssid", ssid).put("how", how))
+            }
+        }
+    }
+
+    /** Başka birinin okutup bağlanacağı QR metni */
+    fun qrText(ssid: String, password: String, security: String, hidden: Boolean): String {
+        fun e(v: String) = v.replace("\\", "\\\\").replace(";", "\\;").replace(",", "\\,").replace(":", "\\:").replace("\"", "\\\"")
+        val t = when (security) { "open" -> "nopass"; "wep" -> "WEP"; else -> "WPA" }
+        return "WIFI:T:$t;S:${e(ssid)};" + (if (security == "open") "" else "P:${e(password)};") + (if (hidden) "H:true;" else "") + ";"
+    }
+
     /** Kayıtlı ağa hemen bağlan */
     suspend fun connectSaved(s: Saved) = connect(s.ssid, s.password, s.security, s.hidden, "saved")
 
-    private fun remember(s: Saved) {
+    private fun remember(s: Saved, async: Boolean = true) {
         setDirty(dirtySet() + s.ssid)
         val list = saved.value.filter { it.ssid != s.ssid } + s
         storeCache(list)
-        Thread { runCatching { syncVault(force = true) }.onFailure { Log.w(TAG, "kasa", it) } }.start()
+        val job = { runCatching { syncVault(force = true) }.onFailure { Log.w(TAG, "kasa", it) }; Unit }
+        if (async) Thread(job).start() else job()
     }
 
     suspend fun forget(s: Saved) = withContext(Dispatchers.IO) {

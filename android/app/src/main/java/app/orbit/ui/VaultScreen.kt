@@ -12,6 +12,9 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
@@ -60,6 +63,12 @@ fun VaultScreen(onCancel: () -> Unit, onWifi: () -> Unit = {}) {
     var deleteEntry by remember { mutableStateOf<Vault.Entry?>(null) }
     var deleteArmed by remember { mutableStateOf<String?>(null) }
     val revealed = remember { mutableStateMapOf<String, Boolean>() }
+    var qrFor by remember { mutableStateOf<Vault.Entry?>(null) }
+    var scanFor by remember { mutableStateOf<String?>(null) } // "" = yeni ağ, yoksa o ağın adı
+    var pwFor by remember { mutableStateOf<Vault.Entry?>(null) }
+    var picking by remember { mutableStateOf(false) }
+    var blocked by remember { mutableStateOf<Blocked?>(null) }
+    fun opened(r: OpenResult) { when (r) { is OpenResult.Closed -> blocked = r.b; OpenResult.Missing -> msg = "Açılamadı (telefonda yok)"; else -> {} } }
 
     fun load() {
         busy = true
@@ -134,6 +143,32 @@ fun VaultScreen(onCancel: () -> Unit, onWifi: () -> Unit = {}) {
             }) { Text("Sil", color = C.bad) } },
         )
     }
+    qrFor?.let { w -> WifiQrDialog(w.app, w.password, app.orbit.data.Wifi.qrText(w.app, w.password, w.security, w.hidden)) { qrFor = null } }
+    blocked?.let { b -> BlockedDialog(b) { blocked = null } }
+    pwFor?.let { w ->
+        var pw by remember(w) { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { pwFor = null },
+            title = { Text("${w.app} şifresi") },
+            text = { OutlinedTextField(pw, { pw = it }, label = { Text("Şifre") }, singleLine = true, modifier = Modifier.fillMaxWidth()) },
+            dismissButton = { TextButton(onClick = { pwFor = null }) { Text("Vazgeç") } },
+            confirmButton = {
+                TextButton(onClick = {
+                    pwFor = null
+                    busy = true
+                    scope.launch {
+                        val r = app.orbit.data.Wifi.saveOnly(w.app, pw, w.security.ifBlank { "wpa" }, w.hidden, "manual")
+                        msg = r.fold({ "Kaydedildi ✓" }, { it.message ?: "Kaydedilemedi" })
+                        load()
+                    }
+                }) { Text("Kaydet") }
+            },
+        )
+    }
+    if (picking) AppPickerDialog(onPick = { pkg, label ->
+        picking = false
+        editing = editing?.let { it.copy(pkg = pkg, app = it.app.ifBlank { label }) }
+    }, onClose = { picking = false })
     if (msg.isNotEmpty()) Text(msg, color = C.good, fontSize = 13.sp)
     when (val s = state) {
         null -> Muted(if (busy) "Açılıyor…" else "")
@@ -167,6 +202,13 @@ fun VaultScreen(onCancel: () -> Unit, onWifi: () -> Unit = {}) {
                         OutlinedTextField(e.password, { v -> upd { it.copy(password = v) } }, label = { Text("Şifre") }, modifier = Modifier.weight(1f))
                         TextButton(onClick = { val p = Vault.generatePassword(); upd { it.copy(password = p) } }) { Text("Üret") }
                     }
+                    OutlinedTextField(e.url, { v -> upd { it.copy(url = v.trim()) } }, label = { Text("Web sitesi (ör. roblox.com)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (e.pkg.isNotEmpty()) { AppIcon(e.pkg, 28.dp); Text("  " + appLabel(ctx, e.pkg), color = C.text, modifier = Modifier.weight(1f)) }
+                        else Text("Uygulama seçilmedi", color = C.muted, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                        TextButton(onClick = { picking = true }) { Text(if (e.pkg.isEmpty()) "Uygulama seç" else "Değiştir") }
+                        if (e.pkg.isNotEmpty()) TextButton(onClick = { upd { it.copy(pkg = "") } }) { Text("Kaldır") }
+                    }
                     OutlinedTextField(e.recovery, { v -> upd { it.copy(recovery = v) } }, label = { Text("Bağlı e-posta / telefon") }, modifier = Modifier.fillMaxWidth())
                     OutlinedTextField(e.note, { v -> upd { it.copy(note = v) } }, label = { Text("Not") }, modifier = Modifier.fillMaxWidth())
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -187,32 +229,84 @@ fun VaultScreen(onCancel: () -> Unit, onWifi: () -> Unit = {}) {
                 Card {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("📶 Wi-Fi ağları (${wifi.size})", color = C.text, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, modifier = Modifier.weight(1f))
-                        OutlinedButton(onClick = onWifi) { Text("Wi-Fi'yi aç") }
+                        TextButton(onClick = onWifi) { Text("Wi-Fi") }
                     }
-                    for (w in wifi) Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(w.app, color = C.text, modifier = Modifier.weight(1f))
-                        if (showWifiPass && w.password.isNotEmpty()) {
-                            val show = revealed[w.id] == true
-                            Text(if (show) w.password else "••••••", color = C.muted, fontFamily = FontFamily.Monospace)
-                            TextButton(onClick = { revealed[w.id ?: ""] = !show }) { Text(if (show) "Gizle" else "Göster") }
-                            TextButton(onClick = { copy("Wi-Fi şifresi", w.password) }) { Text("Kopyala") }
+                    OutlinedButton(onClick = { scanFor = "" }, modifier = Modifier.fillMaxWidth()) { Text("📷 QR ile ağ ekle") }
+                    for (w in wifi) {
+                        Column(Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(w.app, color = C.text, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                                Muted(when (w.security) { "open" -> "şifresiz"; "wpa3" -> "WPA3"; "wep" -> "WEP"; else -> "WPA2" }, 12)
+                            }
+                            val missing = w.password.isEmpty() && w.security != "open"
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                                when {
+                                    missing -> {
+                                        Text("şifre eksik", color = C.warn, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                                        TextButton(onClick = { scanFor = w.app }) { Text("📷 QR") }
+                                        TextButton(onClick = { pwFor = w }) { Text("✎ Yaz") }
+                                    }
+                                    !showWifiPass -> Muted("kayıtlı", 13)
+                                    else -> {
+                                        val show = revealed[w.id] == true
+                                        Text(
+                                            if (w.security == "open") "şifresiz" else if (show) w.password else "••••••••",
+                                            color = C.muted, fontFamily = FontFamily.Monospace, fontSize = 14.sp, modifier = Modifier.weight(1f),
+                                        )
+                                        if (w.security != "open") {
+                                            TextButton(onClick = { revealed[w.id ?: ""] = !show }) { Text(if (show) "🙈" else "👁") }
+                                            TextButton(onClick = { copy("Wi-Fi şifresi", w.password) }) { Text("⧉") }
+                                        }
+                                        TextButton(onClick = { qrFor = w }) { Text("▦ QR") }
+                                    }
+                                }
+                            }
                         }
                     }
+                }
+                scanFor?.let { target ->
+                    QrScanner(
+                        onCancel = { scanFor = null },
+                        onCode = { text ->
+                            val n = app.orbit.data.Wifi.parseQr(text)
+                            when {
+                                n == null -> { msg = "Bu bir Wi-Fi QR kodu değil"; false }
+                                target.isNotEmpty() && n.ssid != target -> { msg = "Bu QR \"${n.ssid}\" ağına ait"; false }
+                                else -> {
+                                    scanFor = null
+                                    busy = true
+                                    scope.launch {
+                                        val r = app.orbit.data.Wifi.saveOnly(n.ssid, n.password, n.security, n.hidden, "qr")
+                                        msg = r.fold({ "${n.ssid} kaydedildi ✓" }, { it.message ?: "Kaydedilemedi" })
+                                        load()
+                                    }
+                                    true
+                                }
+                            }
+                        },
+                    )
                 }
                 val apps = entries.filter { it.kind != "wifi" }
                 if (apps.isEmpty()) Muted("Henüz kayıt yok.")
                 for (x in apps) {
                     Card {
-                        Text(x.app, color = C.text, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (x.pkg.isNotEmpty()) { AppIcon(x.pkg, 30.dp); androidx.compose.foundation.layout.Spacer(Modifier.width(8.dp)) }
+                            Text(x.app, color = C.text, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, modifier = Modifier.weight(1f))
+                        }
+                        if (x.url.isNotEmpty() || x.pkg.isNotEmpty()) Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            if (x.url.isNotEmpty()) TextButton(onClick = { opened(openUrl(ctx, x.url)) }) { Text("🌐 " + x.url.removePrefix("https://").removePrefix("http://").take(28)) }
+                            if (x.pkg.isNotEmpty()) OutlinedButton(onClick = { opened(openApp(ctx, x.pkg)) }) { Text("▶ Uygulamayı aç") }
+                        }
                         if (x.username.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(x.username, color = C.text, fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f))
-                            OutlinedButton(onClick = { copy("Kullanıcı adı", x.username) }) { Text("Kopyala") }
+                            TextButton(onClick = { copy("Kullanıcı adı", x.username) }) { Text("⧉") }
                         }
                         if (x.password.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
                             val show = revealed[x.id] == true
                             Text(if (show) x.password else "••••••••", color = C.text, fontFamily = FontFamily.Monospace, modifier = Modifier.weight(1f))
-                            TextButton(onClick = { revealed[x.id ?: ""] = !show }) { Text(if (show) "Gizle" else "Göster") }
-                            OutlinedButton(onClick = { copy("Şifre", x.password) }) { Text("Kopyala") }
+                            TextButton(onClick = { revealed[x.id ?: ""] = !show }) { Text(if (show) "🙈" else "👁") }
+                            TextButton(onClick = { copy("Şifre", x.password) }) { Text("⧉") }
                         }
                         if (x.recovery.isNotEmpty()) Muted("Kurtarma: ${x.recovery}", 13)
                         if (x.note.isNotEmpty()) Muted(x.note, 13)

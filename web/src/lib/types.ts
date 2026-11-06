@@ -568,6 +568,12 @@ export type AlarmDef = {
   child_can_delete: boolean;
   snooze_max: number;
   snooze_minutes: number;
+  /** Alarm sesi (telefonun bildirdiği listeden); boşsa varsayılan */
+  sound_uri?: string | null;
+  sound_title?: string | null;
+  /** Alarm ses seviyesi %; boşsa telefonun ayarı */
+  volume?: number | null;
+  ramp?: boolean;
 };
 
 export type AlarmLog = { id: string; alarm_id: string | null; child_id: string; title: string | null; fired_at: string; dismissed_at: string | null; snoozes: number };

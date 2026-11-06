@@ -377,6 +377,12 @@ function AlarmsCard({ childId }: { childId: string }) {
   const [log, setLog] = useState<AlarmLog[]>([]);
   const [edit, setEdit] = useState<Partial<AlarmDef> | null>(null);
   const [err, setErr] = useState("");
+  const [sounds, setSounds] = useState<{ uri: string; title: string; kind: string }[]>([]);
+  useEffect(() => {
+    supabase.from("devices").select("sounds").eq("child_id", childId).eq("kind", "child_phone").then(({ data }) => {
+      setSounds(((data ?? []).flatMap((d) => (Array.isArray(d.sounds) ? d.sounds : [])) as { uri: string; title: string; kind: string }[]));
+    });
+  }, [childId]);
 
   const load = useCallback(async () => {
     const [{ data: a }, { data: l }] = await Promise.all([
@@ -407,6 +413,10 @@ function AlarmsCard({ childId }: { childId: string }) {
       child_can_delete: edit.child_can_delete ?? false,
       snooze_max: edit.snooze_max ?? 2,
       snooze_minutes: edit.snooze_minutes ?? 5,
+      sound_uri: edit.sound_uri ?? null,
+      sound_title: edit.sound_title ?? null,
+      volume: edit.volume ?? null,
+      ramp: !!edit.ramp,
     };
     const { error } = edit.id ? await supabase.from("alarms").update(row).eq("id", edit.id) : await supabase.from("alarms").insert(row);
     if (error) return setErr(errorText(error));
@@ -481,6 +491,44 @@ function AlarmsCard({ childId }: { childId: string }) {
                 <MinuteStepper value={edit.snooze_max ?? 2} onChange={(v) => setEdit({ ...edit, snooze_max: v })} max={10} unit="kez" label="Kaç kez" />
                 <MinuteStepper value={edit.snooze_minutes ?? 5} onChange={(v) => setEdit({ ...edit, snooze_minutes: v })} min={1} max={30} label="Kaç dakika" />
               </div>
+            </div>
+          )}
+          {edit.kind === "alarm" && (
+            <div className="extra-group">
+              <span className="pop-label">
+                SES <Info>Liste {child.name}'in telefonundan gelir (telefonun alarm sesleri ve Orbit'teki müzikler). Ses seviyesi seçersen telefon sessizde de bu seviyede çalar.</Info>
+              </span>
+              <select
+                value={edit.sound_uri ?? ""}
+                onChange={(e) => {
+                  const s = sounds.find((x) => x.uri === e.target.value);
+                  setEdit({ ...edit, sound_uri: s?.uri ?? null, sound_title: s?.title ?? null });
+                }}
+              >
+                <option value="">Varsayılan alarm sesi</option>
+                {edit.sound_uri && !sounds.some((x) => x.uri === edit.sound_uri) && <option value={edit.sound_uri}>{edit.sound_title ?? "Seçili ses"}</option>}
+                {[["alarm", "Telefonun alarm sesleri"], ["ringtone", "Zil sesleri"], ["music", "Müzikler"]].map(([k, l]) =>
+                  sounds.some((x) => x.kind === k) ? (
+                    <optgroup key={k} label={l}>
+                      {sounds.filter((x) => x.kind === k).map((x) => (
+                        <option key={x.uri} value={x.uri}>{x.title}</option>
+                      ))}
+                    </optgroup>
+                  ) : null,
+                )}
+              </select>
+              {!sounds.length && <span className="muted tiny">Telefon ses listesini henüz göndermedi (güncellemeden sonra gelir).</span>}
+              <label className="row gap-s small">
+                <input type="checkbox" checked={edit.volume != null} onChange={(e) => setEdit({ ...edit, volume: e.target.checked ? 70 : null })} />
+                Ses seviyesi {edit.volume != null ? `%${edit.volume}` : "(telefonun ayarı)"}
+              </label>
+              {edit.volume != null && (
+                <input type="range" min={5} max={100} step={5} value={edit.volume} onChange={(e) => setEdit({ ...edit, volume: Number(e.target.value) })} />
+              )}
+              <label className="row gap-s small">
+                <input type="checkbox" checked={!!edit.ramp} onChange={(e) => setEdit({ ...edit, ramp: e.target.checked })} />
+                Yavaş yükselsin (30 sn'de tam ses)
+              </label>
             </div>
           )}
           {err && <p className="error">{err}</p>}

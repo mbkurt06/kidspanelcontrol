@@ -1161,6 +1161,9 @@ function PlanSheet({
       } else if (where === "wallet") {
         target = { valid_on: null, section_id: null, vault: false, window_start: null, window_end: null };
         text = "cüzdana";
+      } else if (where === "vault") {
+        target = { valid_on: null, section_id: null, vault: true, window_start: null, window_end: null };
+        text = "kasaya";
       } else if (where === "pool") {
         target = { valid_on: validOn, section_id: null, vault: false, window_start: null, window_end: null };
         text = `${dateText(validOn)} gün boyu`;
@@ -1193,7 +1196,7 @@ function PlanSheet({
     onDone(`${minutesText(m)} → ${text}`);
   }
 
-  const dated = where !== "wallet" && where !== "now";
+  const dated = where !== "wallet" && where !== "now" && where !== "vault";
   return createPortal(
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
@@ -1207,6 +1210,7 @@ function PlanSheet({
           <select value={where} onChange={(e) => setWhere(e.target.value)}>
             <option value="now">Hemen kullansın</option>
             {!(!grant.vault && !grant.valid_on) && <option value="wallet">Cüzdana aktar (çocuk istediği gün kullanır)</option>}
+            {!grant.vault && <option value="vault">Kasaya aktar (çocuk kullanamaz)</option>}
             <option value="window">Belirli saatten itibaren</option>
             <option value="pool">Gün boyu: süreli her bölümde</option>
             {sections.map((o) => (

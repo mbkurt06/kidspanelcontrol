@@ -627,7 +627,8 @@ function TimeTab({ childId }: { childId: string }) {
   const today = todayISO();
   const wallet = grants.filter((g) => !g.vault && !g.valid_on && !g.activated_on && (!g.expires_on || g.expires_on >= today));
   const live = useMemo(
-    () => grants.filter((g) => !g.vault && ((g.valid_on && g.valid_on >= today) || g.activated_on === today)),
+    // Gece yarısını geçen sürenin ertesi gün devamı ayrı satır olarak gösterilmez (ilk satırda yazar)
+    () => grants.filter((g) => !g.vault && ((g.valid_on && g.valid_on >= today) || g.activated_on === today) && !grants.some((x) => x.carry_to === g.id)),
     [grants, today]
   );
   const vault = grants.filter((g) => g.vault);
@@ -982,6 +983,10 @@ function TimeTab({ childId }: { childId: string }) {
                 {g.activated_on && !g.valid_on ? `cüzdandan · ${dateText(g.activated_on)}` : dateText(g.valid_on!)}
                 {g.window_start ? ` · ${hhmm(g.window_start)}–${hhmm(g.window_end ?? "")} arası` : g.section_id ? ` · ${secName(g.section_id)}` : " · gün boyu"}
                 {g.note ? ` · ${g.note}` : ""}
+                {(() => {
+                  const next = g.carry_to ? grants.find((x) => x.id === g.carry_to) : null;
+                  return next?.window_end ? ` · kullanılmayan kısmı gece ${hhmm(next.window_end)}'e kadar sürer` : "";
+                })()}
               </div>
             </div>
             {!g.activated_on && (
@@ -1005,6 +1010,7 @@ function TimeTab({ childId }: { childId: string }) {
                   className="icon-btn"
                   aria-label="Geri al"
                   onClick={async () => {
+                    if (g.carry_to) await supabase.from("time_grants").delete().eq("id", g.carry_to);
                     await supabase.from("time_grants").delete().eq("id", g.id);
                     load();
                     fam.reload();

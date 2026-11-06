@@ -327,6 +327,8 @@ export type TimeGrant = {
   vault: boolean;
   window_start: string | null;
   window_end: string | null;
+  /** Gece yarısını geçen süre: kalan kısmın devam edeceği ertesi gün kaydı */
+  carry_to?: string | null;
 };
 
 export type OrbitEvent = {

@@ -1362,9 +1362,18 @@ type UsageRow = { day: string; package: string; minutes: number; counted_minutes
 function ReportTab({ childId }: { childId: string }) {
   const [rows, setRows] = useState<UsageRow[]>([]);
   const [labels, setLabels] = useState<Record<string, string>>({});
-  const [range, setRange] = useState<"day" | "week" | "month" | "custom">("week");
-  const [from, setFrom] = useState(todayISO("Europe/Berlin", -6));
-  const [to, setTo] = useState(todayISO());
+  // Seçilen aralık çocuklar arasında aynı kalır (panel açıkken), karşılaştırma için
+  const ss = (k: string, d: string) => { try { return sessionStorage.getItem(`orbit.report.${k}`) ?? d; } catch { return d; } };
+  const [range, setRange] = useState<"day" | "week" | "month" | "custom">(() => ss("range", "week") as "day" | "week" | "month" | "custom");
+  const [from, setFrom] = useState(() => ss("from", todayISO("Europe/Berlin", -6)));
+  const [to, setTo] = useState(() => ss("to", todayISO()));
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("orbit.report.range", range);
+      sessionStorage.setItem("orbit.report.from", from);
+      sessionStorage.setItem("orbit.report.to", to);
+    } catch { /* yok */ }
+  }, [range, from, to]);
   const [day, setDay] = useState(todayISO());
 
   useEffect(() => {

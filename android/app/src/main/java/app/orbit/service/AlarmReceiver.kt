@@ -31,12 +31,16 @@ class AlarmReceiver : BroadcastReceiver() {
         val noteId = 9500 + (id.hashCode() and 0xfff)
 
         if (kind == "reminder") {
+            // Seçilmiş ses varsa sessiz kanaldan bildirim + sesi kendimiz bir kez çalarız
+            val snd = Alarms.list().firstOrNull { it.id == id }?.sound
+            val custom = snd?.uri != null
+            if (custom) runCatching { reminderPlayer?.stop(); reminderPlayer = app.orbit.data.SoundPlayer(context.applicationContext).also { it.playOnce(snd!!.uri!!, snd.volume) } }
             val open = PendingIntent.getActivity(
                 context, noteId,
                 Intent(context, app.orbit.ui.MainActivity::class.java).putExtra(Notifier.EXTRA_SCREEN, "ALARMS").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
                 PendingIntent.FLAG_IMMUTABLE,
             )
-            nm.notify(noteId, Notification.Builder(context, CH_REMIND)
+            nm.notify(noteId, Notification.Builder(context, if (custom) CH_REMIND_QUIET else CH_REMIND)
                 .setSmallIcon(R.drawable.ic_orbit).setContentTitle("🔔 $title").setContentText("Hatırlatma")
                 .setCategory(Notification.CATEGORY_REMINDER).setContentIntent(open).setAutoCancel(true).build())
         } else {
@@ -65,11 +69,17 @@ class AlarmReceiver : BroadcastReceiver() {
     companion object {
         const val CH_ALARM = "orbit-alarm"
         const val CH_REMIND = "orbit-remind"
+        const val CH_REMIND_QUIET = "orbit-remind-custom"
+        /** Çalan hatırlatıcı sesi (çöp toplayıcı kesmesin diye burada tutulur) */
+        @Volatile var reminderPlayer: app.orbit.data.SoundPlayer? = null
 
         fun channels(ctx: Context, nm: NotificationManager = ctx.getSystemService(NotificationManager::class.java)) {
             nm.createNotificationChannel(NotificationChannel(CH_ALARM, "Alarmlar", NotificationManager.IMPORTANCE_HIGH).apply {
                 setSound(null, null) // ses AlarmActivity'de çalar
                 setBypassDnd(true)
+            })
+            nm.createNotificationChannel(NotificationChannel(CH_REMIND_QUIET, "Hatırlatıcılar (seçilen ses)", NotificationManager.IMPORTANCE_HIGH).apply {
+                setSound(null, null) // ses AlarmReceiver'da çalar
             })
             nm.createNotificationChannel(NotificationChannel(CH_REMIND, "Hatırlatıcılar", NotificationManager.IMPORTANCE_HIGH).apply {
                 setSound(

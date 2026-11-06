@@ -56,6 +56,24 @@ class SoundPlayer(private val ctx: Context) {
         }
     }
 
+    /** Bir kez çal (hatırlatıcı); bitince ses seviyesi eski haline döner */
+    fun playOnce(uri: String, volumePct: Int?) {
+        stop()
+        if (volumePct != null) setVolume(volumePct)
+        runCatching {
+            player = MediaPlayer().apply {
+                setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+                setDataSource(ctx, Uri.parse(uri))
+                isLooping = false
+                setOnCompletionListener { this@SoundPlayer.stop() }
+                prepare()
+                start()
+            }
+            // Uzun bir şarkı seçildiyse 20 sn'de kes
+            h.postDelayed({ stop() }, 20_000)
+        }.onFailure { Log.w("OrbitSound", "hatırlatıcı sesi çalınamadı", it); stop() }
+    }
+
     /** Alarm ses seviyesi (%), çalarken de değiştirilebilir */
     fun setVolume(pct: Int) {
         runCatching {

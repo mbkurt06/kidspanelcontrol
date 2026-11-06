@@ -35,7 +35,7 @@ import app.orbit.data.Sounds
 
 /** Alarm sesi seç: telefonun alarm/zil sesleri ya da Müziklerim; dokununca kısa önizleme. Ses seviyesi ve yavaş yükselme. */
 @Composable
-fun AlarmSoundDialog(current: AlarmSound, onDone: (AlarmSound) -> Unit, onCancel: () -> Unit) {
+fun AlarmSoundDialog(current: AlarmSound, reminder: Boolean = false, onDone: (AlarmSound) -> Unit, onCancel: () -> Unit) {
     val ctx = LocalContext.current
     val system = remember { Sounds.system(ctx) }
     val music = remember { Sounds.music() }
@@ -68,7 +68,7 @@ fun AlarmSoundDialog(current: AlarmSound, onDone: (AlarmSound) -> Unit, onCancel
 
     AlertDialog(
         onDismissRequest = { preview.stop(); onCancel() },
-        title = { Text("Alarm sesi") },
+        title = { Text(if (reminder) "Hatırlatıcı sesi" else "Alarm sesi") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Column(Modifier.heightIn(max = 300.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -86,7 +86,7 @@ fun AlarmSoundDialog(current: AlarmSound, onDone: (AlarmSound) -> Unit, onCancel
                     value = vol, onValueChange = { vol = it; if (playing != null) preview.setVolume(it.toInt()) }, valueRange = 5f..100f,
                     colors = SliderDefaults.colors(thumbColor = C.accent, activeTrackColor = C.accent),
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                if (!reminder) Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(sel.ramp, { sel = sel.copy(ramp = it) })
                     Text("Yavaş yükselsin (30 sn'de tam ses)", color = C.text, fontSize = 14.sp)
                 }

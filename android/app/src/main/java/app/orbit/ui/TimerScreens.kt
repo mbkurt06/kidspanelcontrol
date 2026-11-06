@@ -464,19 +464,19 @@ private fun AlarmForm(
             Chip("Bugün", !tomorrow) { tomorrow = false }
             Chip("Yarın", tomorrow) { tomorrow = true }
         }
-        if (kind == "alarm") {
+        run {
             Row(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.surface2).clickable { picking = true }.padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text("🔔 Ses", color = C.text, modifier = Modifier.weight(1f))
                 Muted(
-                    listOfNotNull(sound.title ?: "Varsayılan", sound.volume?.let { "%$it" }, if (sound.ramp) "yavaş yükselir" else null).joinToString(" · "),
+                    listOfNotNull(sound.title ?: "Varsayılan", sound.volume?.let { "%$it" }, if (sound.ramp && kind == "alarm") "yavaş yükselir" else null).joinToString(" · "),
                     13,
                 )
             }
         }
-        if (picking) AlarmSoundDialog(sound, onDone = { sound = it; picking = false }, onCancel = { picking = false })
+        if (picking) AlarmSoundDialog(sound, reminder = kind == "reminder", onDone = { sound = it; picking = false }, onCancel = { picking = false })
         if (err.isNotEmpty()) Text(err, color = C.bad)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = {

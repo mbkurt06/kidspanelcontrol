@@ -493,7 +493,7 @@ function AlarmsCard({ childId }: { childId: string }) {
               </div>
             </div>
           )}
-          {edit.kind === "alarm" && (
+          {(
             <div className="extra-group">
               <span className="pop-label">
                 SES <Info>Liste {child.name}'in telefonundan gelir (telefonun alarm sesleri ve Orbit'teki müzikler). Ses seviyesi seçersen telefon sessizde de bu seviyede çalar.</Info>
@@ -505,7 +505,7 @@ function AlarmsCard({ childId }: { childId: string }) {
                   setEdit({ ...edit, sound_uri: s?.uri ?? null, sound_title: s?.title ?? null });
                 }}
               >
-                <option value="">Varsayılan alarm sesi</option>
+                <option value="">{edit.kind === "reminder" ? "Varsayılan bildirim sesi" : "Varsayılan alarm sesi"}</option>
                 {edit.sound_uri && !sounds.some((x) => x.uri === edit.sound_uri) && <option value={edit.sound_uri}>{edit.sound_title ?? "Seçili ses"}</option>}
                 {[["alarm", "Telefonun alarm sesleri"], ["ringtone", "Zil sesleri"], ["music", "Müzikler"]].map(([k, l]) =>
                   sounds.some((x) => x.kind === k) ? (
@@ -525,10 +525,12 @@ function AlarmsCard({ childId }: { childId: string }) {
               {edit.volume != null && (
                 <input type="range" min={5} max={100} step={5} value={edit.volume} onChange={(e) => setEdit({ ...edit, volume: Number(e.target.value) })} />
               )}
-              <label className="row gap-s small">
-                <input type="checkbox" checked={!!edit.ramp} onChange={(e) => setEdit({ ...edit, ramp: e.target.checked })} />
-                Yavaş yükselsin (30 sn'de tam ses)
-              </label>
+              {edit.kind === "alarm" && (
+                <label className="row gap-s small">
+                  <input type="checkbox" checked={!!edit.ramp} onChange={(e) => setEdit({ ...edit, ramp: e.target.checked })} />
+                  Yavaş yükselsin (30 sn'de tam ses)
+                </label>
+              )}
             </div>
           )}
           {err && <p className="error">{err}</p>}

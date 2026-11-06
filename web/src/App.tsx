@@ -22,7 +22,7 @@ import TaskEdit from "./pages/TaskEdit";
 import AppRuleEdit from "./pages/AppRuleEdit";
 import Vault from "./pages/Vault";
 import { Icon } from "./components/Icon";
-import { authenticateBiometric, biometricEnabled } from "./lib/biometric";
+import { authenticateBiometric, biometricDue, biometricEnabled, markSeen } from "./lib/biometric";
 
 type Gate = "loading" | "pending" | "revoked" | "approved" | "error";
 
@@ -190,7 +190,7 @@ function Shell() {
 }
 
 function BiometricGate({ children }: { children: React.ReactNode }) {
-  const [locked, setLocked] = useState(() => biometricEnabled());
+  const [locked, setLocked] = useState(() => biometricDue());
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const authenticating = useRef(false);
@@ -201,7 +201,7 @@ function BiometricGate({ children }: { children: React.ReactNode }) {
     setBusy(true);
     setErr("");
     try {
-      if (await authenticateBiometric()) setLocked(false);
+      if (await authenticateBiometric()) { markSeen(); setLocked(false); }
       else setErr("Face ID doğrulaması yapılamadı.");
     } catch {
       setErr("Face ID doğrulaması iptal edildi veya başarısız oldu.");
@@ -212,12 +212,16 @@ function BiometricGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!biometricEnabled()) return;
+    // Ayardaki süre içinde geri dönülürse tekrar sorulmaz
     const onVisibility = () => {
-      if (document.visibilityState === "visible") setLocked(true);
+      if (document.visibilityState === "hidden") markSeen();
+      else if (biometricDue()) { setLocked(true); unlock(); }
     };
     document.addEventListener("visibilitychange", onVisibility);
-    if (document.visibilityState === "visible") unlock();
-    return () => document.removeEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", markSeen);
+    const beat = window.setInterval(() => { if (document.visibilityState === "visible") markSeen(); }, 30_000);
+    if (document.visibilityState === "visible" && biometricDue()) unlock();
+    return () => { document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("pagehide", markSeen); window.clearInterval(beat); };
   }, []);
 
   if (!locked) return <>{children}</>;

@@ -8,7 +8,7 @@ import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
 import type { CloudStatus } from "../lib/media";
 import { currentPushTypes, currentSubscription, disablePush, enablePush, isIOS, isStandalone, PUSH_EVENT_TYPES, pushSupported, updatePushTypes } from "../lib/push";
-import { biometricEnabled, biometricSupported, disableBiometric, registerBiometric } from "../lib/biometric";
+import { biometricEnabled, biometricGrace, biometricSupported, disableBiometric, registerBiometric, setBiometricGrace } from "../lib/biometric";
 
 type Parent = { user_id: string; email: string; display_name: string };
 type Invite = { email: string; display_name: string | null };
@@ -716,9 +716,32 @@ function BiometricCard() {
     <div className="card">
       <h2>Face ID ile aç <Info>Orbit ana ekrandan açıldığında cihazın Face ID/Touch ID doğrulamasını ister.</Info></h2>
       {!supported ? <p className="muted tiny">Bu cihaz veya tarayıcı platform doğrulamasını desteklemiyor.</p> : enabled ? (
-        <div className="row gap-s wrap"><span className="pill">Face ID kilidi açık</span><button className="btn small ghost" onClick={disable}>Kapat</button></div>
+        <>
+          <div className="row gap-s wrap"><span className="pill">Face ID kilidi açık</span><button className="btn small ghost" onClick={disable}>Kapat</button></div>
+          <GraceSelect />
+        </>
       ) : <button className="btn" onClick={enable} disabled={busy}>{busy ? "Hazırlanıyor…" : "Face ID ile korumayı aç"}</button>}
       {err && <p className="error">{err}</p>}
     </div>
+  );
+}
+
+/** Face ID ne zaman tekrar sorulsun (bu cihazda) */
+function GraceSelect() {
+  const [v, setV] = useState(biometricGrace());
+  return (
+    <label className="field">
+      <span>Tekrar sorulsun <Info>Panelden çıkıp bu süre içinde geri dönersen Face ID sorulmaz. Ayar sadece bu cihaz için.</Info></span>
+      <select value={v} onChange={(e) => { const n = Number(e.target.value); setV(n); setBiometricGrace(n); }}>
+        <option value={0}>Her açılışta</option>
+        <option value={1}>1 dk sonra</option>
+        <option value={5}>5 dk sonra</option>
+        <option value={15}>15 dk sonra</option>
+        <option value={30}>30 dk sonra</option>
+        <option value={60}>1 saat sonra</option>
+        <option value={240}>4 saat sonra</option>
+        <option value={1440}>1 gün sonra</option>
+      </select>
+    </label>
   );
 }

@@ -220,7 +220,7 @@ function ChildCard({ child }: { child: Child }) {
   return (
     <div className="card child-card">
       <Link to={`/child/${child.id}`} className="child-main">
-        <Ring value={open && !unlimited ? st!.remaining_minutes : kiosk || limited || closed ? 1 : 0} max={open && !unlimited ? st!.allowance_minutes || 1 : 1} color={ringColor} size={66}>
+        <Ring value={open && !unlimited ? st!.remaining_minutes : kiosk || limited || closed ? 1 : 0} max={open && !unlimited ? Math.max(st!.allowance_minutes, st!.remaining_minutes + st!.used_minutes, 1) : 1} color={ringColor} size={66}>
           {ringInner}
         </Ring>
         <div className="grow">

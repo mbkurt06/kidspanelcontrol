@@ -191,6 +191,10 @@ function Shell() {
 
 function BiometricGate({ children }: { children: React.ReactNode }) {
   const [locked, setLocked] = useState(() => biometricDue());
+  // Kilitliyken "son kullanım" yazılmaz (yoksa kilit ekranından çıkıp dönünce sormadan açılırdı)
+  const lockedRef = useRef(locked);
+  lockedRef.current = locked;
+  const seen = () => { if (!lockedRef.current) markSeen(); };
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const authenticating = useRef(false);
@@ -214,14 +218,14 @@ function BiometricGate({ children }: { children: React.ReactNode }) {
     if (!biometricEnabled()) return;
     // Ayardaki süre içinde geri dönülürse tekrar sorulmaz
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") markSeen();
+      if (document.visibilityState === "hidden") seen();
       else if (biometricDue()) { setLocked(true); unlock(); }
     };
     document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("pagehide", markSeen);
-    const beat = window.setInterval(() => { if (document.visibilityState === "visible") markSeen(); }, 30_000);
+    window.addEventListener("pagehide", seen);
+    const beat = window.setInterval(() => { if (document.visibilityState === "visible") seen(); }, 30_000);
     if (document.visibilityState === "visible" && biometricDue()) unlock();
-    return () => { document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("pagehide", markSeen); window.clearInterval(beat); };
+    return () => { document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("pagehide", seen); window.clearInterval(beat); };
   }, []);
 
   if (!locked) return <>{children}</>;

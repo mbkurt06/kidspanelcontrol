@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { DateField } from "../components/DateTime";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { ChildChips } from "../components/ChildChips";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { minutesText, relTime, todayISO } from "../lib/util";
@@ -132,7 +133,6 @@ export default function Tasks() {
   const [templatesOpen, setTemplatesOpen] = useState(false);
   // Çocuk seçimi menüdeki seçimle aynı (ayrı tutulunca menüde başka çocuk seçiliyken görevler "bugün olmayan" görünüyordu)
   const childFilter = fam.selectedChildId;
-  const setChildFilter = fam.setSelectedChildId;
   const [err, setErr] = useState("");
   const today = todayISO();
   const [historyView, setHistoryView] = useState<"day" | "week" | "month" | "range">("day");
@@ -318,16 +318,7 @@ export default function Tasks() {
         </section>
       )}
 
-      {fam.children.length > 1 && (
-        <div className="chips">
-          <button className={`chip-btn small-chip ${childFilter === "all" ? "on" : ""}`} onClick={() => setChildFilter("all")}>Herkes</button>
-          {fam.children.map((c) => (
-            <button key={c.id} className={`chip-btn small-chip ${childFilter === c.id ? "on" : ""}`} onClick={() => setChildFilter(c.id)}>
-              <span className="dot" style={{ background: c.color, marginTop: 0 }} /> {c.name}
-            </button>
-          ))}
-        </div>
-      )}
+      <ChildChips />
 
       <div className="tasks-layout">
         <main className="tasks-main">

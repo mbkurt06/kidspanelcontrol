@@ -6,6 +6,7 @@ import { agendaDateText, todayISO } from "../lib/util";
 import type { AgendaItem, Task } from "../lib/types";
 import { useNavigate } from "react-router-dom";
 import { Icon } from "../components/Icon";
+import { ChildChips } from "../components/ChildChips";
 
 export default function Agenda() {
   const fam = useFamily();
@@ -41,6 +42,7 @@ export default function Agenda() {
 
   return <div className="page">
     <header className="page-head"><h1>Ajanda</h1></header>
+    <ChildChips />
     {err && <p className="error">{err}</p>}
     {!grouped.some((g) => g.items.length) && <p className="muted small">Ajandada kayıt yok.</p>}
     {grouped.map(({ child, items: list }) => <section className="agenda-group" key={child.id}>

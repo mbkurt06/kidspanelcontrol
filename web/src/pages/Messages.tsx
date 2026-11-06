@@ -4,6 +4,7 @@ import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { relTime } from "../lib/util";
 import { Icon } from "../components/Icon";
+import { ChildChips } from "../components/ChildChips";
 
 type Msg = { id: string; child_id: string; from_parent: boolean; sender_name: string | null; body: string; created_at: string; read_at: string | null };
 
@@ -40,6 +41,7 @@ export function MessagesList() {
       <header className="page-head">
         <h1>Mesajlar</h1>
       </header>
+      <ChildChips />
       {fam.visibleChildren.map((c) => {
         const m = last[c.id];
         return (

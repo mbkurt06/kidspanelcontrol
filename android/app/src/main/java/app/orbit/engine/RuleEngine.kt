@@ -174,8 +174,9 @@ class RuleEngine(private val rules: Rules) {
             profile.maxTotalMinutes?.let { minOf(raw, it) } ?: raw
         } else {
             if (sections.any { it.budgetMinutes == null }) return 0
+            // Güne eklenen süreler: o güne verilenler + o gün cüzdandan açılanlar
             sections.sumOf { it.budgetMinutes ?: 0 } + rules.grants.filter {
-                !it.vault && it.window == null && it.validOn == day
+                !it.vault && it.window == null && (it.validOn == day || it.activatedOn == day)
             }.sumOf { it.minutes }
         }
         return ((base * 60L - usage.countedSeconds).coerceAtLeast(0) / 60L).toInt()

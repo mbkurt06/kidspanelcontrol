@@ -2,6 +2,7 @@ import { FindPhone } from "../components/FindPhone";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DateField, TimeField } from "../components/DateTime";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import { createPortal } from "react-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { closedModeOf, fromPatch, giveNow, grantMinutes, insertGrant, nowPatch, sendCommand, type ClosedMode, type GrantPatch } from "../lib/actions";
@@ -1193,7 +1194,7 @@ function PlanSheet({
   }
 
   const dated = where !== "wallet" && where !== "now";
-  return (
+  return createPortal(
     <div className="sheet-backdrop" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <h2>Süreyi ver / planla</h2>
@@ -1205,6 +1206,7 @@ function PlanSheet({
           <span>Nereye</span>
           <select value={where} onChange={(e) => setWhere(e.target.value)}>
             <option value="now">Hemen kullansın</option>
+            {!(!grant.vault && !grant.valid_on) && <option value="wallet">Cüzdana aktar (çocuk istediği gün kullanır)</option>}
             <option value="window">Belirli saatten itibaren</option>
             <option value="pool">Gün boyu: süreli her bölümde</option>
             {sections.map((o) => (
@@ -1212,7 +1214,6 @@ function PlanSheet({
                 {o.label}
               </option>
             ))}
-            {!(!grant.vault && !grant.valid_on) && <option value="wallet">Çocuğun cüzdanına (kendisi kullansın)</option>}
           </select>
         </label>
         {where === "now" && <Info>Açık saatlerdeyse kalan süresine hemen eklenir; kapalı saatlerdeyse şu andan itibaren bu süre kadar telefon açılır.</Info>}
@@ -1251,7 +1252,8 @@ function PlanSheet({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

@@ -171,7 +171,6 @@ html:has(.shell), body:has(.shell) { height: 100%; overflow: hidden; overscroll-
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
 .menu-toggle {
@@ -2195,3 +2194,7 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .bars-month .bar-track { height: 56px; }
 .bars-month .bar-val { min-height: 0; font-size: 9px; }
 .bars .bar.future { opacity: .35; cursor: default; }
+
+/* Alttan açılan pencereler: alt menünün üstünde, ekrana sığmazsa kendi içinde kayar */
+.sheet-backdrop { z-index: 60; }
+.sheet { max-height: calc(100dvh - env(safe-area-inset-top) - 16px); overflow-y: auto; overscroll-behavior: contain; }

@@ -2153,7 +2153,6 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
   top: 0;
   z-index: 20;
   background: var(--bg);
-  margin-top: calc(-1 * (env(safe-area-inset-top) + 10px));
   padding-top: calc(env(safe-area-inset-top) + 10px);
   padding-bottom: 8px;
   margin-left: -16px;
@@ -2161,3 +2160,11 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
   padding-right: 16px;
   padding-left: 68px;
 }
+
+/* Sabit başlık kendi üst boşluğunu taşır (eksi boşlukla iPhone'da durum çubuğunun altına kayıyordu) */
+.content:has(.child-head) { padding-top: 0; }
+
+/* Rapor: 7 çubuk dar ekrana sığsın, uzun süre yazısı iki satıra insin */
+.bars { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.bars .bar { min-width: 0; }
+.bars .bar-val { white-space: normal; text-align: center; line-height: 1.15; min-height: 24px; overflow-wrap: anywhere; }

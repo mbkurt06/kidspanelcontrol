@@ -155,8 +155,20 @@ a {
     opacity: 0.6;
   }
 }
+/* Uygulama kabuğu: sayfa kendi içinde kayar, alt menü kabuğun altında sabit durur.
+   (iPhone ana ekran uygulamasında position: fixed alt menü kaydırınca/klavyeden sonra ortaya kayıyordu.) */
+html:has(.shell), body:has(.shell) { height: 100%; overflow: hidden; overscroll-behavior: none; }
 .shell {
-  min-height: 100dvh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.scroller {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 .menu-toggle {
   position: fixed;
@@ -211,7 +223,7 @@ a {
 .side-menu-bottom { margin-top: auto; border-top: 1px solid var(--line); padding-top: 12px; }
 .side-menu-bottom a { color: var(--muted); display: grid; place-items: center; width: 40px; height: 40px; }
 .content {
-  padding: calc(env(safe-area-inset-top) + 10px) 16px calc(env(safe-area-inset-bottom) + 88px);
+  padding: calc(env(safe-area-inset-top) + 10px) 16px 20px;
   max-width: 680px;
   margin: 0 auto;
 }
@@ -245,10 +257,8 @@ a {
 }
 
 .tabbar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  position: relative;
+  flex: none;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   background: color-mix(in srgb, var(--surface) 88%, transparent);
@@ -257,10 +267,6 @@ a {
   border-top: 1px solid var(--line);
   padding: 6px 4px calc(env(safe-area-inset-bottom) + 6px);
   z-index: 10;
-  /* iPhone ana ekran uygulamasında kaydırırken sayfanın ortasına kaymasın */
-  transform: translate3d(0, 0, 0);
-  -webkit-transform: translate3d(0, 0, 0);
-  will-change: transform;
 }
 .tabbar a {
   display: flex;
@@ -1174,7 +1180,7 @@ summary.section-collapse-head { list-style: none; cursor: pointer; }
 }
 .chat-input {
   position: sticky;
-  bottom: calc(env(safe-area-inset-bottom) + 70px);
+  bottom: 0;
   display: flex;
   gap: 8px;
   align-items: flex-end;

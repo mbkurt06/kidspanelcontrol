@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Navigate, NavLink, Route, Routes } from "react-router-dom";
+import { Navigate, NavLink, Route, Routes, useLocation } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import { confirmDevice, deviceLabel, errorText, renewDeviceFor, selectDeviceFor, supabase } from "./lib/supabase";
 import { FamilyProvider } from "./lib/family";
@@ -237,6 +237,9 @@ function BiometricGate({ children }: { children: React.ReactNode }) {
 function ShellContent() {
   const fam = useFamily();
   const [menuOpen, setMenuOpen] = useState(false);
+  // Sayfa değişince içerik başa dönsün (sayfa artık kendi kutusunda kayıyor)
+  const loc = useLocation();
+  useEffect(() => { document.getElementById("scroller")?.scrollTo(0, 0); }, [loc.pathname]);
   return (
     <div className="shell">
       <button className="menu-toggle" aria-label="Menüyü aç" onClick={() => setMenuOpen(true)}>☰</button>
@@ -248,6 +251,7 @@ function ShellContent() {
         </div>
         <div className="side-menu-bottom"><NavLink to="/settings" onClick={() => setMenuOpen(false)} aria-label="Web sayfası ayarları"><Icon name="gear" /></NavLink></div>
       </aside></div>}
+      <div className="scroller" id="scroller">
       <main className="content">
         <Routes>
           <Route path="/" element={<Home />} />
@@ -274,6 +278,7 @@ function ShellContent() {
           <Route path="/child-settings" element={<ChildSettings />} />
         </Routes>
       </main>
+      </div>
       <nav className="tabbar">
         <NavLink to="/" end>
           <Icon name="home" />

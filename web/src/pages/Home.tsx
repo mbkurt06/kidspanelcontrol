@@ -229,9 +229,8 @@ function ChildCard({ child }: { child: Child }) {
           {ringInner}
         </Ring>
         <div className="grow">
-          <div className="row between">
-            <h2 className="row gap-xs" style={{ alignItems: "center" }}>
-              {child.name}
+          <div className="row between name-row">
+            <h2>{child.name}</h2>
               {conn && (
                 <span
                   role="button"
@@ -242,7 +241,6 @@ function ChildCard({ child }: { child: Child }) {
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowSeen(!showSeen); }}
                 />
               )}
-            </h2>
             <Icon name="chevron" size={18} />
           </div>
           {showSeen && st && (

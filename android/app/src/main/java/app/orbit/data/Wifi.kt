@@ -44,7 +44,7 @@ object Wifi {
         /** Telefonun internete çıkabildiği herhangi bir bağlantı var mı (mobil veri dahil) */
         val online: Boolean = true,
     )
-    data class Settings(val childAdd: Boolean = true, val notify: Boolean = true, val showPasswords: Boolean = true)
+    data class Settings(val childAdd: Boolean = true, val notify: Boolean = true, val showPasswords: Boolean = true, val systemWifi: Boolean = false)
 
     val saved = MutableStateFlow<List<Saved>>(emptyList())
     val nearby = MutableStateFlow<List<Nearby>>(emptyList())
@@ -80,10 +80,16 @@ object Wifi {
     // --- ayarlar ve önbellek ---
 
     fun applySettings(j: JSONObject?) {
-        val s = Settings(j?.optBoolean("child_add", true) ?: true, j?.optBoolean("notify", true) ?: true, j?.optBoolean("show_passwords", true) ?: true)
-        if (s != settings.value) {
+        val s = Settings(
+            j?.optBoolean("child_add", true) ?: true, j?.optBoolean("notify", true) ?: true, j?.optBoolean("show_passwords", true) ?: true,
+            j?.optBoolean("system_wifi", false) ?: false,
+        )
+        val first = !Store.prefs().contains("systemWifi")
+        if (s != settings.value || first) {
             settings.value = s
-            Store.prefs().edit().putString("wifiSettings", JSONObject().put("child_add", s.childAdd).put("notify", s.notify).put("show_passwords", s.showPasswords).toString()).apply()
+            Store.prefs().edit().putString("wifiSettings", JSONObject().put("child_add", s.childAdd).put("notify", s.notify).put("show_passwords", s.showPasswords).put("system_wifi", s.systemWifi).toString())
+                .putBoolean("systemWifi", s.systemWifi).apply()
+            if (::ctx.isInitialized) Policy.applyWifiLock(ctx)
         }
     }
 

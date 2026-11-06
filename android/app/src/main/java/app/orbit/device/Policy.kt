@@ -50,8 +50,26 @@ object Policy {
      * maintenance = ebeveyn modu: kısıtlamalar (uygulama yükleme/yönetme, geliştirici seçenekleri) kalkar,
      * uygulamaların izin istekleri sorulmadan verilir. Süre bitince her şey geri gelir.
      */
+    @Volatile private var lastMaintenance = false
+
+    /**
+     * Wi-Fi sadece Orbit'ten: telefonun kendi Wi-Fi ayarlarında ağ eklenemez/değiştirilemez (Wi-Fi açıp kapatmak serbest).
+     * Panelde "telefonun Wi-Fi ayarlarını kullanabilir" açıksa ya da ebeveyn modunda kısıt kalkar.
+     * Orbit telefon yöneticisi olduğu için kendi Wi-Fi ekranından bağlanmaya devam eder.
+     */
+    fun applyWifiLock(ctx: Context, maintenance: Boolean = lastMaintenance) {
+        if (!isOwner(ctx)) return
+        val free = maintenance || app.orbit.data.Store.prefs().getBoolean("systemWifi", false)
+        runCatching {
+            if (free) dpm(ctx).clearUserRestriction(admin(ctx), UserManager.DISALLOW_CONFIG_WIFI)
+            else dpm(ctx).addUserRestriction(admin(ctx), UserManager.DISALLOW_CONFIG_WIFI)
+        }.onFailure { Log.w(TAG, "wifi kısıtı", it) }
+    }
+
     fun applyBase(ctx: Context, maintenance: Boolean) {
         if (!isOwner(ctx)) return
+        lastMaintenance = maintenance
+        applyWifiLock(ctx, maintenance)
         val d = dpm(ctx)
         val a = admin(ctx)
         for (r in RESTRICTIONS) runCatching {

@@ -24,7 +24,7 @@ type Row = { id: string; v: VaultEntry; updated_at: string; updated_by: string }
 const blank: VaultEntry = { app: "", username: "", password: "", recovery: "", note: "", history: [] };
 const blankWifi: VaultEntry = { ...blank, kind: "wifi", security: "wpa", hidden: false };
 const SEC: Array<[string, string]> = [["wpa", "WPA2"], ["wpa3", "WPA3"], ["open", "Şifresiz"]];
-const WIFI_DEFAULT = { child_add: true, notify: true, show_passwords: true };
+const WIFI_DEFAULT = { child_add: true, notify: true, show_passwords: true, system_wifi: false };
 
 export default function Vault() {
   const { id } = useParams();
@@ -425,6 +425,13 @@ export default function Vault() {
                 <label className="row gap-s small">
                   <input type="checkbox" checked={wifiSet.show_passwords} disabled={busy} onChange={(e) => setWifi("show_passwords", e.target.checked)} />
                   {child.name} Wi-Fi şifrelerini görebilir
+                </label>
+                <label className="row gap-s small">
+                  <input type="checkbox" checked={wifiSet.system_wifi} disabled={busy} onChange={(e) => setWifi("system_wifi", e.target.checked)} />
+                  <span>
+                    Telefonun kendi Wi-Fi ayarlarını kullanabilir{" "}
+                    <Info>Kapalıyken {child.name} ağlara sadece Orbit'in Wi-Fi ekranından bağlanır; telefonun Ayarlar › Wi-Fi bölümünde ve üst menüde ağ seçemez, ekleyemez. Wi-Fi'yi açıp kapatmak serbest. Ebeveyn modunda bu kısıt kalkar.</Info>
+                  </span>
                 </label>
               </div>
             </div>

@@ -28,6 +28,32 @@ export default function ChildPage() {
   });
   // Çocuk değişince aynı sekme açık kalır
   useEffect(() => { try { localStorage.setItem("orbit.childTab", tab); } catch { /* yok */ } }, [tab]);
+  // Açılıp kapanan bölümler çocuklar arasında aynı kalsın (panel açıkken): sekme + bölüm başlığına göre
+  const sectionsRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const root = sectionsRef.current;
+    if (!root) return;
+    const keyOf = (d: HTMLDetailsElement) => `${tab}:${(d.querySelector("summary")?.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 60)}`;
+    let state: Record<string, boolean> = {};
+    try { state = JSON.parse(sessionStorage.getItem("orbit.childSections") ?? "{}"); } catch { /* yok */ }
+    const apply = () => root.querySelectorAll("details").forEach((d) => {
+      const k = keyOf(d);
+      if (k in state && d.open !== state[k]) d.open = state[k];
+    });
+    const onToggle = (e: Event) => {
+      const d = e.target as HTMLDetailsElement;
+      if (d.tagName !== "DETAILS") return;
+      state[keyOf(d)] = d.open;
+      try { sessionStorage.setItem("orbit.childSections", JSON.stringify(state)); } catch { /* yok */ }
+    };
+    apply();
+    // Bölümler veri gelince sonradan çizilebilir
+    const mo = new MutationObserver(() => apply());
+    mo.observe(root, { childList: true, subtree: true });
+    const stop = window.setTimeout(() => mo.disconnect(), 4000);
+    root.addEventListener("toggle", onToggle, true);
+    return () => { mo.disconnect(); window.clearTimeout(stop); root.removeEventListener("toggle", onToggle, true); };
+  }, [id, tab]);
   // Soldaki menüden başka çocuk seçilince bu sayfa o çocuğa geçer
   const prevSel = useRef(fam.selectedChildId);
   useEffect(() => {
@@ -59,8 +85,8 @@ export default function ChildPage() {
             </button>
           ))}
         </div>
-        <Link to={`/child/${child.id}/vault`} className="btn small">
-          <Icon name="key" size={16} /> Şifreler
+        <Link to={`/child/${child.id}/vault`} className="icon-btn" aria-label="Şifreler" title="Şifreler">
+          <Icon name="key" size={18} />
         </Link>
       </header>
       <ParentModeCard key={`pm-${child.id}`} childId={child.id} />
@@ -83,7 +109,7 @@ export default function ChildPage() {
         ))}
         </div>
       </div>
-      <div key={child.id} className="stack">
+      <div key={child.id} className="stack" ref={sectionsRef}>
       {tab === "apps" && <AppsTab childId={child.id} />}
       {tab === "program" && <ProgramTab childId={child.id} />}
       {tab === "time" && <TimeTab childId={child.id} />}
@@ -242,7 +268,11 @@ function AppsTab({ childId }: { childId: string }) {
   const [apps, setApps] = useState<ChildApp[] | null>(null);
   const [q, setQ] = useState("");
   const [showSystem, setShowSystem] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  // Açık uygulama grupları çocuklar arasında aynı kalır (panel açıkken)
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(sessionStorage.getItem("orbit.appGroupsOpen") ?? "{}"); } catch { return {}; }
+  });
+  useEffect(() => { try { sessionStorage.setItem("orbit.appGroupsOpen", JSON.stringify(openGroups)); } catch { /* yok */ } }, [openGroups]);
   const [err, setErr] = useState("");
   const [pendingGroup, setPendingGroup] = useState<Record<string, string>>({});
 

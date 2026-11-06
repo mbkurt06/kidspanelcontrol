@@ -1,5 +1,5 @@
 import { FindPhone } from "../components/FindPhone";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { DateField, TimeField } from "../components/DateTime";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
@@ -54,6 +54,30 @@ export default function ChildPage() {
     root.addEventListener("toggle", onToggle, true);
     return () => { mo.disconnect(); window.clearTimeout(stop); root.removeEventListener("toggle", onToggle, true); };
   }, [id, tab]);
+  // Çocuk değişince sayfa aynı yerde kalsın: son kaydırma konumu, içerik yüklenince geri verilir
+  const lastScroll = useRef(0);
+  useEffect(() => {
+    const sc = document.getElementById("scroller");
+    if (!sc) return;
+    const on = () => { lastScroll.current = sc.scrollTop; };
+    sc.addEventListener("scroll", on, { passive: true });
+    return () => sc.removeEventListener("scroll", on);
+  }, []);
+  const firstId = useRef(id);
+  useLayoutEffect(() => {
+    if (firstId.current === id) return;
+    firstId.current = id;
+    const sc = document.getElementById("scroller");
+    const target = lastScroll.current;
+    if (!sc || target <= 0) return;
+    let tries = 0;
+    const t = window.setInterval(() => {
+      sc.scrollTop = target;
+      if (Math.abs(sc.scrollTop - target) < 2 || ++tries > 30) window.clearInterval(t);
+    }, 60);
+    sc.scrollTop = target;
+    return () => window.clearInterval(t);
+  }, [id]);
   // Soldaki menüden başka çocuk seçilince bu sayfa o çocuğa geçer
   const prevSel = useRef(fam.selectedChildId);
   useEffect(() => {
@@ -68,7 +92,7 @@ export default function ChildPage() {
 
   return (
     <div className="page">
-      <header className="page-head">
+      <header className="page-head child-head">
         <Link to="/" className="icon-btn" aria-label="Geri">
           <Icon name="back" />
         </Link>

@@ -239,7 +239,15 @@ function ShellContent() {
   const [menuOpen, setMenuOpen] = useState(false);
   // Sayfa değişince içerik başa dönsün (sayfa artık kendi kutusunda kayıyor)
   const loc = useLocation();
-  useEffect(() => { document.getElementById("scroller")?.scrollTo(0, 0); }, [loc.pathname]);
+  const prevPath = useRef(loc.pathname);
+  useEffect(() => {
+    const prev = prevPath.current;
+    prevPath.current = loc.pathname;
+    // Çocuk sayfasında çocuklar arası geçişte konum korunur (ChildPage geri yükler)
+    const child = /^\/child\/[^/]+$/;
+    if (child.test(prev) && child.test(loc.pathname)) return;
+    document.getElementById("scroller")?.scrollTo(0, 0);
+  }, [loc.pathname]);
   return (
     <div className="shell">
       <button className="menu-toggle" aria-label="Menüyü aç" onClick={() => setMenuOpen(true)}>☰</button>

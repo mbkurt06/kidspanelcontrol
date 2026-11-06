@@ -78,13 +78,25 @@ export default function ChildPage() {
     sc.scrollTop = target;
     return () => window.clearInterval(t);
   }, [id]);
+  // Geçişte yeni çocuğun verisi gelene kadar sayfa boyu korunur: sayfa bir an yukarı zıplamaz
+  const [lockH, setLockH] = useState(0);
+  const lockTimer = useRef<number | null>(null);
+  function goChild(cid: string) {
+    const h = sectionsRef.current?.offsetHeight ?? 0;
+    if (h > 0) {
+      setLockH(h);
+      if (lockTimer.current) window.clearTimeout(lockTimer.current);
+      lockTimer.current = window.setTimeout(() => setLockH(0), 2500);
+    }
+    nav(`/child/${cid}`, { replace: true });
+  }
   // Soldaki menüden başka çocuk seçilince bu sayfa o çocuğa geçer
   const prevSel = useRef(fam.selectedChildId);
   useEffect(() => {
     const sel = fam.selectedChildId;
     if (sel !== prevSel.current) {
       prevSel.current = sel;
-      if (sel !== "all" && sel !== id) nav(`/child/${sel}`, { replace: true });
+      if (sel !== "all" && sel !== id) goChild(sel);
     }
   }, [fam.selectedChildId, id, nav]);
 
@@ -103,7 +115,7 @@ export default function ChildPage() {
               role="tab"
               aria-selected={c.id === child.id}
               className={`chip ${c.id === child.id ? "on" : ""}`}
-              onClick={() => c.id !== child.id && nav(`/child/${c.id}`, { replace: true })}
+              onClick={() => c.id !== child.id && goChild(c.id)}
             >
               <span className="dot" style={{ background: c.color }} /> {c.name}
             </button>
@@ -133,7 +145,7 @@ export default function ChildPage() {
         ))}
         </div>
       </div>
-      <div key={child.id} className="stack" ref={sectionsRef}>
+      <div key={child.id} className="stack" ref={sectionsRef} style={lockH ? { minHeight: lockH } : undefined}>
       {tab === "apps" && <AppsTab childId={child.id} />}
       {tab === "program" && <ProgramTab childId={child.id} />}
       {tab === "time" && <TimeTab childId={child.id} />}

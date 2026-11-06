@@ -14,8 +14,13 @@ import java.time.LocalDate
 object Store {
     private lateinit var p: SharedPreferences
 
+    /** Uygulama bağlamı (servis/arka plan işlerinde etkinlik açmak için) */
+    lateinit var appCtx: Context
+        private set
+
     fun init(ctx: Context) {
         if (!::p.isInitialized) p = ctx.applicationContext.getSharedPreferences("orbit", Context.MODE_PRIVATE)
+        if (!::appCtx.isInitialized) appCtx = ctx.applicationContext
     }
 
     fun prefs(): SharedPreferences = p

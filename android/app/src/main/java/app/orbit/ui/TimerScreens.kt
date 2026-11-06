@@ -325,20 +325,20 @@ fun AlarmsScreen() {
         }
     }
 
-    fun saveAlarm(title: String, kind: String, time: LocalTime, days: Set<Int>, date: LocalDate?, active: Boolean) {
+    fun saveAlarm(title: String, kind: String, time: LocalTime, days: Set<Int>, date: LocalDate?, active: Boolean, sound: app.orbit.data.AlarmSound) {
         val old = list
         val current = editing
         val local = AlarmDef(
             current?.id ?: "local-${System.nanoTime()}", title.trim().ifBlank { "Alarm" }, kind, time, days, date, active,
             current?.byParent ?: false, current?.canEdit ?: true, current?.canDelete ?: true,
-            current?.snoozeMax ?: 3, current?.snoozeMinutes ?: 5,
+            current?.snoozeMax ?: 3, current?.snoozeMinutes ?: 5, sound,
         )
         list = if (current == null) old + local else old.map { if (it.id == current.id) local else it }
         editing = null
         creating = false
         scope.launch {
             pendingWrites++
-            val ok = writeLock.withLock { withContext(Dispatchers.IO) { Alarms.save(current?.id, title, kind, time, days, date, active) } }
+            val ok = writeLock.withLock { withContext(Dispatchers.IO) { Alarms.save(current?.id, title, kind, time, days, date, active, sound) } }
             if (!ok) {
                 list = old
                 msg = "Kaydedilemedi; bağlantıyı kontrol et"
@@ -364,7 +364,7 @@ fun AlarmsScreen() {
             editing,
             onCancel = { editing = null; creating = false },
             onDelete = { deleteAlarm(it) },
-        ) { title, kind, time, days, date, active -> saveAlarm(title, kind, time, days, date, active) }
+        ) { title, kind, time, days, date, active, sound -> saveAlarm(title, kind, time, days, date, active, sound) }
         return
     }
 
@@ -397,7 +397,7 @@ fun AlarmsScreen() {
                 val token = System.nanoTime()
                 pendingByAlarm[a.id] = token
                 list = list.map { if (it.id == a.id) it.copy(active = on) else it }
-                run({ Alarms.save(a.id, a.title, a.kind, a.time, a.days, a.onDate, on) }) {
+                run({ Alarms.save(a.id, a.title, a.kind, a.time, a.days, a.onDate, on, a.sound) }) {
                     if (pendingByAlarm[a.id] == token) {
                         list = list.map { if (it.id == a.id) it.copy(active = before) else it }
                         pendingByAlarm.remove(a.id)
@@ -431,8 +431,10 @@ private fun AlarmForm(
     a: AlarmDef?,
     onCancel: () -> Unit,
     onDelete: (AlarmDef) -> Unit,
-    onSave: (String, String, LocalTime, Set<Int>, LocalDate?, Boolean) -> Unit,
+    onSave: (String, String, LocalTime, Set<Int>, LocalDate?, Boolean, app.orbit.data.AlarmSound) -> Unit,
 ) {
+    var sound by remember { mutableStateOf(a?.sound ?: app.orbit.data.AlarmSound()) }
+    var picking by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf(a?.title ?: "") }
     var kind by remember { mutableStateOf(a?.kind ?: "alarm") }
     var hh by remember { mutableStateOf(a?.time?.hour ?: 7) }
@@ -462,12 +464,25 @@ private fun AlarmForm(
             Chip("Bugün", !tomorrow) { tomorrow = false }
             Chip("Yarın", tomorrow) { tomorrow = true }
         }
+        if (kind == "alarm") {
+            Row(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.surface2).clickable { picking = true }.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("🔔 Ses", color = C.text, modifier = Modifier.weight(1f))
+                Muted(
+                    listOfNotNull(sound.title ?: "Varsayılan", sound.volume?.let { "%$it" }, if (sound.ramp) "yavaş yükselir" else null).joinToString(" · "),
+                    13,
+                )
+            }
+        }
+        if (picking) AlarmSoundDialog(sound, onDone = { sound = it; picking = false }, onCancel = { picking = false })
         if (err.isNotEmpty()) Text(err, color = C.bad)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = {
                 val t = LocalTime.of(hh, mm)
                 val date = if (days.isEmpty()) LocalDate.now().plusDays(if (tomorrow) 1 else 0) else null
-                if (title.isBlank()) err = "Başlık yaz" else onSave(title, kind, t, days, date, a?.active ?: true)
+                if (title.isBlank()) err = "Başlık yaz" else onSave(title, kind, t, days, date, a?.active ?: true, sound)
             }, colors = ButtonDefaults.buttonColors(containerColor = C.accent)) { Text("Kaydet") }
             OutlinedButton(onClick = onCancel) { Text("Vazgeç") }
             if (a != null && a.deletable) TextButton(onClick = { onDelete(a) }) { Text("Sil", color = C.bad) }

@@ -15,6 +15,9 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
+/** Alarm sesi: uri yoksa telefonun varsayılan alarm sesi; volume yoksa telefonun alarm ses seviyesi */
+data class AlarmSound(val uri: String? = null, val title: String? = null, val volume: Int? = null, val ramp: Boolean = false)
+
 /** Alarm / hatırlatıcı (ebeveynin ya da çocuğun kurduğu). */
 data class AlarmDef(
     val id: String,
@@ -30,6 +33,7 @@ data class AlarmDef(
     val canDelete: Boolean,
     val snoozeMax: Int,
     val snoozeMinutes: Int,
+    val sound: AlarmSound = AlarmSound(),
 ) {
     val editable get() = !byParent || canEdit
     val deletable get() = !byParent || canDelete
@@ -75,6 +79,12 @@ object Alarms {
                 o.optBoolean("active", true), o.optBoolean("by_parent"),
                 o.optBoolean("child_can_edit", true), o.optBoolean("child_can_delete", true),
                 o.optInt("snooze_max", 3), o.optInt("snooze_minutes", 5),
+                AlarmSound(
+                    o.optString("sound_uri").takeIf { !o.isNull("sound_uri") && it.isNotBlank() },
+                    o.optString("sound_title").takeIf { !o.isNull("sound_title") && it.isNotBlank() },
+                    if (o.isNull("volume") || !o.has("volume")) null else o.optInt("volume"),
+                    o.optBoolean("ramp"),
+                ),
             )
         }.getOrNull()
     }
@@ -125,11 +135,13 @@ object Alarms {
 
     // --- Sunucu (IO iş parçacığında) ---
 
-    fun save(id: String?, title: String, kind: String, time: LocalTime, days: Set<Int>, onDate: LocalDate?, active: Boolean): Boolean {
+    fun save(id: String?, title: String, kind: String, time: LocalTime, days: Set<Int>, onDate: LocalDate?, active: Boolean, sound: AlarmSound? = null): Boolean {
         val c = Store.creds ?: return false
         val body = JSONObject().put("title", title.trim().ifBlank { "Alarm" }.take(60)).put("kind", kind)
             .put("at_time", time.toString()).put("days", JSONArray(days.sorted()))
             .put("on_date", onDate?.toString() ?: JSONObject.NULL).put("active", active)
+        if (sound != null) body.put("sound_uri", sound.uri ?: JSONObject.NULL).put("sound_title", sound.title ?: JSONObject.NULL)
+            .put("volume", sound.volume ?: JSONObject.NULL).put("ramp", sound.ramp)
         return runCatching {
             if (id == null) Api.post("alarms", body.put("family_id", c.familyId).put("child_id", c.childId))
             else Api.patch("alarms?id=eq.$id", body)

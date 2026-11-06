@@ -124,6 +124,11 @@ object Realtime {
     private fun onChange(d: JSONObject?) {
         val table = d?.optString("table") ?: return
         Live.syncRequested = true
+        // Telefonu bul: beklemeden çal (tam eşitlemeyi beklemeden)
+        val rec = d.optJSONObject("record")
+        if (table == "commands" && rec?.optJSONObject("payload")?.has("find") == true) {
+            runCatching { app.orbit.ui.FindPhone.handle(Store.appCtx, rec.getString("id"), rec.getJSONObject("payload"), rec.optString("created_at")) }
+        }
         if (table == "vault_holders" || table == "commands" && d.optJSONObject("record")?.optJSONObject("payload")?.optBoolean("vault") == true) {
             Vault.shareSoon()
         }

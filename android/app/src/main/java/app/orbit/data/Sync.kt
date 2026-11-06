@@ -98,6 +98,8 @@ object Sync {
             Wifi.applySettings(kid.optJSONObject(0)?.optJSONObject("wifi_settings"))
             // Kasadaki Wi-Fi ağları (panelden eklenenler dahil) telefona tanıtılır; 5 dk'da bir
             runCatching { Wifi.syncVault() }.onFailure { Log.w(TAG, "wifi kasa", it) }
+            // Panelde alarm sesi seçilebilsin diye telefonun ses listesi (değişince)
+            runCatching { Sounds.report(Store.appCtx) }
             Store.lastSync = System.currentTimeMillis()
             runCatching { TaskAlerts.onTasks(Tasks.current()) }
             runCatching { Alarms.reschedule() }
@@ -119,6 +121,11 @@ object Sync {
         if (fresh.any { it.optJSONObject("payload")?.optBoolean("check_update") == true }) { Store.updateCheckOnly = true; Store.lastUpdateCheck = 0 }
         // Panel kasa anahtarı istiyor (yeni ebeveyn cihazı)
         if (fresh.any { it.optJSONObject("payload")?.optBoolean("vault") == true }) Vault.shareSoon()
+        // Telefonu bul (panelden çaldır / ses / durdur)
+        for (c in fresh.sortedBy { it.optString("created_at") }) {
+            val pl = c.optJSONObject("payload") ?: continue
+            if (pl.has("find")) runCatching { app.orbit.ui.FindPhone.handle(Store.appCtx, c.getString("id"), pl, c.optString("created_at")) }
+        }
         // Panelde Wi-Fi ağı eklendi/silindi: hemen eşitle
         if (fresh.any { it.optJSONObject("payload")?.optBoolean("wifi") == true }) Thread { runCatching { Wifi.syncVault(force = true) } }.start()
         runCatching {

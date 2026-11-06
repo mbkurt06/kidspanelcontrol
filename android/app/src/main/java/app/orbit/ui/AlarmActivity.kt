@@ -95,17 +95,13 @@ class AlarmActivity : ComponentActivity() {
         }
     }
 
+    private var sound: app.orbit.data.SoundPlayer? = null
+
     private fun startSound() {
-        runCatching {
-            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM) ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-            player = MediaPlayer().apply {
-                setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
-                setDataSource(this@AlarmActivity, uri)
-                isLooping = true
-                prepare()
-                start()
-            }
-        }
+        // Alarmın seçilen sesi, seviyesi ve yavaş yükselmesi (yoksa varsayılan alarm sesi)
+        val id = intent.getStringExtra("id")
+        val s = Alarms.list().firstOrNull { it.id == id }?.sound ?: app.orbit.data.AlarmSound()
+        sound = app.orbit.data.SoundPlayer(this).also { it.start(s.uri, s.volume, s.ramp) }
         runCatching {
             @Suppress("DEPRECATION")
             vibrator = getSystemService(Vibrator::class.java)
@@ -114,6 +110,8 @@ class AlarmActivity : ComponentActivity() {
     }
 
     private fun stopSound() {
+        runCatching { sound?.stop() }
+        sound = null
         runCatching { player?.stop(); player?.release() }
         player = null
         runCatching { vibrator?.cancel() }

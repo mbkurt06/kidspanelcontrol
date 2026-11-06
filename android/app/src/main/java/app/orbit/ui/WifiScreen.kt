@@ -278,7 +278,13 @@ fun QrScanner(onCancel: () -> Unit, onCode: (String) -> Boolean) {
     DisposableEffect(Unit) {
         onDispose { runCatching { provider?.unbindAll() }; exec.shutdown() }
     }
-    Card {
+    // Ekranın ortasında, uygulamanın üstünde açılan pencere
+    androidx.compose.ui.window.Dialog(
+        onDismissRequest = onCancel,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+    Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp).clip(RoundedCornerShape(20.dp)).background(C.surface).padding(16.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Title("📷 QR kodu kameraya göster")
         Muted("Router'ın üstündeki ya da iPhone'da \"Wi-Fi'yi paylaş\" ile çıkan kod.", 13)
         err?.let { Text(it, color = C.bad, fontSize = 13.sp) }
@@ -311,9 +317,11 @@ fun QrScanner(onCancel: () -> Unit, onCode: (String) -> Boolean) {
                     }, ContextCompat.getMainExecutor(c))
                 }
             },
-            modifier = Modifier.fillMaxWidth().height(280.dp).clip(RoundedCornerShape(12.dp)),
+            modifier = Modifier.fillMaxWidth().height(320.dp).clip(RoundedCornerShape(12.dp)),
         )
         OutlinedButton(onClick = onCancel, modifier = Modifier.fillMaxWidth()) { Text("Vazgeç") }
+    }
+    }
     }
 }
 

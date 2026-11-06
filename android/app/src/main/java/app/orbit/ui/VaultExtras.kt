@@ -68,7 +68,6 @@ fun WifiQrDialog(ssid: String, password: String, qr: String, onClose: () -> Unit
                     Image(bmp.asImageBitmap(), null, filterQuality = FilterQuality.None, modifier = Modifier.size(240.dp))
                 }
                 Text("Kamerayla okutunca bağlanır", color = C.muted, fontSize = 13.sp, textAlign = TextAlign.Center)
-                if (password.isNotEmpty()) Text(password, color = C.text, fontFamily = FontFamily.Monospace, fontSize = 16.sp, textAlign = TextAlign.Center)
             }
         },
         confirmButton = { TextButton(onClick = onClose) { Text("Kapat") } },

@@ -3,10 +3,19 @@ import { DateField, TimeField } from "../components/DateTime";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { agendaDateText, todayISO } from "../lib/util";
-import type { AgendaItem, Task } from "../lib/types";
+import type { AgendaItem, Task, TaskRun } from "../lib/types";
 import { useNavigate } from "react-router-dom";
 import { Icon } from "../components/Icon";
 import { ChildChips } from "../components/ChildChips";
+
+const HIST_DAYS = 60;
+const STATUS: Record<string, [string, string]> = {
+  approved: ["✓ Tamamlandı", "ok"], claimed: ["✓ Tamamlandı", "ok"],
+  submitted: ["Onay bekliyor", "wait"], started: ["Başladı", "wait"], open: ["Yapılmadı", "no"],
+  rejected: ["Reddedildi", "no"], expired: ["Yapılmadı", "no"], none: ["Yapılmadı", "no"],
+};
+function addDay(d: string) { const x = new Date(d + "T12:00:00Z"); x.setUTCDate(x.getUTCDate() + 1); return x.toISOString().slice(0, 10); }
+function isoDow(d: string) { const w = new Date(d + "T12:00:00Z").getUTCDay(); return w === 0 ? 7 : w; }
 
 export default function Agenda() {
   const fam = useFamily();
@@ -16,6 +25,10 @@ export default function Agenda() {
   const [open, setOpen] = useState<AgendaItem | null>(null);
   const [form, setForm] = useState(false);
   const [err, setErr] = useState("");
+  const [runs, setRuns] = useState<TaskRun[]>([]);
+  const [histOpen, setHistOpen] = useState<Record<string, boolean>>(() => { try { return JSON.parse(sessionStorage.getItem("orbit.agendaHist") ?? "{}"); } catch { return {}; } });
+  const toggleHist = (id: string) => setHistOpen((v) => { const n = { ...v, [id]: !v[id] }; try { sessionStorage.setItem("orbit.agendaHist", JSON.stringify(n)); } catch { /* */ } return n; });
+  const today = todayISO();
   const load = useCallback(async () => {
     const { data, error } = await supabase.from("agenda_items").select("*").order("due_date").order("due_time");
     if (error) return setErr(errorText(error));
@@ -24,11 +37,63 @@ export default function Agenda() {
     const ids = [...new Set(list.map((x) => x.task_id).filter(Boolean))] as string[];
     if (ids.length) {
       const { data: t } = await supabase.from("tasks").select("*").in("id", ids);
-      setTasks(Object.fromEntries(((t ?? []) as Task[]).map((x) => [x.id, x])));
+      const tmap = Object.fromEntries(((t ?? []) as Task[]).map((x) => [x.id, x]));
+      setTasks(tmap);
+      const rec = Object.values(tmap).filter((x) => x.recurrence === "days").map((x) => x.id);
+      if (rec.length) {
+        const { data: r } = await supabase.from("task_runs").select("*").in("task_id", rec).gte("day", todayISO("Europe/Berlin", -HIST_DAYS));
+        setRuns((r ?? []) as TaskRun[]);
+      } else setRuns([]);
     }
   }, []);
   useEffect(() => { load(); }, [load]);
-  const grouped = fam.visibleChildren.map((child) => ({ child, items: items.filter((x) => x.child_id === child.id) }));
+  // Günü geçen kayıtlar geçmişe; tekrarlı görevler son tekrar gününe kadar Günüm'de kalır
+  const lastDay = (x: AgendaItem) => {
+    const t = x.task_id ? tasks[x.task_id] : undefined;
+    if (t?.recurrence === "days") return t.end_date ?? "9999-12-31";
+    return x.due_date;
+  };
+  const runOf = (taskId: string, child: string, day: string) => runs.find((r) => r.task_id === taskId && r.child_id === child && r.day === day);
+  const grouped = fam.visibleChildren.map((child) => {
+    const mine = items.filter((x) => x.child_id === child.id);
+    const current = mine.filter((x) => lastDay(x) >= today);
+    const past = mine.filter((x) => lastDay(x) < today);
+    // Tekrarlı görevlerin geçmiş günleri, o günkü durumla
+    const days: { key: string; day: string; title: string; status: string }[] = [];
+    for (const x of mine) {
+      const t = x.task_id ? tasks[x.task_id] : undefined;
+      if (!t || t.recurrence !== "days" || !t.child_ids.includes(child.id)) continue;
+      const from = [t.start_date, todayISO("Europe/Berlin", -HIST_DAYS)].sort()[1];
+      const to = t.end_date && t.end_date < today ? t.end_date : todayISO("Europe/Berlin", -1);
+      for (let d = from; d <= to; d = addDay(d)) {
+        if (!t.days.includes(isoDow(d))) continue;
+        days.push({ key: `${x.id}:${d}`, day: d, title: x.title, status: runOf(t.id, child.id, d)?.status ?? "none" });
+      }
+    }
+    days.sort((a, b) => b.day.localeCompare(a.day));
+    return { child, items: current, past, days };
+  });
+
+  const renderRow = (item: AgendaItem) => <button className={`agenda-row ${item.status === "done" ? "done" : ""}`} key={item.id} onClick={() => setOpen(item)}>
+        <span className={`check-box ${item.status === "done" ? "checked" : ""}`} aria-hidden="true">{item.status === "done" ? "✓" : ""}</span>
+        <span className="agenda-copy"><span className="muted tiny">{new Date(item.entered_at).toLocaleDateString("tr-TR")} · {new Date(item.entered_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</span><b>{item.title}{todayTag(item)}</b><span className="muted tiny">{agendaDateText(item.due_date)}{item.due_time ? ` · ${item.due_time.slice(0, 5)}` : ""}</span></span>
+        {item.task_id && tasks[item.task_id] ? (
+          <span className="task-tag" title="Bu girdi bir görev">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 10h6M9 14h6" /></svg>
+            Görev{tasks[item.task_id].reward_minutes ? ` · +${tasks[item.task_id].reward_minutes} dk` : " · ödülsüz"}
+          </span>
+        ) : item.status !== "done" ? (
+          <span className="task-tag ghost">Göreve dönüştür</span>
+        ) : null}
+        <Icon name="chevron" size={18} />
+      </button>;
+  function todayTag(item: AgendaItem) {
+    const t = item.task_id ? tasks[item.task_id] : undefined;
+    if (!t || t.recurrence !== "days" || !t.days.includes(isoDow(today))) return null;
+    const st = runOf(t.id, item.child_id, today)?.status ?? "none";
+    const s = STATUS[st];
+    return <span className={`agenda-today ${s?.[1] === "ok" ? "" : "muted"}`}> · bugün: {s && st !== "none" ? s[0] : "bekliyor"}</span>;
+  }
 
   async function toggle(item: AgendaItem) {
     const { error } = await supabase.from("agenda_items").update({ status: item.status === "done" ? "open" : "done", completed_at: item.status === "done" ? null : new Date().toISOString() }).eq("id", item.id);
@@ -44,23 +109,23 @@ export default function Agenda() {
     <header className="page-head"><h1>Ajanda</h1></header>
     <ChildChips />
     {err && <p className="error">{err}</p>}
-    {!grouped.some((g) => g.items.length) && <p className="muted small">Ajandada kayıt yok.</p>}
-    {grouped.map(({ child, items: list }) => <section className="agenda-group" key={child.id}>
+    {!grouped.some((g) => g.items.length || g.past.length || g.days.length) && <p className="muted small">Ajandada kayıt yok.</p>}
+    {grouped.map(({ child, items: list, past, days }) => <section className="agenda-group" key={child.id}>
       <h2>{child.name}</h2>
       {!list.length && <p className="muted tiny">Kayıt yok</p>}
-      {list.map((item) => <button className={`agenda-row ${item.status === "done" ? "done" : ""}`} key={item.id} onClick={() => setOpen(item)}>
-        <span className={`check-box ${item.status === "done" ? "checked" : ""}`} aria-hidden="true">{item.status === "done" ? "✓" : ""}</span>
-        <span className="agenda-copy"><span className="muted tiny">{new Date(item.entered_at).toLocaleDateString("tr-TR")} · {new Date(item.entered_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}</span><b>{item.title}</b><span className="muted tiny">{agendaDateText(item.due_date)}{item.due_time ? ` · ${item.due_time.slice(0, 5)}` : ""}</span></span>
-        {item.task_id && tasks[item.task_id] ? (
-          <span className="task-tag" title="Bu girdi bir görev">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 10h6M9 14h6" /></svg>
-            Görev{tasks[item.task_id].reward_minutes ? ` · +${tasks[item.task_id].reward_minutes} dk` : " · ödülsüz"}
-          </span>
-        ) : item.status !== "done" ? (
-          <span className="task-tag ghost">Göreve dönüştür</span>
-        ) : null}
-        <Icon name="chevron" size={18} />
-      </button>)}
+      {list.map(renderRow)}
+      {(past.length > 0 || days.length > 0) && <>
+        <button className={`agenda-hist-toggle ${histOpen[child.id] ? "open" : ""}`} onClick={() => toggleHist(child.id)}>
+          🕘 Geçmiş ({past.length + days.length})<span className="chev"><Icon name="chevron" size={16} /></span>
+        </button>
+        {histOpen[child.id] && <div className="agenda-hist">
+          {days.map((d) => <div className="agenda-day-row" key={d.key}>
+            <span className="muted">{agendaDateText(d.day)}</span><b>{d.title}</b>
+            <span className={`st ${STATUS[d.status]?.[1] ?? "no"}`}>{STATUS[d.status]?.[0] ?? "Yapılmadı"}</span>
+          </div>)}
+          {past.map(renderRow)}
+        </div>}
+      </>}
     </section>)}
     {form && <AgendaForm defaultChildren={fam.visibleChildren.map((c) => c.id)} allChildren={fam.children} onClose={() => setForm(false)} onSaved={() => { setForm(false); load(); }} />}
     {open && <AgendaDetail item={open} task={open.task_id ? tasks[open.task_id] : undefined} childName={fam.children.find((c) => c.id === open.child_id)?.name ?? ""} onClose={() => setOpen(null)} onToggle={() => toggle(open)} onRemove={() => remove(open)} onConvert={() => nav(`/tasks/new?agenda=${open.id}`)} onOpenTask={() => open.task_id && nav(`/tasks/${open.task_id}`)} />}

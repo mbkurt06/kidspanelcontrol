@@ -240,7 +240,7 @@ html:has(.shell), body:has(.shell) { height: 100%; overflow: hidden; overscroll-
   align-items: center;
   justify-content: flex-start;
   gap: 12px;
-  min-height: 44px;
+  min-height: 50px;
   padding-left: 52px;
 }
 .page-head > .icon-btn:first-child {
@@ -2198,3 +2198,14 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 /* Alttan açılan pencereler: alt menünün üstünde, ekrana sığmazsa kendi içinde kayar */
 .sheet-backdrop { z-index: 60; }
 .sheet { max-height: calc(100dvh - env(safe-area-inset-top) - 16px); overflow-y: auto; overscroll-behavior: contain; }
+
+.agenda-hist-toggle { display: flex; align-items: center; gap: 8px; width: 100%; background: none; border: 0; border-top: 1px solid var(--line); color: var(--muted); padding: 10px 2px 4px; font: inherit; font-size: 14px; cursor: pointer; }
+.agenda-hist-toggle .chev { margin-left: auto; transition: transform .15s; }
+.agenda-hist-toggle.open .chev { transform: rotate(90deg); }
+.agenda-hist { display: flex; flex-direction: column; gap: 6px; opacity: .9; }
+.agenda-day-row { display: flex; align-items: center; gap: 10px; padding: 6px 4px; font-size: 13px; border-bottom: 1px dashed var(--line); }
+.agenda-day-row .st { margin-left: auto; font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.agenda-day-row .st.ok { color: #3ccf8e; border-color: #3ccf8e55; }
+.agenda-day-row .st.no { color: #ff7a7a; border-color: #ff7a7a55; }
+.agenda-day-row .st.wait { color: #f5b83d; border-color: #f5b83d55; }
+.agenda-today { font-size: 12px; margin-left: 6px; }

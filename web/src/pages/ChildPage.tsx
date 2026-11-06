@@ -874,8 +874,8 @@ function TimeTab({ childId }: { childId: string }) {
 
   return (
     <div className="stack">
-      <div className="card extra-card">
-        <h2>Ekstra süre ver</h2>
+      <details className="card extra-card section-collapse-card" open>
+        <summary className="section-collapse-head"><span>Ekstra süre ver</span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <div className="extra-row">
           <MinuteStepper value={Number(minutes) || 0} onChange={(v) => setMinutes(String(v))} onEnter={give} label="Verilecek dakika" />
           <div className="chips">
@@ -1022,10 +1022,10 @@ function TimeTab({ childId }: { childId: string }) {
             {minutes} dk ver
           </button>
         </div>
-      </div>
+      </details>
 
-      <div className="card">
-          <h2>Süre cüzdanı <Info>Çocuk bu süreyi kendisi açabilir; yalnızca izin verilen saatlerde kullanılır.</Info></h2>
+      <details className="card section-collapse-card" open>
+        <summary className="section-collapse-head"><span>Süre cüzdanı <Info>Çocuk bu süreyi kendisi açabilir; yalnızca izin verilen saatlerde kullanılır.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         {!wallet.length && <p className="muted small">Cüzdanda süre yok.</p>}
         {wallet.length > 0 && (
           <p>
@@ -1040,10 +1040,10 @@ function TimeTab({ childId }: { childId: string }) {
             Kaydet
           </button>
         </div>
-      </div>
+      </details>
 
-      <div className="card">
-        <h2>Süre kasası <Info>Bu süreyi çocuk kendisi kullanamaz. Hemen verebilir veya ileriye planlayabilirsin.</Info></h2>
+      <details className="card section-collapse-card" open>
+        <summary className="section-collapse-head"><span>Süre kasası <Info>Bu süreyi çocuk kendisi kullanamaz. Hemen verebilir veya ileriye planlayabilirsin.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         {!vault.length && <p className="muted small">Kasada süre yok.</p>}
         {vault.length > 0 && (
           <p>
@@ -1051,7 +1051,7 @@ function TimeTab({ childId }: { childId: string }) {
           </p>
         )}
         {vault.map((g) => grantRow(g, "vault"))}
-      </div>
+      </details>
       {plan && (
         <PlanSheet
           grant={plan.g}
@@ -1066,8 +1066,8 @@ function TimeTab({ childId }: { childId: string }) {
           }}
         />
       )}
-      <div className="card">
-        <h2>Planlanan süreler <Info>Bu liste kullanılmış süreler değil; cüzdandan veya görev ödülünden aktif plana ayrılmış, çocuğun kullanabileceği süreleri gösterir.</Info></h2>
+      <details className="card section-collapse-card" open>
+        <summary className="section-collapse-head"><span>Planlanan süreler <Info>Bu liste kullanılmış süreler değil; cüzdandan veya görev ödülünden aktif plana ayrılmış, çocuğun kullanabileceği süreleri gösterir.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         {!live.length && <p className="muted small">Planlanmış ekstra süre yok.</p>}
         {live.map((g) => (
           <div className="app-row wrap" key={g.id}>
@@ -1116,7 +1116,7 @@ function TimeTab({ childId }: { childId: string }) {
             )}
           </div>
         ))}
-      </div>
+      </details>
     </div>
   );
 }

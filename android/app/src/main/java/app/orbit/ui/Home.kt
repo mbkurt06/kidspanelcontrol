@@ -78,6 +78,7 @@ enum class Screen(val icon: String, val title: String) {
     ASK("🙋", "Ebeveynden iste"),
     PROFILE("👤", "Profil"),
     VAULT("🔑", "Şifrelerim"),
+    WIFI("📶", "Wi-Fi"),
     ABOUT("ℹ️", "Hakkında"),
 }
 
@@ -101,7 +102,8 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
     // Tam kilit: sadece izin verilen ekranlar
     val kiosk = live.kiosk
     // "Hakkında" (sürüm, son güncelleme) her durumda görünür
-    fun visible(s: Screen) = s == Screen.ABOUT ||
+    // "Hakkında" ve "Wi-Fi" (kilitliyken de internete bağlanabilmek için) her durumda görünür
+    fun visible(s: Screen) = s == Screen.ABOUT || s == Screen.WIFI ||
         (kiosk == null || s == Screen.TODAY || s.kioskKey() in kiosk.screens) &&
             (focusNow == null || focusNow.screens.isEmpty() || s == Screen.TODAY || s.kioskKey() in focusNow.screens) &&
             (taskScreens == null || s == Screen.TODAY || s.kioskKey() in taskScreens)
@@ -228,6 +230,7 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                 Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                if (screen == Screen.TODAY) WifiBanner { screen = Screen.WIFI }
                 when (screen) {
                     Screen.TODAY -> if (kiosk != null) KioskToday(kiosk) { screen = it } else TodayScreen { if (visible(it)) screen = it }
                     Screen.TASKS -> TasksCard(remember(live.lastSync, live.snapshot?.now?.minute) { Tasks.current().filter { !it.open || it.inWindow() } })
@@ -235,7 +238,8 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                     Screen.ASK -> AskScreen()
                     Screen.PROFILE -> ProfileScreen()
                     Screen.ABOUT -> AboutScreen()
-                    Screen.VAULT -> VaultScreen(onCancel = { screen = Screen.TODAY })
+                    Screen.VAULT -> VaultScreen(onCancel = { screen = Screen.TODAY }, onWifi = { screen = Screen.WIFI })
+                    Screen.WIFI -> WifiScreen()
                     Screen.MESSAGES -> Unit
                     Screen.TIMER -> TimerScreen()
                     Screen.MUSIC -> MusicScreen()

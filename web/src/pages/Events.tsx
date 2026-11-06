@@ -52,6 +52,11 @@ function describe(e: OrbitEvent, childName: string) {
           return `📹 ${childName} · ${p.title}`;
       }
     }
+    case "wifi":
+    case "wifi_alert":
+      if (p.action === "portal") return `📶 ${childName} onay sayfalı ağa bağlandı: ${p.ssid ?? ""}.`;
+      if (p.action === "forget") return `📶 ${childName} bir Wi-Fi ağını unuttu: ${p.ssid ?? ""}.`;
+      return `📶 ${childName} yeni Wi-Fi ağı ekledi: ${p.ssid ?? ""}${p.how === "qr" ? " (QR ile)" : ""}.`;
     case "pin_unlock":
       return `🔓 ${childName} telefonunda ebeveyn PIN'i girildi (${p.minutes ?? 15} dk kısıtlama yok).`;
     case "pin_fail":

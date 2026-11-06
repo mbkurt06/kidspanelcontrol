@@ -33,7 +33,7 @@ object Sync {
                         .getOrElse { Api.get("families?select=timezone&limit=1") }
                 }
                 val kidJob = async(Dispatchers.IO) {
-                    runCatching { Api.get("children?select=name,wallet_daily_max,kiosk_settings,parent_pin_hash,parent_pin_enabled,music_mode,music_folder,profile_nickname,profile_avatar&id=eq.$child") }
+                    runCatching { Api.get("children?select=name,wallet_daily_max,kiosk_settings,parent_pin_hash,parent_pin_enabled,music_mode,music_folder,profile_nickname,profile_avatar,wifi_settings&id=eq.$child") }
                         .getOrElse { Api.get("children?select=name&id=eq.$child") }
                 }
                 famJob.await() to kidJob.await()
@@ -95,6 +95,9 @@ object Sync {
             }
             Store.rulesJson = bundle.toString()
             kid.optJSONObject(0)?.optString("name")?.let { Store.childName = it }
+            Wifi.applySettings(kid.optJSONObject(0)?.optJSONObject("wifi_settings"))
+            // Kasadaki Wi-Fi ağları (panelden eklenenler dahil) telefona tanıtılır; 5 dk'da bir
+            runCatching { Wifi.syncVault() }.onFailure { Log.w(TAG, "wifi kasa", it) }
             Store.lastSync = System.currentTimeMillis()
             runCatching { TaskAlerts.onTasks(Tasks.current()) }
             runCatching { Alarms.reschedule() }

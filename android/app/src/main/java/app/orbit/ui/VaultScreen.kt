@@ -47,7 +47,7 @@ import kotlinx.coroutines.withContext
  * Kopyalanan bilgi 30 sn sonra panodan silinir.
  */
 @Composable
-fun VaultScreen(onCancel: () -> Unit) {
+fun VaultScreen(onCancel: () -> Unit, onWifi: () -> Unit = {}) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
     var unlocked by remember { mutableStateOf(false) }
@@ -182,8 +182,26 @@ fun VaultScreen(onCancel: () -> Unit) {
                     onClick = { editing = Vault.Entry(null, "", "", "", "", "") },
                     colors = ButtonDefaults.buttonColors(containerColor = C.accent), modifier = Modifier.fillMaxWidth(),
                 ) { Text("Yeni hesap ekle") }
-                if (entries.isEmpty()) Muted("Henüz kayıt yok.")
-                for (x in entries) {
+                val wifi = entries.filter { it.kind == "wifi" }
+                val showWifiPass = app.orbit.data.Wifi.settings.value.showPasswords
+                Card {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("📶 Wi-Fi ağları (${wifi.size})", color = C.text, fontWeight = FontWeight.SemiBold, fontSize = 17.sp, modifier = Modifier.weight(1f))
+                        OutlinedButton(onClick = onWifi) { Text("Wi-Fi'yi aç") }
+                    }
+                    for (w in wifi) Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(w.app, color = C.text, modifier = Modifier.weight(1f))
+                        if (showWifiPass && w.password.isNotEmpty()) {
+                            val show = revealed[w.id] == true
+                            Text(if (show) w.password else "••••••", color = C.muted, fontFamily = FontFamily.Monospace)
+                            TextButton(onClick = { revealed[w.id ?: ""] = !show }) { Text(if (show) "Gizle" else "Göster") }
+                            TextButton(onClick = { copy("Wi-Fi şifresi", w.password) }) { Text("Kopyala") }
+                        }
+                    }
+                }
+                val apps = entries.filter { it.kind != "wifi" }
+                if (apps.isEmpty()) Muted("Henüz kayıt yok.")
+                for (x in apps) {
                     Card {
                         Text(x.app, color = C.text, fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
                         if (x.username.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {

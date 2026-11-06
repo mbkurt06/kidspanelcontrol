@@ -14,6 +14,7 @@ export const PUSH_EVENT_TYPES: Array<[string, string]> = [
   ["recording_alert", "Kamera kaydı"],
   ["pin_unlock", "PIN ile açma"],
   ["pin_fail", "Yanlış PIN"],
+  ["wifi_alert", "Wi-Fi ağı"],
   ["push_test", "Deneme bildirimi"],
 ];
 

@@ -25,6 +25,11 @@ object Notifier {
         nm.createNotificationChannel(NotificationChannel(CH_MSG, "Ebeveyn mesajları", NotificationManager.IMPORTANCE_HIGH))
     }
 
+    fun cancel(id: Int) {
+        val ctx = app ?: return
+        runCatching { ctx.getSystemService(NotificationManager::class.java).cancel(id) }
+    }
+
     fun show(channel: String, id: Int, title: String, text: String, screen: String) {
         val ctx = app ?: return
         val open = Intent(ctx, MainActivity::class.java)

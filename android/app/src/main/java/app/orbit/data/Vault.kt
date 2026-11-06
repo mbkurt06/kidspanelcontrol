@@ -38,6 +38,11 @@ object Vault {
         val note: String,
         val history: JSONArray = JSONArray(),
         val updatedBy: String = "phone",
+        /** "" = uygulama hesabı, "wifi" = Wi-Fi ağı (app = ağ adı) */
+        val kind: String = "",
+        /** Wi-Fi: "wpa" | "wpa3" | "wep" | "open" */
+        val security: String = "",
+        val hidden: Boolean = false,
     )
 
     fun b64(b: ByteArray): String = Base64.encodeToString(b, Base64.NO_WRAP)
@@ -166,6 +171,7 @@ object Vault {
         Entry(
             o.getString("id"), j.optString("app"), j.optString("username"), j.optString("password"),
             j.optString("recovery"), j.optString("note"), j.optJSONArray("history") ?: JSONArray(), o.optString("updated_by", "phone"),
+            j.optString("kind"), j.optString("security"), j.optBoolean("hidden"),
         )
     }.getOrNull()
 
@@ -173,6 +179,7 @@ object Vault {
         val iv = ByteArray(12).also { rnd.nextBytes(it) }
         val j = JSONObject().put("app", e.app).put("username", e.username).put("password", e.password)
             .put("recovery", e.recovery).put("note", e.note).put("history", e.history)
+        if (e.kind.isNotEmpty()) j.put("kind", e.kind).put("security", e.security).put("hidden", e.hidden)
         val ct = aes(Cipher.ENCRYPT_MODE, key, iv).doFinal(j.toString().toByteArray(Charsets.UTF_8))
         return b64(iv) to b64(ct)
     }

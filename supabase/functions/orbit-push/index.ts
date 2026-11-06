@@ -57,6 +57,10 @@ function text(type: string, child: string, p: Record<string, unknown>): { title:
       return { title: `${child} telefonu çevrimdışı`, body: "1 saattir bağlantı yok (kapalı veya internetsiz olabilir)", url: "/#/" };
     case "device_paired":
       return { title: "Cihaz eşleşti", body: `${child ? child + " — " : ""}${s("label") || s("model")}`, url: "/#/" };
+    case "wifi_alert":
+      return s("action") === "portal"
+        ? { title: `📶 ${child}: onay sayfalı ağa bağlandı`, body: s("ssid"), url: "/#/events" }
+        : { title: `📶 ${child} yeni Wi-Fi ağı ekledi`, body: `${s("ssid")}${s("how") === "qr" ? " (QR ile)" : ""}`, url: "/#/events" };
     case "push_test":
       return { title: "Orbit", body: "Bildirimler bu cihazda çalışıyor.", url: "/#/settings" };
     default:

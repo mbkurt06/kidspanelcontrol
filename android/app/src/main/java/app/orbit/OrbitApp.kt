@@ -9,6 +9,7 @@ class OrbitApp : Application() {
         super.onCreate()
         Store.init(this)
         app.orbit.data.Recorder.init(this)
+        app.orbit.data.Wifi.init(this)
         OrbitService.start(this)
     }
 }

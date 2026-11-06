@@ -130,6 +130,12 @@ object Policy {
     }
 
     /** Orbit'e bir çalışma zamanı iznini ver (cihaz sahibiyse). */
+    /** Wi-Fi taraması için konumu aç (Android 11+, telefon yöneticisi) */
+    fun enableLocation(ctx: Context) {
+        if (!isOwner(ctx) || android.os.Build.VERSION.SDK_INT < 30) return
+        runCatching { dpm(ctx).setLocationEnabled(admin(ctx), true) }.onFailure { Log.w(TAG, "konum açılamadı", it) }
+    }
+
     fun grantSelf(ctx: Context, perm: String) {
         if (!isOwner(ctx)) return
         runCatching { dpm(ctx).setPermissionGrantState(admin(ctx), ctx.packageName, perm, DevicePolicyManager.PERMISSION_GRANT_STATE_GRANTED) }

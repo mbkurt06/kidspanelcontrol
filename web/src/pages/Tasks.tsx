@@ -416,7 +416,8 @@ export default function Tasks() {
                 })}
               </div>
 
-              {(otherGroups.length > 0 || otherSingles.length > 0) && (
+              {/* "Bugün olmayan görevler" bölümü kaldırıldı: biten görevler Görev geçmişinde görünür */}
+              {false && (otherGroups.length > 0 || otherSingles.length > 0) && (
                 <div className="card">
                   <div className="section-collapse-head collapse-title" role="button" tabIndex={0} onClick={() => setOthersOpen((v) => !v)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOthersOpen((v) => !v); } }} aria-expanded={othersOpen}>
                     <span>Bugün olmayan görevler ({otherGroups.length + otherSingles.length}) <Info>Kapalı gruplar, bugün günü olmayan ya da ileri tarihli görevler. Düzenlemek için dokun.</Info></span>

@@ -10,7 +10,7 @@ export default function ChildSettings() {
   const fam = useFamily();
   return (
     <div className="page">
-      <header className="page-head"><h1>Ayarlar</h1></header>
+      <header className="page-head"><h1>Uygulama Ayarları</h1></header>
       {!fam.visibleChildren.length && <p className="muted small">Çocuk bulunamadı.</p>}
       <details className="card section-collapse-card" open>
         <summary className="section-collapse-head"><span>Görev ayarları</span><span className="collapse-arrow" aria-hidden="true" /></summary>

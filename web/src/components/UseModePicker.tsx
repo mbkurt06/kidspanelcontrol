@@ -10,7 +10,7 @@ export function UseModePicker({ mode, within, onMode, onWithin }: { mode: UseMod
   ];
   return (
     <div className="field">
-      <span>Kazanılan süre nasıl kullanılsın <Info>Görevden kazanılan süre açık saatlerin dışına (21:00 sonrası) taşmaz. Bu süre sürerken zorunlu görev kısıtlaması ve kısıtlı saatler kalkar.</Info></span>
+      <span>Kazanılan süre nasıl kullanılsın <Info>Görevden kazanılan süre açık saatlerin dışına taşmaz (açık saatler: günlük programda Kilitli olmayan bölümler). Bu süre sürerken zorunlu görev kısıtlaması ve kısıtlı saatler kalkar.</Info></span>
       <div className="chips">
         {OPTS.map(([k, l]) => <button key={k} type="button" className={`chip-btn ${mode === k ? "on" : ""}`} onClick={() => onMode(k)}>{l}</button>)}
       </div>

@@ -1429,9 +1429,15 @@ function ReportTab({ childId }: { childId: string }) {
     d.setDate(d.getDate() + amount);
     return d.toISOString().slice(0, 10);
   };
-  const monthStart = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; })();
-  const start = range === "day" ? to : range === "week" ? addDays(to, -6) : range === "month" ? monthStart : from;
-  const end = range === "custom" ? to : to;
+  // Haftalar her zaman Pazartesi başlar, Pazar biter; gelmemiş günler boş görünür
+  const today = todayISO();
+  const isoDow = (v: string) => ((new Date(`${v}T12:00:00`).getDay() + 6) % 7); // 0 = Pzt
+  const monthStart = `${today.slice(0, 8)}01`;
+  const monthEnd = (() => { const d = new Date(`${monthStart}T12:00:00`); d.setMonth(d.getMonth() + 1); d.setDate(0); return d.toISOString().slice(0, 10); })();
+  const weekStart = addDays(today, -isoDow(today));
+  const start = range === "day" ? to : range === "week" ? weekStart : range === "month" ? monthStart : from;
+  const end = range === "day" ? to : range === "week" ? addDays(weekStart, 6) : range === "month" ? monthEnd : to;
+  const lead = range === "day" ? 0 : isoDow(start);
   const days: string[] = [];
   for (let d = start; d <= end && days.length < 366; d = addDays(d, 1)) days.push(d);
   const totals = days.map((d) => ({
@@ -1442,7 +1448,8 @@ function ReportTab({ childId }: { childId: string }) {
   const max = Math.max(60, ...totals.map((t) => t.total));
   const totalMinutes = totals.reduce((a, t) => a + t.total, 0);
   const countedMinutes = totals.reduce((a, t) => a + t.counted, 0);
-  const selectedDay = days.includes(day) ? day : days[days.length - 1] ?? todayISO();
+  const past = days.filter((d) => d <= today);
+  const selectedDay = past.includes(day) ? day : past[past.length - 1] ?? today;
   const dayRows = rows.filter((r) => r.day === selectedDay && r.minutes > 0).sort((a, b) => b.minutes - a.minutes);
   const short = (d: string) => new Date(d + "T12:00:00").toLocaleDateString("tr-TR", { weekday: "short" });
 
@@ -1455,16 +1462,22 @@ function ReportTab({ childId }: { childId: string }) {
         </div>
         {range === "custom" && <div className="grid2"><label className="field"><span>Başlangıç</span><DateField value={from} onChange={setFrom} /></label><label className="field"><span>Bitiş</span><DateField value={to} onChange={setTo} /></label></div>}
         <div className="report-total"><b>{minutesText(totalMinutes)}</b><span className="muted tiny">toplam · {minutesText(countedMinutes)} sınırdan düştü</span></div>
-        <div className="bars">
+        {range !== "day" && (
+          <div className="bars bars-head">
+            {["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"].map((w) => <span key={w} className="bar-day">{w}</span>)}
+          </div>
+        )}
+        <div className={`bars ${range === "month" || days.length > 7 ? "bars-month" : ""} ${range === "day" ? "bars-day" : ""}`}>
+          {Array.from({ length: lead }, (_, i) => <span key={`b${i}`} />)}
           {totals.map((t) => (
-            <button key={t.d} className={`bar ${t.d === selectedDay ? "on" : ""}`} onClick={() => setDay(t.d)}>
+            <button key={t.d} className={`bar ${t.d === selectedDay ? "on" : ""} ${t.d > today ? "future" : ""}`} disabled={t.d > today} onClick={() => setDay(t.d)}>
               <span className="bar-val">{t.total ? minutesText(t.total) : ""}</span>
               <span className="bar-track">
                 <span className="bar-all" style={{ height: `${(t.total / max) * 100}%` }}>
                   <span className="bar-counted" style={{ height: t.total ? `${(t.counted / t.total) * 100}%` : 0 }} />
                 </span>
               </span>
-              <span className="bar-day">{short(t.d)}</span>
+              <span className="bar-day">{range === "day" ? short(t.d) : Number(t.d.slice(8))}</span>
             </button>
           ))}
         </div>

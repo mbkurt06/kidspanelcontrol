@@ -2186,3 +2186,12 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
   background-position: right 8px center;
 }
 .app-setting-controls input { padding-right: 8px; }
+
+/* Rapor takvimi: sütunlar Pzt…Paz, ay görünümü satır satır haftalar */
+.bars-head { margin-bottom: -2px; }
+.bars-head .bar-day { text-align: center; font-weight: 600; }
+.bars-day { grid-template-columns: minmax(0, 120px); justify-content: center; }
+.bars-month { row-gap: 10px; }
+.bars-month .bar-track { height: 56px; }
+.bars-month .bar-val { min-height: 0; font-size: 9px; }
+.bars .bar.future { opacity: .35; cursor: default; }

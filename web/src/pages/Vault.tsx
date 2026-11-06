@@ -22,6 +22,9 @@ import { Info } from "../components/Info";
 type Row = { id: string; v: VaultEntry; updated_at: string; updated_by: string };
 
 const blank: VaultEntry = { app: "", username: "", password: "", recovery: "", note: "", history: [] };
+const blankWifi: VaultEntry = { ...blank, kind: "wifi", security: "wpa", hidden: false };
+const SEC: Array<[string, string]> = [["wpa", "WPA2"], ["wpa3", "WPA3"], ["open", "Şifresiz"]];
+const WIFI_DEFAULT = { child_add: true, notify: true, show_passwords: true };
 
 export default function Vault() {
   const { id } = useParams();
@@ -112,7 +115,9 @@ export default function Vault() {
   async function save() {
     if (!edit || state?.kind !== "open" || !id) return;
     const v = { ...edit.v, app: edit.v.app.trim() };
-    if (!v.app) return setErr("Uygulama veya site adını yaz.");
+    const isWifi = v.kind === "wifi";
+    if (!v.app) return setErr(isWifi ? "Ağ adını yaz." : "Uygulama veya site adını yaz.");
+    if (isWifi && v.security !== "open" && v.password.length < 8) return setErr("Wi-Fi şifresi en az 8 karakter olmalı.");
     await run(async () => {
       const prev = rows.find((r) => r.id === edit.id);
       if (prev && prev.v.password && prev.v.password !== v.password) {
@@ -125,7 +130,19 @@ export default function Vault() {
         : await supabase.from("vault_entries").insert({ child_id: id, ...c, updated_by: "parent" });
       if (error) throw error;
       setEdit(null);
+      if (isWifi) await sendCommand(id, "resync", { wifi: true }).catch(() => {});
       await load();
+    });
+  }
+
+  const wifiSet = { ...WIFI_DEFAULT, ...(child?.wifi_settings ?? {}) };
+  async function setWifi(k: keyof typeof WIFI_DEFAULT, val: boolean) {
+    if (!child) return;
+    await run(async () => {
+      const { error } = await supabase.from("children").update({ wifi_settings: { ...wifiSet, [k]: val } }).eq("id", child.id);
+      if (error) throw error;
+      await sendCommand(child.id, "resync", {}).catch(() => {});
+      await fam.reload();
     });
   }
 
@@ -140,6 +157,8 @@ export default function Vault() {
   }
 
   if (!child) return <div className="page"><p className="muted">Çocuk bulunamadı.</p></div>;
+  const wifiRows = rows.filter((r) => r.v.kind === "wifi");
+  const appRows = rows.filter((r) => r.v.kind !== "wifi");
 
   const header = (
     <header className="page-head">
@@ -242,7 +261,40 @@ export default function Vault() {
             </div>
           )}
 
-          {edit ? (
+          {edit && edit.v.kind === "wifi" ? (
+            <div className="card">
+              <h2>{edit.id ? "Wi-Fi ağını düzenle" : "Wi-Fi ağı ekle"}</h2>
+              <label className="field">
+                <span>Ağ adı (SSID)</span>
+                <input value={edit.v.app} autoComplete="off" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, app: e.target.value } })} placeholder="Anneanne-WLAN" />
+              </label>
+              <div className="row gap-xs wrap">
+                {SEC.map(([k, l]) => (
+                  <button key={k} type="button" className={`chip ${edit.v.security === k ? "on" : ""}`} onClick={() => setEdit({ ...edit, v: { ...edit.v, security: k } })}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+              {edit.v.security !== "open" && (
+                <label className="field">
+                  <span>Şifre</span>
+                  <input value={edit.v.password} autoComplete="off" onChange={(e) => setEdit({ ...edit, v: { ...edit.v, password: e.target.value } })} />
+                </label>
+              )}
+              <label className="row gap-s small">
+                <input type="checkbox" checked={!!edit.v.hidden} onChange={(e) => setEdit({ ...edit, v: { ...edit.v, hidden: e.target.checked } })} />
+                Gizli ağ (yakındaki ağlarda görünmüyor)
+              </label>
+              <div className="row gap-s">
+                <button className="btn primary grow" disabled={busy} onClick={save}>
+                  Kaydet
+                </button>
+                <button className="btn grow" onClick={() => setEdit(null)}>
+                  Vazgeç
+                </button>
+              </div>
+            </div>
+          ) : edit ? (
             <div className="card">
               <h2>{edit.id ? "Kaydı düzenle" : "Yeni kayıt"}</h2>
               <label className="field">
@@ -288,9 +340,72 @@ export default function Vault() {
             </div>
           )}
 
-          {!rows.length && !edit && <p className="muted small">Henüz kayıt yok. {child.name} telefonundan da ekleyebilir.</p>}
+          {!edit && (
+            <div className="card">
+              <div className="row between">
+                <h2>📶 Wi-Fi ağları</h2>
+                <button className="btn small primary" onClick={() => setEdit({ id: null, v: { ...blankWifi } })}>
+                  <Icon name="plus" size={14} /> Ağ ekle
+                </button>
+              </div>
+              <p className="muted small">
+                <Info>
+                  {child.name}'in telefonu bu ağları tanır ve yakınına gelince kendiliğinden bağlanır. Telefonda eklenen ağlar da buraya gelir.
+                </Info>
+              </p>
+              {wifiRows.length === 0 && <p className="muted small">Henüz kayıtlı ağ yok.</p>}
+              {wifiRows.map((r) => (
+                <div className="row gap-s wifi-row" key={r.id}>
+                  <div className="grow">
+                    <b>{r.v.app}</b>
+                    <div className="muted tiny">
+                      {SEC.find(([k]) => k === r.v.security)?.[1] ?? "WPA2"}
+                      {r.v.hidden ? " · gizli" : ""} · {r.updated_by === "phone" ? child.name : "ebeveyn"} · {relTime(r.updated_at)}
+                    </div>
+                    {r.v.password && <span className="mono small">{revealed[r.id] ? r.v.password : "••••••••"}</span>}
+                  </div>
+                  {r.v.password && (
+                    <button className="btn small" onClick={() => setRevealed({ ...revealed, [r.id]: !revealed[r.id] })}>
+                      {revealed[r.id] ? "Gizle" : "Göster"}
+                    </button>
+                  )}
+                  <button className="btn small" onClick={() => setEdit({ id: r.id, v: { ...r.v } })} aria-label="Düzenle">
+                    Düzenle
+                  </button>
+                  <button
+                    className="btn small danger-text"
+                    onClick={async () => {
+                      if (deleteId !== r.id) return setDeleteId(r.id);
+                      await supabase.from("vault_entries").update({ removed_at: new Date().toISOString() }).eq("id", r.id);
+                      setDeleteId(null);
+                      await sendCommand(child.id, "resync", { wifi: true }).catch(() => {});
+                      load();
+                    }}
+                  >
+                    {deleteId === r.id ? "Tekrar bas: sil" : "Sil"}
+                  </button>
+                </div>
+              ))}
+              <div className="stack-s wifi-settings">
+                <label className="row gap-s small">
+                  <input type="checkbox" checked={wifiSet.child_add} disabled={busy} onChange={(e) => setWifi("child_add", e.target.checked)} />
+                  {child.name} yeni ağ ekleyebilir
+                </label>
+                <label className="row gap-s small">
+                  <input type="checkbox" checked={wifiSet.notify} disabled={busy} onChange={(e) => setWifi("notify", e.target.checked)} />
+                  Yeni ağ eklenince ve onay sayfalı ağa bağlanınca bana bildir
+                </label>
+                <label className="row gap-s small">
+                  <input type="checkbox" checked={wifiSet.show_passwords} disabled={busy} onChange={(e) => setWifi("show_passwords", e.target.checked)} />
+                  {child.name} Wi-Fi şifrelerini görebilir
+                </label>
+              </div>
+            </div>
+          )}
+
+          {!appRows.length && !edit && <p className="muted small">Henüz hesap kaydı yok. {child.name} telefonundan da ekleyebilir.</p>}
           <div className="stack-s">
-            {rows
+            {appRows
               .filter((r) => !q || r.v.app.toLowerCase().includes(q.toLowerCase()) || r.v.username.toLowerCase().includes(q.toLowerCase()))
               .map((r) => (
                 <div className="card" key={r.id}>

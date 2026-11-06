@@ -6,7 +6,8 @@ export type ExtraTarget = "now" | "current" | "pool" | "wallet";
 export type Child = { id: string; family_id: string; name: string; color: string; sort_order: number; extra_default: ExtraTarget; wallet_daily_max?: number | null;
   closed_grant_mode?: "clock" | "usage" | "within"; closed_grant_within_minutes?: number | null; closed_grant_within_factor?: number | null;
   profile_nickname?: string | null; profile_avatar?: string | null;
-  kiosk_settings?: KioskSettings; parent_pin_enabled?: boolean; parent_pin_hash?: string | null;
+  kiosk_settings?: KioskSettings; parent_pin_enabled?: boolean;
+  wifi_settings?: { child_add: boolean; notify: boolean; show_passwords: boolean }; parent_pin_hash?: string | null;
   music_mode?: "always" | "rules" | "never"; music_folder?: string | null; music_folders?: string[]; timer_defaults?: { allow_stop: "no" | "yes" | "notify"; pause_mode: "none" | "limit" | "child"; pause_max_minutes: number | null; focus_change: "no" | "stricter" | "free" } };
 
 export type AgendaKind = "homework" | "exam" | "payment" | "event";

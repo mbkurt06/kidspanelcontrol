@@ -57,22 +57,22 @@ object Wifi {
     @Volatile private var lastVaultSync = 0L
     private var lastPortalAutoOpen: Network? = null
     private var portalNotified: String? = null
-    private lateinit var app: Context
+    private lateinit var ctx: Context
 
-    private fun wm() = app.getSystemService(WifiManager::class.java)
-    private fun cm() = app.getSystemService(ConnectivityManager::class.java)
+    private fun wm() = ctx.getSystemService(WifiManager::class.java)
+    private fun cm() = ctx.getSystemService(ConnectivityManager::class.java)
 
-    fun init(ctx: Context) {
-        if (::app.isInitialized) return
-        app = ctx.applicationContext
+    fun init(c: Context) {
+        if (::ctx.isInitialized) return
+        ctx = c.applicationContext
         loadCache()
         grantPerms()
         runCatching { watch() }.onFailure { Log.w(TAG, "ağ izleme", it) }
     }
 
     private fun grantPerms() {
-        for (p in listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) Policy.grantSelf(app, p)
-        if (Build.VERSION.SDK_INT >= 33) Policy.grantSelf(app, Manifest.permission.NEARBY_WIFI_DEVICES)
+        for (p in listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)) Policy.grantSelf(ctx, p)
+        if (Build.VERSION.SDK_INT >= 33) Policy.grantSelf(ctx, Manifest.permission.NEARBY_WIFI_DEVICES)
     }
 
     // --- ayarlar ve önbellek ---
@@ -171,17 +171,12 @@ object Wifi {
     }
 
     fun openPortal() {
-        val i = android.content.Intent(app, app.orbit.ui.PortalActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        runCatching { app.startActivity(i) }.onFailure { Log.w(TAG, "onay sayfası açılamadı", it) }
+        val i = android.content.Intent(ctx, app.orbit.ui.PortalActivity::class.java).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        runCatching { ctx.startActivity(i) }.onFailure { Log.w(TAG, "onay sayfası açılamadı", it) }
     }
 
     /** Onay sayfası adresi (Android 11+ ağ bildiriyorsa), yoksa yönlendiren deneme adresi */
     fun portalUrl(): String {
-        val n = wifiNetwork
-        if (n != null && Build.VERSION.SDK_INT >= 30) {
-            val u = runCatching { cm().getLinkProperties(n)?.captivePortalData?.userPortalUrl?.toString() }.getOrNull()
-            if (!u.isNullOrBlank()) return u
-        }
         return "http://connectivitycheck.gstatic.com/generate_204"
     }
 
@@ -201,7 +196,7 @@ object Wifi {
         scanning.value = true
         try {
             grantPerms()
-            Policy.enableLocation(app)
+            Policy.enableLocation(ctx)
             val w = wm()
             if (!w.isWifiEnabled) runCatching { w.isWifiEnabled = true }
             runCatching { w.startScan() }
@@ -318,7 +313,7 @@ object Wifi {
      * hepsini Android'e tanıt. Panelden silinen (Orbit'in eklediği) ağları kaldır.
      */
     fun syncVault(force: Boolean = false) {
-        if (!::app.isInitialized || Store.creds == null) return
+        if (!::ctx.isInitialized || Store.creds == null) return
         val now = System.currentTimeMillis()
         if (!force && now - lastVaultSync < 5 * 60_000) return
         lastVaultSync = now

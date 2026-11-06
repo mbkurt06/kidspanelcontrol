@@ -434,6 +434,10 @@ function AppsTab({ childId }: { childId: string }) {
             </div>
             {(openGroups[g.id] ?? false) && list.map((a) => (
               <div className="app-setting-row" key={a.package}>
+                <div className="app-setting-name">
+                  <b>{a.label}</b>
+                  <div className="muted tiny">{a.package}</div>
+                </div>
                 <div className="app-setting-controls">
                   {groupSelect(fam.members[a.package] ?? "", (v) => setGroup(a.package, v))}
                   <select value={mode3(a.app_group)} onChange={(e) => update(a, { app_group: fromMode3(e.target.value as Mode3) })} aria-label="Durum">
@@ -456,10 +460,6 @@ function AppsTab({ childId }: { childId: string }) {
                       aria-label="Bu uygulama için günlük üst sınır (dakika)"
                     />
                   ) : <span />}
-                </div>
-                <div className="app-setting-name">
-                  <b>{a.label}</b>
-                  <div className="muted tiny">{a.package}</div>
                 </div>
               </div>
             ))}

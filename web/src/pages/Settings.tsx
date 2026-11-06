@@ -384,7 +384,7 @@ async function sha256(text: string) {
 }
 
 /** Güvenlik: bütün telefonlarda geçen ebeveyn PIN'i. */
-export function SecurityCard() {
+export function SecurityCard({ embedded = false }: { embedded?: boolean } = {}) {
   const fam = useFamily();
   const f = fam.family;
   const [pin, setPin] = useState("");
@@ -406,8 +406,8 @@ export function SecurityCard() {
     fam.reload();
   }
   return (
-    <div className="card">
-      <h2>🔐 Güvenlik · Ebeveyn PIN'i <Info>Bu PIN ile çocuk telefonunda geçici ebeveyn modu açılır. Üç yanlış denemede 5 dakika beklenir ve giriş sana bildirilir.</Info></h2>
+    <div className={embedded ? "stack" : "card"}>
+      <h2 hidden={embedded}>🔐 Güvenlik · Ebeveyn PIN'i <Info>Bu PIN ile çocuk telefonunda geçici ebeveyn modu açılır. Üç yanlış denemede 5 dakika beklenir ve giriş sana bildirilir.</Info></h2>
       <div className="row gap-s">
         <input type="password" inputMode="numeric" className="grow" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))} placeholder={f.parent_pin_hash ? "Yeni PIN (değiştir)" : "PIN belirle (4–8 rakam)"} />
         <button className="btn small" onClick={savePin}>

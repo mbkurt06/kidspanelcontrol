@@ -13,16 +13,19 @@ export default function ChildSettings() {
     <div className="page">
       <header className="page-head"><h1>Uygulama Ayarları</h1></header>
       {!fam.visibleChildren.length && <p className="muted small">Çocuk bulunamadı.</p>}
-      <SecurityCard />
-      <details className="card section-collapse-card" open>
+      <details className="card section-collapse-card">
+        <summary className="section-collapse-head"><span>🔐 Ebeveyn PIN'i</span><span className="collapse-arrow" aria-hidden="true" /></summary>
+        <SecurityCard embedded />
+      </details>
+      <details className="card section-collapse-card">
         <summary className="section-collapse-head"><span>Görev ayarları</span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <TaskSettingsCard embedded />
       </details>
-      <details className="card section-collapse-card" open>
+      <details className="card section-collapse-card">
         <summary className="section-collapse-head"><span>Müzik</span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <Music inline />
       </details>
-      <details className="card section-collapse-card" open>
+      <details className="card section-collapse-card">
         <summary className="section-collapse-head"><span>Profil ayarları</span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <div className="stack">
           {fam.visibleChildren.map((child) => (

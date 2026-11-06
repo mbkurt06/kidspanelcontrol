@@ -367,8 +367,6 @@ export default function Settings() {
         )}
       </div>
 
-      <SecurityCard />
-
       <div className="card">
         <h2>Hesap <Info>Paneli iPhone ana ekranına eklemek için Safari → Paylaş → Ana Ekrana Ekle yolunu kullan.</Info></h2>
         <button className="btn ghost" onClick={() => supabase.auth.signOut()}>
@@ -386,7 +384,7 @@ async function sha256(text: string) {
 }
 
 /** Güvenlik: bütün telefonlarda geçen ebeveyn PIN'i. */
-function SecurityCard() {
+export function SecurityCard() {
   const fam = useFamily();
   const f = fam.family;
   const [pin, setPin] = useState("");

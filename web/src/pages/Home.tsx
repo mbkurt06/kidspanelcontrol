@@ -85,6 +85,8 @@ function useHold(fn: () => void) {
 
 type LockKind = "kiosk" | "limit" | string;
 
+const timeText = (iso: string) => new Date(iso).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+
 function ChildCard({ child }: { child: Child }) {
   const fam = useFamily();
   const st = fam.statuses[child.id];
@@ -104,6 +106,9 @@ function ChildCard({ child }: { child: Child }) {
   }, [child.id, fam.sections, st?.updated_at]);
 
   const staleMin = st ? Math.floor((Date.now() - new Date(st.updated_at).getTime()) / 60000) : 0;
+  // Bağlantı: yeşil = son 2 dk, sarı = 2–15 dk, gri = daha uzun
+  const conn = !st ? null : staleMin < 2 ? "on" : staleMin < 15 ? "idle" : "off";
+  const [showSeen, setShowSeen] = useState(false);
   // Telefonun bildirdiği durum
   const realKiosk = !!st?.lock_reason?.startsWith("🔒");
   const realLimited = !realKiosk && !!st?.locked;
@@ -225,14 +230,29 @@ function ChildCard({ child }: { child: Child }) {
         </Ring>
         <div className="grow">
           <div className="row between">
-            <h2>{child.name}</h2>
+            <h2 className="row gap-xs" style={{ alignItems: "center" }}>
+              {child.name}
+              {conn && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  className={`conn-dot ${conn}`}
+                  aria-label={conn === "on" ? "Telefon bağlı" : conn === "idle" ? "Telefon birkaç dakikadır sessiz" : "Telefon bağlı değil"}
+                  title={`Son bağlantı ${timeText(st!.updated_at)}`}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowSeen(!showSeen); }}
+                />
+              )}
+            </h2>
             <Icon name="chevron" size={18} />
           </div>
+          {showSeen && st && (
+            <span className="muted tiny">Son bağlantı {timeText(st.updated_at)} ({staleMin < 1 ? "az önce" : `${staleMin} dk önce`})</span>
+          )}
           {st ? (
             <>
               {stateLine && (
                 <span className={`state-line ${stateLine.cls}`}>
-                  <span className="state-dot" />
+                  <span className="state-ico" aria-hidden>🕘</span>
                   {stateLine.text}
                 </span>
               )}

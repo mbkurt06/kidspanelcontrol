@@ -82,10 +82,11 @@ class RecordActivity : ComponentActivity() {
     private fun Screen(runId: String?) {
         val state by Recorder.state.collectAsState()
         val task = remember(runId) { Tasks.current().firstOrNull { it.runId == runId } }
-        // İade sonrası yeni deneme: bu görevin önceki kaydı bitmiş ama sunucuda bu deneme için kayıt yoksa yeniden başlatılabilir
-        val s = state?.takeIf { it.runId == runId || runId == null }
-            // Sadece iade edilmiş (yeni deneme bekleyen) görevde eski bitmiş kayıt yok sayılır
-            ?.takeIf { it.active || task?.status != "rejected" }
+        // İade sonrası yeni deneme: ekran açılırken duran eski (bitmiş) kayıt yok sayılır; bu ekranda yeni biten kayıt gösterilir
+        val staleId = remember(runId) {
+            Recorder.state.value?.takeIf { !it.active && it.runId == runId && task?.status == "rejected" }?.id
+        }
+        val s = state?.takeIf { it.runId == runId || runId == null }?.takeIf { it.id != staleId }
         Column(
             Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding()
                 .clickable(enabled = s?.status == "recording") { applyDim(!dim) },

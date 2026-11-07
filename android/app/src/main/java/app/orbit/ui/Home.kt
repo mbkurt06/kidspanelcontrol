@@ -497,6 +497,12 @@ private fun WalletScreen() {
     val limitLeft = rules.walletDailyMax?.let { (it - usedToday).coerceAtLeast(0) }
     val maxUse = minOf(walletTotal, limitLeft ?: walletTotal)
     var busy by remember { mutableStateOf(false) }
+    // Cüzdan yalnızca açık saatlerde kullanılır (programdaki kilitli olmayan bölümler)
+    val openSecs = remember(live.lastSync, s.day) { app.orbit.engine.RuleEngine(rules).daySections(s.day).filter { it.defaultRule != app.orbit.engine.SecRule.BLOCKED } }
+    val openStart = openSecs.minOfOrNull { it.start }
+    val openEnd = openSecs.maxOfOrNull { if (!it.end.isAfter(it.start)) java.time.LocalTime.of(23, 59) else it.end }
+    val walletClosed = openStart != null && openEnd != null && (s.now.isBefore(openStart) || !s.now.isBefore(openEnd))
+    val hoursText = if (openStart != null && openEnd != null) "%02d:%02d–%02d:%02d".format(openStart.hour, openStart.minute, openEnd.hour, openEnd.minute) else ""
     Card {
         Row(verticalAlignment = Alignment.CenterVertically) { Title("Cüzdanım"); Spacer(Modifier.width(6.dp)); Info("Cüzdandaki süreyi çocuk kullanabilir; yalnızca izin verilen saatlerde ve günlük sınır içinde geçerlidir.") }
         if (s.walletGrants.isEmpty()) {
@@ -510,7 +516,9 @@ private fun WalletScreen() {
                 Muted("Günde en fazla ${minutesText(it.toLong())} kullanabilirsin · bugün kalan ${minutesText((limitLeft ?: 0).toLong())}", 13)
             }
             Muted("Bugüne eklenir; izin verilen saatlerde kullanırsın.", 13)
-            if (maxUse > 0) {
+            if (walletClosed) {
+                Muted("Cüzdan açık saatlerde ($hoursText) kullanılır. Şu an kapalı saatlerdesin.", 13)
+            } else if (maxUse > 0) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     for (m in listOf(10, 15, 30).filter { it < maxUse } + maxUse) {
                         Button(

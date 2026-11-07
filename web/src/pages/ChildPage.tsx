@@ -1144,11 +1144,28 @@ function PlanSheet({
   const [end, setEnd] = useState(grant.window_end ? hhmm(grant.window_end) : "19:00");
   const [endMode, setEndMode] = useState<"open" | "until" | "eod">(grant.window_end ? "until" : "open");
   const [err, setErr] = useState("");
+  // Kapalı saatteyken bugüne süre eklemek işe yaramaz (kullanılamaz); bugün seçenekleri kapanır
+  const [closedNow, setClosedNow] = useState<string | null>(null);
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.rpc("open_hours", { p_child: grant.child_id, p_day: todayISO() });
+      const h = (Array.isArray(data) ? data[0] : data) as { os: number; oe: number } | null;
+      if (!h) return;
+      const p = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date()).split(":").map(Number);
+      const t = p[0] * 60 + p[1];
+      const f = (m: number) => `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+      if (t < h.os || t >= h.oe) {
+        setClosedNow(`${f(h.os)}–${f(h.oe)}`);
+        setDay((d) => (d === "today" ? "tomorrow" : d));
+      }
+    })();
+  }, [grant.child_id]);
 
   async function save() {
     setErr("");
     const m = Math.round(Number(minutes));
     if (!m || m < 1 || m > grant.minutes) return setErr(`1 ile ${grant.minutes} dk arası yaz.`);
+    if (closedNow && dated && day === "today") return setErr("Kapalı saatte bugüne süre eklenemez.");
     const validOn = day === "today" ? todayISO() : day === "tomorrow" ? todayISO("Europe/Berlin", 1) : date;
     let target: GrantPatch;
     let text: string;
@@ -1220,12 +1237,13 @@ function PlanSheet({
             ))}
           </select>
         </label>
+        {closedNow && dated && <p className="muted small">Şu an kapalı saat (açık: {closedNow}). Bugüne eklenen süre kullanılamaz; yarına ya da başka güne planla, veya "Hemen kullansın" ile telefonu şimdi aç.</p>}
         {where === "now" && <Info>Açık saatlerdeyse kalan süresine hemen eklenir; kapalı saatlerdeyse şu andan itibaren bu süre kadar telefon açılır.</Info>}
         {dated && (
           <label className="field">
             <span>Hangi gün</span>
             <select value={day} onChange={(e) => setDay(e.target.value as typeof day)}>
-              <option value="today">Bugün</option>
+              <option value="today" disabled={!!closedNow}>Bugün{closedNow ? " (kapalı saat)" : ""}</option>
               <option value="tomorrow">Yarın</option>
               <option value="date">Belirli bir gün</option>
             </select>

@@ -241,6 +241,10 @@ object Sync {
                 if (left > 0) "Bugün cüzdandan en fazla $left dk daha kullanabilirsin" else "Bugünkü cüzdan sınırın doldu"
             }
             "wallet_empty" in m -> "Cüzdanında süre yok"
+            "wallet_closed" in m -> {
+                val h = Regex("wallet_closed:([0-9:]+-[0-9:]+)").find(m)?.groupValues?.get(1)?.replace("-", "–")
+                "Cüzdan açık saatlerde${h?.let { " ($it)" } ?: ""} kullanılır"
+            }
             else -> "İnternet gerekli"
         }
     }

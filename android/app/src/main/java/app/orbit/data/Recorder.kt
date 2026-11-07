@@ -31,7 +31,14 @@ data class RecState(
     val autoSubmit: Boolean = false,
     /** Sunucuya bildirilmemiş son durum var mı */
     val dirty: Boolean = false,
+    /** İstenen süre doldu, çocuğun seçimi bekleniyor (onaya gönder / devam / baştan) */
+    val reached: Boolean = false,
+    val reachedAt: Long = 0L,
+    /** Süre dolduktan sonra fazladan kayda devam ediyor */
+    val extra: Boolean = false,
 ) {
+    /** Fazladan kayıt üst sınırı: istenen süre + 60 dk */
+    val hardMaxSeconds get() = plannedSeconds + 3600
     val active get() = status == "recording" || status == "paused"
     val canPause get() = pausePolicy != "none" && (pausePolicy != "limit" || pauseLeftSeconds > 0)
     val pauseLeftSeconds get() = if (pausePolicy == "limit") ((pauseMaxSeconds ?: 0) - pausedSeconds).coerceAtLeast(0) else Int.MAX_VALUE
@@ -40,13 +47,14 @@ data class RecState(
         .put("id", id).put("runId", runId).put("title", title).put("planned", plannedSeconds).put("camera", camera)
         .put("pausePolicy", pausePolicy).put("pauseMax", pauseMaxSeconds ?: JSONObject.NULL).put("status", status)
         .put("recorded", recordedSeconds).put("paused", pausedSeconds).put("pauseCount", pauseCount)
-        .put("autoSubmit", autoSubmit).put("dirty", dirty)
+        .put("autoSubmit", autoSubmit).put("dirty", dirty).put("reached", reached).put("reachedAt", reachedAt).put("extra", extra)
 
     companion object {
         fun fromJson(o: JSONObject) = RecState(
             o.getString("id"), o.getString("runId"), o.optString("title"), o.optInt("planned"), o.optString("camera", "back"),
             o.optString("pausePolicy", "child"), if (o.isNull("pauseMax")) null else o.optInt("pauseMax"), o.optString("status"),
             o.optInt("recorded"), o.optInt("paused"), o.optInt("pauseCount"), o.optBoolean("autoSubmit"), o.optBoolean("dirty"),
+            o.optBoolean("reached"), o.optLong("reachedAt"), o.optBoolean("extra"),
         )
     }
 }

@@ -61,6 +61,10 @@ class RecordService : LifecycleService() {
         const val ACTION_RESUME = "resume"
         const val ACTION_FINISH = "finish"
         const val ACTION_CANCEL = "cancel"
+        /** Süre doldu ekranında "Devam et": fazladan kayda geç */
+        const val ACTION_EXTEND = "extend"
+        /** Süre doldu ekranında seçim yapılmazsa bu kadar sonra kendiliğinden onaya gider */
+        const val REVIEW_TIMEOUT_MS = 120_000L
         /** Parça uzunluğu */
         private const val SEGMENT_MS = 3 * 60_000L
 
@@ -117,9 +121,10 @@ class RecordService : LifecycleService() {
             ACTION_RESUME -> resume()
             ACTION_FINISH -> finish(cancelled = false)
             ACTION_CANCEL -> finish(cancelled = true)
+            ACTION_EXTEND -> extend()
             else -> {}
         }
-        if (intent?.action != ACTION_RESUME) Recorder.current()?.takeIf { it.active }?.let { bindCamera(it) }
+        if (intent?.action != ACTION_RESUME && intent?.action != ACTION_EXTEND) Recorder.current()?.takeIf { it.active }?.let { bindCamera(it) }
         if (!ticking) {
             ticking = true
             lifecycleScope.launch { tickLoop() }
@@ -290,6 +295,23 @@ class RecordService : LifecycleService() {
         bindCamera(n)
     }
 
+    /** İstenen süre doldu: kaydı durdur, çocuğa seçim ekranını göster */
+    private fun reachTarget() {
+        val n = Recorder.update { it.copy(status = "paused", reached = true, reachedAt = System.currentTimeMillis()) } ?: return
+        closeSegment()
+        net { Recorder.push(n, JSONObject().put("type", "pause").put("note", "süre doldu")) }
+        goForeground(n)
+        // Ekran kapalıysa ya da başka yerdeyse seçim ekranını öne getir
+        runCatching { startActivity(Intent(this, RecordActivity::class.java).putExtra("runId", n.runId).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)) }
+    }
+
+    private fun extend() {
+        val s = Recorder.current() ?: return
+        if (!s.reached) return
+        Recorder.update { it.copy(reached = false, extra = true) }
+        resume()
+    }
+
     private fun finish(cancelled: Boolean) {
         val s = Recorder.current() ?: return
         if (!s.active) return
@@ -326,7 +348,8 @@ class RecordService : LifecycleService() {
                 if (camOk) {
                     gapReported = false
                     val n = Recorder.update { it.copy(recordedSeconds = it.recordedSeconds + dt) } ?: break
-                    if (n.recordedSeconds >= n.plannedSeconds) { finish(cancelled = false); break }
+                    if (!n.extra && n.recordedSeconds >= n.plannedSeconds) { reachTarget(); continue }
+                    if (n.extra && n.recordedSeconds >= n.hardMaxSeconds) { finish(cancelled = false); break }
                     if (recording != null && !rollover && now - segStartMs > SEGMENT_MS) { rollover = true; closeSegment() }
                     if (recording == null && !rollover) startSegment()
                 } else if (now - lastFrameSeen > 15_000 && now - lastRebind > 15_000) {
@@ -346,6 +369,9 @@ class RecordService : LifecycleService() {
                     // Analiz yoksa canlılık kayıttan gelir: parça yokken bekleyip kilitlenmesin
                     startSegment()
                 }
+            } else if (s.status == "paused" && s.reached) {
+                // Seçim bekleniyor: mola sayılmaz; 2 dk içinde seçilmezse onaya gönderilir
+                if (now - s.reachedAt > REVIEW_TIMEOUT_MS) { finish(cancelled = false); break }
             } else if (s.status == "paused") {
                 val n = Recorder.update { it.copy(pausedSeconds = it.pausedSeconds + dt) } ?: break
                 if (n.pausePolicy == "limit" && n.pauseLeftSeconds <= 0) resume(auto = true)

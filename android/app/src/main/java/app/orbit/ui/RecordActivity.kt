@@ -1,5 +1,11 @@
 package app.orbit.ui
 
+import android.widget.Toast
+
+import kotlinx.coroutines.delay
+
+import androidx.compose.runtime.LaunchedEffect
+
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
@@ -92,6 +98,7 @@ class RecordActivity : ComponentActivity() {
                 .clickable(enabled = s?.status == "recording") { applyDim(!dim) },
         ) {
             when {
+                s != null && s.active && s.reached -> Reached(task)
                 s != null && s.active -> Recording()
                 s != null -> Finished()
                 task != null -> Start(task)
@@ -275,6 +282,73 @@ class RecordActivity : ComponentActivity() {
                 dismissButton = { TextButton(onClick = { confirm = false }) { Text("Devam") } },
             )
         }
+    }
+
+    /** İstenen süre doldu: onaya gönder / fazladan devam / baştan çek */
+    @Composable
+    private fun Reached(task: TaskItem?) {
+        val s by Recorder.state.collectAsState()
+        val st = s ?: return
+        val scope = rememberCoroutineScope()
+        var askRestart by remember { mutableStateOf(false) }
+        var busy by remember { mutableStateOf(false) }
+        var left by remember { mutableStateOf(0) }
+        LaunchedEffect(st.reachedAt) {
+            while (true) {
+                left = (((st.reachedAt + RecordService.REVIEW_TIMEOUT_MS) - System.currentTimeMillis()) / 1000).toInt().coerceAtLeast(0)
+                delay(1000)
+            }
+        }
+        Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Text("✅ Kayıt süresi tamamlandı", color = C.text, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+            Muted("${st.title} · ${clock(st.recordedSeconds)} kayıt")
+            Muted(
+                if (st.autoSubmit) "Seçmezsen ${left} sn sonra kendiliğinden onaya gönderilir."
+                else "Seçmezsen ${left} sn sonra kayıt kaydedilir; görevin kalan adımlarını Görevlerim'den tamamla.",
+                13,
+            )
+            Spacer(Modifier.weight(1f))
+            Button(
+                enabled = !busy,
+                onClick = { RecordService.send(this@RecordActivity, RecordService.ACTION_FINISH) },
+                modifier = Modifier.fillMaxWidth().height(60.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = C.accent),
+            ) { Text(if (st.autoSubmit) "✓ Onaya gönder" else "✓ Kaydı bitir, göreve dön", fontSize = 18.sp) }
+            Button(
+                enabled = !busy,
+                onClick = { RecordService.send(this@RecordActivity, RecordService.ACTION_EXTEND) },
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = C.surface2),
+            ) { Text("▶ Devam et (fazladan kayıt)") }
+            if (task != null) TextButton(
+                enabled = !busy,
+                onClick = { askRestart = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(if (busy) "Baştan başlatılıyor…" else "↺ Baştan çek", color = C.bad) }
+        }
+        if (askRestart && task != null) AlertDialog(
+            onDismissRequest = { askRestart = false },
+            title = { Text("Baştan çekilsin mi?") },
+            text = { Text("Bu kayıt (${clock(st.recordedSeconds)}) silinir ve yeni kayıt sıfırdan başlar.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    askRestart = false
+                    busy = true
+                    val cam = st.camera
+                    RecordService.send(this@RecordActivity, RecordService.ACTION_CANCEL)
+                    scope.launch {
+                        // Eski kayıt kapanana kadar bekle, sonra yenisini başlat
+                        var waited = 0
+                        while ((RecordService.running || Recorder.current()?.active == true) && waited < 8000) { delay(200); waited += 200 }
+                        val err = withContext(Dispatchers.IO) { Recorder.begin(task, cam) }
+                        busy = false
+                        if (err == null) { RecordService.send(this@RecordActivity, RecordService.ACTION_START); Live.syncRequested = true }
+                        else Toast.makeText(this@RecordActivity, err, Toast.LENGTH_LONG).show()
+                    }
+                }) { Text("Baştan çek", color = C.bad) }
+            },
+            dismissButton = { TextButton(onClick = { askRestart = false }) { Text("Vazgeç") } },
+        )
     }
 
     @Composable

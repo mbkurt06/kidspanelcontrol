@@ -181,6 +181,7 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
           {rec.planned_seconds ? ` / ${mm(rec.planned_seconds)}` : ""}
           {rec.pause_count ? ` · ${rec.pause_count} mola (${mm(rec.paused_seconds)})` : ""}
           {alerts ? ` · ${alerts} kesinti` : ""}
+          {rec.planned_seconds && rec.recorded_seconds > rec.planned_seconds + 30 ? ` · fazladan +${mm(rec.recorded_seconds - rec.planned_seconds)}` : ""}
           {rec.status === "recording" ? " · sürüyor" : rec.status === "paused" ? " · molada" : rec.status === "cancelled" ? " · iptal" : early ? " · erken bitti" : ""}
         </span>
       </button>

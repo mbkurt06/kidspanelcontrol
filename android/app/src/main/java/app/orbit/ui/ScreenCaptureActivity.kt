@@ -21,7 +21,9 @@ class ScreenCaptureActivity : Activity() {
         private const val REQ = 41
 
         fun start(ctx: Context, t: TaskItem, mode: String) {
-            if (!Settings.canDrawOverlays(ctx)) {
+            // Android Go'da bu izin hiç yok: bildirimden kontrol edilir, izin sayfası açılmaz
+            val lowRam = ctx.getSystemService(android.app.ActivityManager::class.java).isLowRamDevice
+            if (!Settings.canDrawOverlays(ctx) && !lowRam) {
                 Toast.makeText(ctx, "Önce Orbit'e \"diğer uygulamaların üzerinde göster\" izni ver", Toast.LENGTH_LONG).show()
                 runCatching {
                     ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

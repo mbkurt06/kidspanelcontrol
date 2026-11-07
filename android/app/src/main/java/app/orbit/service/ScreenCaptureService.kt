@@ -58,6 +58,10 @@ class ScreenCaptureService : Service() {
     companion object {
         private const val TAG = "OrbitScreen"
         private const val CH = "orbit-screen"
+        const val ACT_SHOT = "app.orbit.screen.SHOT"
+        const val ACT_DONE = "app.orbit.screen.DONE"
+        const val ACT_PAUSE = "app.orbit.screen.PAUSE"
+        const val ACT_RESTART = "app.orbit.screen.RESTART"
         @Volatile var running = false
             private set
         /** İzin penceresi açılırken (servis henüz başlamadan) kilit yumuşasın */
@@ -110,6 +114,9 @@ class ScreenCaptureService : Service() {
     private var preview: LinearLayout? = null
     private var small = false
     private var bubbleParams: WindowManager.LayoutParams? = null
+    // Üzerinde gösterme izni yoksa (Android Go gibi) kontroller bildirimde
+    private var overlay = true
+    private var lastNote = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -124,7 +131,14 @@ class ScreenCaptureService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACT_SHOT -> { if (projection != null) { toast("2 sn sonra çekilecek, bildirim panelini kapat"); main.postDelayed({ takeShot() }, 1800) }; return START_NOT_STICKY }
+            ACT_DONE -> { if (mode == "shot") finishShots() else finishRecording(); return START_NOT_STICKY }
+            ACT_PAUSE -> { togglePause(); return START_NOT_STICKY }
+            ACT_RESTART -> { restartRecording(); return START_NOT_STICKY }
+        }
         if (intent == null || projection != null) return START_NOT_STICKY
+        overlay = android.provider.Settings.canDrawOverlays(this)
         mode = intent.getStringExtra("mode") ?: "shot"
         runId = intent.getStringExtra("runId") ?: ""
         title = intent.getStringExtra("title") ?: "Görev"
@@ -154,7 +168,7 @@ class ScreenCaptureService : Service() {
             override fun onStop() { main.post { onProjectionStopped() } }
         }, main)
         setupDisplay(mp)
-        showBubble()
+        if (overlay) showBubble() else updateNote(force = true)
         if (mode == "record") startRecording()
         return START_NOT_STICKY
     }
@@ -222,6 +236,8 @@ class ScreenCaptureService : Service() {
     }
 
     private fun showPreview(bmp: Bitmap) {
+        // Önizleme penceresi açılamıyorsa doğrudan ekle
+        if (!overlay) { toast("Ekran görüntüsü ${shotCount + 1} eklendi"); upload(bmp); return }
         bubble?.visibility = View.VISIBLE
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -484,6 +500,7 @@ class ScreenCaptureService : Service() {
     }
 
     private fun updateBubble() {
+        if (!overlay) { updateNote(); return }
         val t = bubbleText ?: return
         if (small) { t.text = if (mode == "record") "●" else "📱"; bubbleSub?.text = ""; return }
         if (mode == "shot") {
@@ -511,6 +528,29 @@ class ScreenCaptureService : Service() {
                 col.addView(btn("Bitti", "#2B3157") { finishShots() }, LinearLayout.LayoutParams(dp(72), dp(34)).apply { topMargin = dp(6) })
             }
         }
+    }
+
+    /** Bildirimdeki kontroller (yüzen düğme gösterilemeyen telefonlar için) */
+    private fun updateNote(force: Boolean = false) {
+        val now = System.currentTimeMillis()
+        if (!force && now - lastNote < 3000) return
+        lastNote = now
+        fun pi(action: String, code: Int) = android.app.PendingIntent.getService(this, code, Intent(this, ScreenCaptureService::class.java).setAction(action), android.app.PendingIntent.FLAG_IMMUTABLE or android.app.PendingIntent.FLAG_UPDATE_CURRENT)
+        val b = Notification.Builder(this, CH).setSmallIcon(R.drawable.ic_orbit).setOngoing(true).setOnlyAlertOnce(true)
+        if (mode == "shot") {
+            b.setContentTitle("📱 Ekran görüntüsü: $title")
+                .setContentText("$shotCount / $shotMin · çekmek için \"Görüntü al\"a bas")
+                .addAction(Notification.Action.Builder(null, "📷 Görüntü al", pi(ACT_SHOT, 51)).build())
+            if (shotCount >= shotMin) b.addAction(Notification.Action.Builder(null, "✓ Bitti", pi(ACT_DONE, 52)).build())
+        } else {
+            val time = "%d:%02d".format(recorded / 60, recorded % 60)
+            b.setContentTitle("🎬 Ekran kaydı: $title")
+                .setContentText(if (paused) "⏸ Duraklatıldı · $time" else "● $time · " + if (minReached) "bitirebilirsin" else "en az ${recMin / 60} dk")
+                .addAction(Notification.Action.Builder(null, if (paused) "▶ Devam" else "⏸ Duraklat", pi(ACT_PAUSE, 53)).build())
+            if (minReached) b.addAction(Notification.Action.Builder(null, "✓ Bitir", pi(ACT_DONE, 54)).build())
+            b.addAction(Notification.Action.Builder(null, "↺ Baştan", pi(ACT_RESTART, 55)).build())
+        }
+        runCatching { getSystemService(NotificationManager::class.java).notify(5, b.build()) }
     }
 
     private fun togglePanel() {

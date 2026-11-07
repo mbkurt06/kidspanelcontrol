@@ -320,6 +320,7 @@ fun TasksCard(tasks: List<TaskItem>) {
                         ) {
                             Text(
                                 when {
+                                    rec?.reached == true -> "✅ Kayıt süresi doldu — seç"
                                     rec?.status == "paused" -> "📹 Kayda devam et"
                                     rec?.active == true -> "📹 Kayıt sürüyor — aç"
                                     t.recStatus == "recording" || t.recStatus == "paused" -> "📹 Kayda devam et"

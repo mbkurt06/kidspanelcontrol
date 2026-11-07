@@ -82,7 +82,9 @@ class RecordActivity : ComponentActivity() {
     private fun Screen(runId: String?) {
         val state by Recorder.state.collectAsState()
         val task = remember(runId) { Tasks.current().firstOrNull { it.runId == runId } }
+        // İade sonrası yeni deneme: bu görevin önceki kaydı bitmiş ama sunucuda bu deneme için kayıt yoksa yeniden başlatılabilir
         val s = state?.takeIf { it.runId == runId || runId == null }
+            ?.takeIf { it.active || task == null || task.recordingDone || !task.open }
         Column(
             Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding()
                 .clickable(enabled = s?.status == "recording") { applyDim(!dim) },

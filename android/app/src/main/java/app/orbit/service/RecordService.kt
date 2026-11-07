@@ -90,6 +90,7 @@ class RecordService : LifecycleService() {
     private var lastPreviewMs = 0L
     private var lastFrameSeen = 0L
     private var hasAnalysis = false
+    private var lastRebind = 0L
     private var surfaceWatch = false
     private var wake: PowerManager.WakeLock? = null
     private var ticking = false
@@ -118,7 +119,7 @@ class RecordService : LifecycleService() {
             ACTION_CANCEL -> finish(cancelled = true)
             else -> {}
         }
-        Recorder.current()?.takeIf { it.active }?.let { bindCamera(it) }
+        if (intent?.action != ACTION_RESUME) Recorder.current()?.takeIf { it.active }?.let { bindCamera(it) }
         if (!ticking) {
             ticking = true
             lifecycleScope.launch { tickLoop() }
@@ -278,7 +279,15 @@ class RecordService : LifecycleService() {
         val n = Recorder.update { it.copy(status = "recording") } ?: return
         net { Recorder.push(n, JSONObject().put("type", "resume").apply { if (auto) put("note", "mola hakkı bitti") }) }
         goForeground(n)
-        startSegment()
+        // Molada kamerayı başka uygulama almış olabilir: kamerayı baştan bağla, bağlanınca parça başlar
+        lastFrameSeen = System.currentTimeMillis()
+        lastRebind = lastFrameSeen
+        recording?.stop()
+        runCatching { provider?.unbindAll() }
+        provider = null
+        boundCamera = null
+        videoCap = null
+        bindCamera(n)
     }
 
     private fun finish(cancelled: Boolean) {
@@ -302,6 +311,7 @@ class RecordService : LifecycleService() {
         var last = System.currentTimeMillis()
         var lastPush = 0L
         var gapReported = false
+        lastRebind = System.currentTimeMillis()
         while (lifecycleScope.isActive && running) {
             delay(1000)
             val now = System.currentTimeMillis()
@@ -319,12 +329,22 @@ class RecordService : LifecycleService() {
                     if (n.recordedSeconds >= n.plannedSeconds) { finish(cancelled = false); break }
                     if (recording != null && !rollover && now - segStartMs > SEGMENT_MS) { rollover = true; closeSegment() }
                     if (recording == null && !rollover) startSegment()
-                } else if (!gapReported && now - lastFrameSeen > 15_000 && lastFrameSeen > 0) {
-                    gapReported = true
-                    net { Recorder.push(s, JSONObject().put("type", "gap").put("note", "kamera görüntü vermiyor")) }
+                } else if (now - lastFrameSeen > 15_000 && now - lastRebind > 15_000) {
+                    // Görüntü yok: 15 sn'de bir kamerayı yeniden bağlamayı dene (bir kez değil)
+                    if (!gapReported) {
+                        gapReported = true
+                        net { Recorder.push(s, JSONObject().put("type", "gap").put("note", "kamera görüntü vermiyor")) }
+                    }
+                    lastRebind = now
+                    recording?.stop()
+                    runCatching { provider?.unbindAll() }
                     boundCamera = null
                     provider = null
+                    videoCap = null
                     bindCamera(s)
+                } else if (recording == null && !rollover && videoCap != null) {
+                    // Analiz yoksa canlılık kayıttan gelir: parça yokken bekleyip kilitlenmesin
+                    startSegment()
                 }
             } else if (s.status == "paused") {
                 val n = Recorder.update { it.copy(pausedSeconds = it.pausedSeconds + dt) } ?: break

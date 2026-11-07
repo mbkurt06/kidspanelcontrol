@@ -316,7 +316,8 @@ function GroupSettings({ group, tasks, onSaved, onRemove }: { group: TaskGroup; 
   const [repeat, setRepeat] = useState<RepeatChoice>(repeatChoice(group));
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  useEffect(() => { setF(group); setRepeat(repeatChoice(group)); }, [group]);
+  // Yalnızca başka bir grup açılınca sıfırla (sayfa yenilenince yazılan ad/ayarlar silinmesin)
+  useEffect(() => { setF(group); setRepeat(repeatChoice(group)); }, [group.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = <K extends keyof TaskGroup>(k: K, v: TaskGroup[K]) => setF((x) => ({ ...x, [k]: v }));
   const mandatory = tasks.filter((t) => t.mandatory).length;
   const total = tasks.length;

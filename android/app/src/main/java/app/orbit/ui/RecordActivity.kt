@@ -84,7 +84,8 @@ class RecordActivity : ComponentActivity() {
         val task = remember(runId) { Tasks.current().firstOrNull { it.runId == runId } }
         // İade sonrası yeni deneme: bu görevin önceki kaydı bitmiş ama sunucuda bu deneme için kayıt yoksa yeniden başlatılabilir
         val s = state?.takeIf { it.runId == runId || runId == null }
-            ?.takeIf { it.active || task == null || task.recordingDone || !task.open }
+            // Sadece iade edilmiş (yeni deneme bekleyen) görevde eski bitmiş kayıt yok sayılır
+            ?.takeIf { it.active || task?.status != "rejected" }
         Column(
             Modifier.fillMaxSize().background(Color.Black).safeDrawingPadding()
                 .clickable(enabled = s?.status == "recording") { applyDim(!dim) },

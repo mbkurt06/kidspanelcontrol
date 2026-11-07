@@ -31,6 +31,15 @@ Read this file before changing any code, regardless of provider (Claude, Codex, 
 - For Android enforcement: verify behavior without network and on clock/timezone changes.
 - Never expose real children, private media, passwords, or tokens to third-party LLMs.
 
+## Mandatory English-only engineering language
+- **All source-code identifiers and technical comments MUST be in English:** variable names, function and method names, class/interface/type/enum names, constants, database identifiers, test case names, code documentation (KDoc/JSDoc), commit messages, PR descriptions, engineering documentation, and log messages.
+- Use clear domain-specific names, never transliterated Turkish such as `sure`, `gorev`, `kullanici`, or abbreviated names without a conventional meaning. Prefer `remainingTimeSeconds`, `taskReward`, `parentAccount`.
+- Follow official language conventions: Kotlin/TypeScript `lowerCamelCase` for values/functions, `UpperCamelCase` for classes/types/React components, `UPPER_SNAKE_CASE` for true compile-time constants when idiomatic; PostgreSQL identifiers `snake_case`. Conventional acronyms only.
+- Make every variable's unit and state explicit where ambiguity is costly: `elapsedSeconds`, `dailyLimitMinutes`, `isDeviceLocked`, `pendingCommands`. Avoid `data`, `temp`, `flag` or single-letter identifiers outside a tiny well-understood local context.
+- Avoid literal line-by-line explanation; explanatory comments describe WHY, invariants, constraints, tradeoffs, or non-obvious behavior **in English**.
+- User-facing text may be Turkish or another localized language, but keep it in translation resources / UI localization structures; never put Turkish words into technical identifiers or code comments. Do not translate user-visible Turkish text into English as an incidental refactor.
+- Do not mass-rename existing identifiers or comments merely to satisfy this policy; plan incremental, test-backed modernization. Schema/API/serialized key changes require compatibility and migration review.
+
 ## Agent portability
 - CLAUDE.md points to this document; other tools must also read AGENTS.md.
 - Model/provider/agent configuration is replaceable; no single proprietary memory store is the source of truth.

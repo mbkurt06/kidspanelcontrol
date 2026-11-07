@@ -20,6 +20,9 @@ Checks design system reuse, mobile/iPhone Safari and desktop layouts, clipping, 
 ## 6. Performance / Release Reviewer
 Checks work on UI thread, excessive rendering or polling, memory, network retries, build reproducibility, signing, APK update safety, Vercel publish and safe rollback.
 
+## Shared language review requirement
+Every reviewer must check that newly introduced code identifiers, test names, KDoc/JSDoc and technical comments are in English and follow docs/engineering/QUALITY_POLICY.md. Check naming consistency and explicit time units. Localized UI copy is a separate, permitted exception.
+
 ## How to use roles
 - Every PR: Developer + automated checks; independent review by Architect or QA.
 - Authentication, permissions, RLS or child privacy: Security role **mandatory**.

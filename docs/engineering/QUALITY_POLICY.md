@@ -10,6 +10,28 @@ Status: proposed baseline, **not** proof of project-wide compliance. These are e
 - WCAG 2.2 AA as an interface accessibility target (where applicable).
 - Git pull requests, controlled migrations, observable failures, tests, and rollback plans.
 
+## English language and naming conventions (mandatory for new and touched code)
+
+All production code, test names and comments, KDoc/JSDoc, technical identifiers, engineering documentation, Git commit messages and PR descriptions must be written in **English**, independent of the user's spoken language or the AI provider. Domain terminology must be consistent across Kotlin, TypeScript, APIs and SQL. Reviewers reject Turkish/transliterated-Turkish identifier names and code comments introduced by a change.
+
+| Area | Convention | Example |
+| --- | --- | --- |
+| Kotlin classes and interfaces | `UpperCamelCase` | `DailyAllowanceCalculator` |
+| Kotlin functions and properties | `lowerCamelCase` | `calculateRemainingSeconds` |
+| Kotlin constants | `UPPER_SNAKE_CASE` for true constants | `DEFAULT_DAILY_LIMIT_MINUTES` |
+| TypeScript variables / functions | `lowerCamelCase` | `remainingTimeSeconds` |
+| React components / TS types | `UpperCamelCase` | `TaskRewardDialog` |
+| React hooks | `use` + `UpperCamelCase` suffix | `useDailyAllowance` |
+| Booleans | predicate names | `isLocked`, `hasPermission`, `canEditTask` |
+| Database columns / SQL identifiers | `snake_case` | `daily_limit_minutes` |
+| Tests | English behavior-oriented names | `profileChangePreservesConsumedTime` |
+
+Prefer full descriptive names; include units (`Seconds`, `Minutes`, `Bytes`) and avoid opaque abbreviations. English comments explain intent/invariants, not obvious assignments. Document public interfaces and subtle rules, not every line.
+
+**Localization exception:** UI content, translated strings, notifications intended for users, and locale resources may be Turkish or multilingual; their identifier keys and related code comments remain English. Localization content is not a naming-standard violation.
+
+**Legacy migration:** existing Turkish comments/identifiers are technical debt, not permission to break working code. Rename in small behavior-preserving PRs with tests, serialization/API/schema compatibility checks and review.
+
 ## Non-negotiable release gates
 - No known unreviewed critical vulnerability, permission bypass, family data leak, or loss of time/accounting integrity.
 - Existing tested behavior passes; new acceptance criteria have appropriate tests.

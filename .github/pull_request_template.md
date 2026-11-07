@@ -8,6 +8,12 @@ What changes, and what user-visible behavior remains unchanged?
 - [ ] Offline/Sync/Time/Rewards checked / not affected
 - [ ] CI, signing, updates, secrets checked / not affected
 
+## Naming and documentation
+- [ ] New or modified identifiers, tests, technical comments and code documentation are English-only.
+- [ ] Kotlin/TypeScript/SQL names follow the repository naming conventions.
+- [ ] User-facing translated content remains localized; no unintended UI language changes.
+- [ ] Renamed public interfaces, serialized keys and database columns have compatibility review.
+
 ## Evidence
 - Changed modules / important decisions:
 - Tests actually run (commands, success/failure, logs):

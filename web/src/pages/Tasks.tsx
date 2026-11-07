@@ -90,6 +90,14 @@ const proofText = (t?: Task) =>
       ].filter(Boolean).join(" · ");
 const runTone = (st: string) => (st === "approved" ? "good" : st === "submitted" ? "accent" : st === "rejected" || st === "expired" ? "warn" : "quiet");
 const rewardText = (n: number | null | undefined) => (n ? `${n > 0 ? "+" : ""}${n} dk` : "—");
+/** Ödül + ceza: bitmiş görevde sonucu (onay → +, süresi doldu → −), açıkta ikisini birden gösterir */
+const taskRewardText = (t: Task, status?: string | null) => {
+  const plus = (t.reward_minutes ?? 0) > 0 ? t.reward_minutes! : 0;
+  const minus = t.fail_minutes ?? 0;
+  if (status === "expired") return minus ? `−${minus} dk` : "—";
+  if (status === "approved" || !minus) return rewardText(t.reward_minutes);
+  return plus ? `+${plus} / −${minus}` : `−${minus} dk`;
+};
 /** Satır sonu sütunları: tekrar · puan · durum · düzenle · aç/kapa — her satırda aynı hizada */
 function Meta({ repeat, repeatTitle, reward, status, edit, arrow }: { repeat?: boolean; repeatTitle?: string; reward?: string | null; status?: string | null; edit?: JSX.Element | null; arrow?: JSX.Element | null }) {
   return (
@@ -248,7 +256,7 @@ export default function Tasks() {
   const taskMeta = (t: Task | undefined, status: string | null, arrow: JSX.Element | null = null) => {
     const g = t?.group_id ? groups.find((x) => x.id === t.group_id) : null;
     const repeat = !!t && !g && t.recurrence === "days";
-    return <Meta repeat={repeat} repeatTitle="Tekrarlı görev" reward={t ? rewardText(t.reward_minutes) : null} status={status} edit={<EditIcon label="Görevi düzenle" />} arrow={arrow} />;
+    return <Meta repeat={repeat} repeatTitle="Tekrarlı görev" reward={t ? taskRewardText(t, status) : null} status={status} edit={<EditIcon label="Görevi düzenle" />} arrow={arrow} />;
   };
   const groupMeta = (g: TaskGroup, pr: { all: number }, status: string | null, open: boolean | null) => (
     <Meta

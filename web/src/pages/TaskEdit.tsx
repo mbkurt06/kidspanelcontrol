@@ -30,6 +30,10 @@ type Form = {
   proof_after_min: string;
   proof_after_max: string;
   reward_minutes: string;
+  reward_on: boolean;
+  fail_on: boolean;
+  fail_minutes: string;
+  fail_target: "today" | "wallet" | "vault";
   reward_text: string;
   reward_validity: RewardValidity;
   reward_date: string;
@@ -71,7 +75,9 @@ function defaultsOf(f: Form): TaskDefaults {
     proof_before_max: Number(f.proof_before_max) || 4,
     proof_after_min: Number(f.proof_after_min) || 1,
     proof_after_max: Number(f.proof_after_max) || 4,
-    reward_minutes: f.reward_minutes.trim() === "" ? null : Number(f.reward_minutes),
+    reward_minutes: f.reward_on && f.reward_minutes.trim() !== "" ? Number(f.reward_minutes) : null,
+    fail_minutes: f.fail_on && Number(f.fail_minutes) > 0 ? Number(f.fail_minutes) : null,
+    fail_target: f.fail_target,
     reward_text: f.reward_text.trim() || null,
     reward_validity: f.reward_validity,
     reward_expires_days: f.reward_expires_days ? Number(f.reward_expires_days) : null,
@@ -108,6 +114,10 @@ function applyDefaults(f: Form, d: TaskDefaults | null | undefined, allChildren:
     proof_after_min: String(d.proof_after_min ?? f.proof_after_min),
     proof_after_max: String(d.proof_after_max ?? f.proof_after_max),
     reward_minutes: d.reward_minutes === undefined ? f.reward_minutes : d.reward_minutes == null ? "" : String(d.reward_minutes),
+    reward_on: d.reward_minutes === undefined ? f.reward_on : d.reward_minutes != null,
+    fail_on: d.fail_minutes != null,
+    fail_minutes: d.fail_minutes == null ? "15" : String(d.fail_minutes),
+    fail_target: (d.fail_target as Form["fail_target"]) ?? "today",
     reward_text: d.reward_text ?? f.reward_text,
     reward_validity: d.reward_validity ?? f.reward_validity,
     reward_expires_days: d.reward_expires_days == null ? "" : String(d.reward_expires_days),
@@ -153,6 +163,10 @@ const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; 
   proof_after_min: String(defaults?.task_after_photo_min ?? 1),
   proof_after_max: String(defaults?.task_after_photo_max ?? 4),
   reward_minutes: "15",
+  reward_on: true,
+  fail_on: false,
+  fail_minutes: "15",
+  fail_target: "today",
   reward_text: "",
   reward_validity: "today",
   reward_date: todayISO("Europe/Berlin", 1),
@@ -301,7 +315,11 @@ export default function TaskEdit() {
             proof_before_max: String(t.proof_before_max ?? 4),
             proof_after_min: String(t.proof_after_min ?? 1),
             proof_after_max: String(t.proof_after_max ?? 4),
-            reward_minutes: t.reward_minutes?.toString() ?? "",
+            reward_minutes: t.reward_minutes != null ? String(Math.abs(t.reward_minutes)) : "15",
+            reward_on: (t.reward_minutes ?? 0) > 0,
+            fail_on: (t.fail_minutes ?? 0) > 0 || (t.reward_minutes ?? 0) < 0,
+            fail_minutes: String(t.fail_minutes ?? ((t.reward_minutes ?? 0) < 0 ? -(t.reward_minutes as number) : 15)),
+            fail_target: t.fail_target ?? "today",
             reward_text: t.reward_text ?? "",
             reward_validity: t.reward_validity,
             reward_date: t.reward_date ?? todayISO("Europe/Berlin", 1),
@@ -329,7 +347,11 @@ export default function TaskEdit() {
               proof_before_max: String(data.proof_before_max ?? 4),
               proof_after_min: String(data.proof_after_min ?? 1),
               proof_after_max: String(data.proof_after_max ?? 4),
-              reward_minutes: data.reward_minutes?.toString() ?? "",
+              reward_minutes: data.reward_minutes != null ? String(Math.abs(data.reward_minutes)) : "15",
+              reward_on: (data.reward_minutes ?? 0) > 0,
+              fail_on: (data.fail_minutes ?? 0) > 0,
+              fail_minutes: String(data.fail_minutes ?? 15),
+              fail_target: data.fail_target ?? "today",
               reward_text: data.reward_text ?? "",
               reward_validity: data.reward_validity,
               reward_expires_days: data.reward_expires_days?.toString() ?? "",
@@ -366,8 +388,10 @@ export default function TaskEdit() {
     if (!f.title.trim()) return setErr("Görev adı yaz.");
     if (!f.child_ids.length) return setErr("En az bir çocuk seç.");
     if (f.recurrence === "days" && !f.days.length) return setErr("Tekrar günlerini seç.");
-    const rewardMinutes = f.reward_minutes.trim() === "" ? null : Number(f.reward_minutes);
-    if (rewardMinutes != null && (!Number.isInteger(rewardMinutes) || rewardMinutes < -1440 || rewardMinutes > 1440)) return setErr("Süre -1440 ile 1440 dakika arasında tam sayı olmalı.");
+    const rewardMinutes = f.reward_on && f.reward_minutes.trim() !== "" ? Number(f.reward_minutes) : null;
+    if (rewardMinutes != null && (!Number.isInteger(rewardMinutes) || rewardMinutes < 1 || rewardMinutes > 1440)) return setErr("Kazanılacak süre 1–1440 dakika arasında olmalı.");
+    const failMinutes = f.fail_on ? Number(f.fail_minutes) : null;
+    if (failMinutes != null && (!Number.isInteger(failMinutes) || failMinutes < 1 || failMinutes > 1440)) return setErr("Düşülecek süre 1–1440 dakika arasında olmalı.");
     setBusy(true);
     const row = {
       family_id: fam.familyId,
@@ -388,6 +412,8 @@ export default function TaskEdit() {
       proof_after_min: f.proof === "none" ? 1 : Math.min(4, Math.max(1, Number(f.proof_after_min) || 1)),
       proof_after_max: f.proof === "none" ? 4 : Math.max(Number(f.proof_after_max) || 4, Number(f.proof_after_min) || 1),
       reward_minutes: rewardMinutes,
+      fail_minutes: failMinutes,
+      fail_target: f.fail_target,
       reward_text: f.reward_text.trim() || null,
       reward_validity: f.reward_validity,
       reward_date: f.reward_validity === "date" ? f.reward_date : null,
@@ -436,6 +462,8 @@ export default function TaskEdit() {
         proof_after_min: row.proof_after_min,
         proof_after_max: row.proof_after_max,
         reward_minutes: row.reward_minutes,
+        fail_minutes: row.fail_minutes,
+        fail_target: row.fail_target,
         reward_text: row.reward_text,
         reward_validity: row.reward_validity === "date" ? "today" : row.reward_validity,
         reward_expires_days: row.reward_expires_days,
@@ -778,21 +806,44 @@ export default function TaskEdit() {
       </div>
 
       <div className="card">
-        <h2>Ödül / eksi süre <Info>Pozitif değer ödül olarak eklenir. Negatif değer görev zamanında yapılmazsa seçtiğin hedefe borç/eksi süre olarak yazılır.</Info></h2>
-        <div className="grid2">
+        <h2>Ödül ve ceza <Info>İkisi birbirinden bağımsız: yalnız ödül, yalnız ceza ya da ikisi birden seçilebilir. Ceza, görev son saatine (ya da son gününe) kadar onaylanmazsa uygulanır.</Info></h2>
+        <label className="check">
+          <input type="checkbox" checked={f.reward_on} onChange={(e) => set("reward_on", e.target.checked)} />
+          ✅ Yaparsa süre kazansın
+        </label>
+        {f.reward_on && <div className="grid2">
           <label className="field">
-            <span>{Number(f.reward_minutes) < 0 ? "Eksi süre (dk)" : "Ekstra süre (dk)"}</span>
-            <input type="number" min={-1440} max={1440} step={1} value={f.reward_minutes} onChange={(e) => set("reward_minutes", e.target.value)} placeholder="yok" />
+            <span>Kazanacağı süre (dk)</span>
+            <input type="number" min={1} max={1440} step={1} value={f.reward_minutes} onChange={(e) => set("reward_minutes", e.target.value)} />
           </label>
           <label className="field">
-            <span>Ödül</span>
+            <span>Nereye</span>
             <select value={f.reward_validity} onChange={(e) => set("reward_validity", e.target.value as RewardValidity)}>
-              {REWARD_CORE.map(([value, label]) => <option key={value} value={value}>{Number(f.reward_minutes) < 0 ? (({ today: "Bugünden düş", wallet: "Cüzdana borç yaz", vault: "Kasaya borç yaz" } as Record<string, string>)[value] ?? label) : label}</option>)}
+              {REWARD_CORE.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               {legacyReward && <option value={f.reward_validity}>{VALIDITY_LABEL[f.reward_validity]}</option>}
             </select>
           </label>
-        </div>
-        {f.reward_validity === "date" && (
+        </div>}
+        <label className="check">
+          <input type="checkbox" checked={f.fail_on} onChange={(e) => set("fail_on", e.target.checked)} />
+          ❌ Yapmazsa süre düşülsün
+        </label>
+        {f.fail_on && <div className="grid2">
+          <label className="field">
+            <span>Düşülecek süre (dk)</span>
+            <input type="number" min={1} max={1440} step={1} value={f.fail_minutes} onChange={(e) => set("fail_minutes", e.target.value)} />
+          </label>
+          <label className="field">
+            <span>Nereden</span>
+            <select value={f.fail_target} onChange={(e) => set("fail_target", e.target.value as Form["fail_target"])}>
+              <option value="today">O günün süresinden</option>
+              <option value="wallet">Cüzdana borç yaz</option>
+              <option value="vault">Kasadan düş</option>
+            </select>
+          </label>
+        </div>}
+        {!f.reward_on && !f.fail_on && <p className="muted tiny">Süre ödülü ya da cezası yok.</p>}
+        {f.reward_on && f.reward_validity === "date" && (
           <div className="field">
             <span>Gün</span>
             <DateField value={f.reward_date} onChange={(v) => set("reward_date", v)} />
@@ -812,11 +863,11 @@ export default function TaskEdit() {
             <small className="muted">Onaylarken ya da sonra çocuğun Süre sekmesinden değiştirebilirsin.</small>
           </label>
         )}
-        {f.reward_validity === "today" && Number(f.reward_minutes) > 0 && !f.group_id && (
+        {f.reward_on && f.reward_validity === "today" && Number(f.reward_minutes) > 0 && !f.group_id && (
           <UseModePicker mode={f.use_mode} within={f.use_within_minutes} onMode={(m) => set("use_mode", m)} onWithin={(v) => set("use_within_minutes", v)} />
         )}
-        {f.group_id && Number(f.reward_minutes) > 0 && <p className="muted tiny">Gruptaki görevin süresi grubun ayarlarına göre (ne zaman açılacağı ve nasıl kullanılacağı) verilir.</p>}
-        {f.reward_validity === "wallet" && (
+        {f.reward_on && f.group_id && Number(f.reward_minutes) > 0 && <p className="muted tiny">Gruptaki görevin süresi grubun ayarlarına göre (ne zaman açılacağı ve nasıl kullanılacağı) verilir.</p>}
+        {f.reward_on && f.reward_validity === "wallet" && (
           <label className="field">
             <span>Kaç gün içinde kullanılmalı (boş = süresiz)</span>
             <input type="number" min={1} value={f.reward_expires_days} onChange={(e) => set("reward_expires_days", e.target.value)} />

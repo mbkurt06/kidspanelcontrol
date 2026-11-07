@@ -119,6 +119,8 @@ export type TaskDefaults = Partial<{
   proof_after_min: number;
   proof_after_max: number;
   reward_minutes: number | null;
+  fail_minutes?: number | null;
+  fail_target?: "today" | "wallet" | "vault";
   reward_text: string | null;
   reward_validity: RewardValidity;
   reward_expires_days: number | null;
@@ -377,6 +379,8 @@ export type TaskTemplate = {
   proof_after_min: number;
   proof_after_max: number;
   reward_minutes: number | null;
+  fail_minutes?: number | null;
+  fail_target?: "today" | "wallet" | "vault";
   reward_text: string | null;
   reward_validity: RewardValidity;
   reward_expires_days: number | null;
@@ -518,6 +522,8 @@ export type ActivityDef = {
   default_focus_id: string | null;
   reward_every: number | null;
   reward_minutes: number | null;
+  fail_minutes?: number | null;
+  fail_target?: "today" | "wallet" | "vault";
   reward_to: "today" | "vault";
   sort_order: number;
 };

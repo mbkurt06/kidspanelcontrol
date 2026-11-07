@@ -303,6 +303,7 @@ fun TasksCard(tasks: List<TaskItem>) {
                 if (t.agendaItemId != null) Muted("📋 Ajandandan", 12)
                 t.description?.let { Muted(it, 13) }
                 rewardText(t)?.let { Text("Ödül: $it", color = C.good, fontSize = 13.sp) }
+                if (t.open) t.failMinutes?.let { Text("Yapmazsan −$it dk", color = C.bad, fontSize = 13.sp) }
                 val due = listOfNotNull(taskEntered(t.createdAt), taskDate(t.dueDate), t.dueTime?.let { it }).joinToString(" · ")
                 if (due.isNotBlank()) Muted(due, 12)
                 if (t.firstWins && t.open) Muted("İlk yapan alır", 12)

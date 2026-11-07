@@ -723,7 +723,7 @@ export default function TaskEdit() {
       </div>
 
       <div className="card">
-        <h2>Kısıtlamalar <Info>Görevin saat aralığında (varsayılan 08:00–21:00) ve görev onaylanana kadar geçerlidir. Aralık dışında görevin kısıtlaması uygulanmaz; telefon o saatin kuralıyla çalışır. Ebeveynin verdiği ekstra süre sürerken kısıtlama kalkar.</Info></h2>
+        <h2>Kısıtlamalar <Info>Görevin saat aralığında (varsayılan: programdaki açık saatler) ve görev onaylanana kadar geçerlidir. Aralık dışında görevin kısıtlaması uygulanmaz; telefon o saatin kuralıyla çalışır. Ebeveynin verdiği ekstra süre sürerken kısıtlama kalkar.</Info></h2>
         {f.group_id && !f.mandatory ? (
           <p className="muted small">Seçmeli görev telefonu kısıtlamaz. Kısıtlama sadece zorunlu görevlerde seçilir.</p>
         ) : (

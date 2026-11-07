@@ -4,9 +4,9 @@ import { Info } from "./Info";
 /** Görevden kazanılan sürenin kullanımı (3 mod) */
 export function UseModePicker({ mode, within, onMode, onWithin }: { mode: UseMode; within: string; onMode: (m: UseMode) => void; onWithin: (v: string) => void }) {
   const OPTS: Array<[UseMode, string, string]> = [
-    ["usage", "Kullandıkça düşsün", "Telefon hemen açılır, süre kullandıkça düşer. Açık saatler bitince (21:00) kalan kasaya gider."],
+    ["usage", "Kullandıkça düşsün", "Telefon hemen açılır, süre kullandıkça düşer. Açık saatler bitince (programdaki son açık saat) kalan kasaya gider."],
     ["clock", "Saat gibi aksın", "Telefon hemen bu kadar dakikalığına açılır, kullanmasa da süre akar. Kullanmadığı dakikalar kasaya gider."],
-    ["within", "Belirli süre içinde", "Kullandıkça düşer ama seçilen süre içinde kullanmalı. Süre dolunca ya da 21:00'de kalan kasaya gider."],
+    ["within", "Belirli süre içinde", "Kullandıkça düşer ama seçilen süre içinde kullanmalı. Süre dolunca ya da açık saatler bitince kalan kasaya gider."],
   ];
   return (
     <div className="field">

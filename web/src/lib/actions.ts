@@ -114,7 +114,13 @@ export async function giveNow(
   const end = (m: number) => hm(Math.min(m, 1439));
   if (cm.mode === "clock") return `şu andan ${end(minute + minutes)}'e kadar açık · kullanılmayan kasaya`;
   if (cm.mode === "within") return `kullandıkça düşer · ${end(minute + (within ?? 120))}'e kadar kullanmalı`;
-  if (cm.mode === "open") return minute >= 8 * 60 && minute < 21 * 60 ? "açık saatlerde kullanılır · 21:00'de kalan kasaya" : "kapalı saat · süre kasaya eklendi";
+  if (cm.mode === "open") {
+    // Açık saatler çocuğun bugünkü programından (kilitli olmayan bölümler)
+    const { data } = await supabase.rpc("open_hours", { p_child: childId, p_day: todayISO() });
+    const h = (Array.isArray(data) ? data[0] : data) as { os: number; oe: number } | null;
+    const os = h?.os ?? 480, oe = h?.oe ?? 1260;
+    return minute >= os && minute < oe ? `açık saatlerde kullanılır · ${hm(oe)}'de kalan kasaya` : "kapalı saat · süre kasaya eklendi";
+  }
   return "kullandıkça düşer · bitene kadar telefon açık";
 }
 

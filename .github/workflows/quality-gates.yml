@@ -1,0 +1,51 @@
+# Independent, read-only checks. Does NOT build, sign, release, deploy or update child devices.
+name: Orbit quality gates (no deployment)
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: orbit-quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hygiene:
+    name: Git hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Whitespace/conflict checks on changed commit
+        run: |
+          git diff --check HEAD^ HEAD
+          if git grep -nE '^(<<<<<<< |=======|>>>>>>> )' -- ':!web/package-lock.json'; then
+            echo 'Conflict markers detected'
+            exit 1
+          fi
+
+  web-build:
+    name: Web typecheck and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run build
+      - name: Production dependency audit (report-only during baseline)
+        continue-on-error: true
+        run: npm audit --omit=dev --audit-level=high
+
+  # Existing android.yml runs its own unit tests and APK compilation when Android
+  # files are modified on pull requests; it is deliberately not duplicated here.

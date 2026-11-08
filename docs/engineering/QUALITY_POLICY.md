@@ -2,6 +2,8 @@
 
 Status: proposed baseline, **not** proof of project-wide compliance. These are engineering objectives, not an App Store submission checklist.
 
+This policy uses the extensible [Standards Registry](STANDARDS_REGISTRY.md) for scope, activation status, authoritative references, owner and evidence requirements. This registry explicitly includes SOLID/Clean Architecture, Android architecture, Kotlin conventions/Detekt/ktlint, TypeScript strict/ESLint/Prettier, OWASP MASVS/ASVS, WCAG 2.2, conditional Apple Human Interface Guidelines, inactive App Store Review Guidelines, and Release & Platform review.
+
 ## Reference practices
 - Simplicity, single responsibility, modular boundaries, dependency inversion when useful; no forced enterprise patterns.
 - Kotlin official coding conventions + Android architecture guidance (UI / domain / data as needed).

@@ -21,6 +21,11 @@ Read this file before changing any code, regardless of provider (Claude, Codex, 
 7. Update the handoff with facts from Git and test logs; identify remaining risks and next step.
 8. Submit a pull request. No autonomous merge or deployment.
 
+## Engineering standards registry
+- Read [docs/engineering/STANDARDS_REGISTRY.md](docs/engineering/STANDARDS_REGISTRY.md) for required/target/conditional/inactive standards. Apply only the standards relevant to the code being changed, and provide evidence.
+- New technical standards and specialist reviewers must use the registry and [reviewer extension template](docs/engineering/REVIEWER_EXTENSION_TEMPLATE.md) after isolated evaluation and approval.
+- Orbit is not targeting the Apple App Store. Apple HIG may inform relevant interface quality; App Store Review Guidelines remain inactive unless explicitly activated.
+
 ## Quality rules
 - Prefer explicit, readable, typed functions and small cohesive modules. No class for its own sake.
 - Comments explain **why**, invariant, platform limitation, or non-obvious security decision—not every line of obvious code.

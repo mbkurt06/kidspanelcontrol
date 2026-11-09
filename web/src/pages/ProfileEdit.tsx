@@ -105,7 +105,7 @@ function SectionsEditor({ profile, sections }: { profile: Profile; sections: Sec
                 className="mini"
                 type="number"
                 min={0}
-                placeholder="yok"
+                placeholder="sınırsız"
                 defaultValue={s.budget_minutes ?? ""}
                 key={`b-${s.id}-${s.budget_minutes}`}
                 onBlur={(e) => {
@@ -114,7 +114,7 @@ function SectionsEditor({ profile, sections }: { profile: Profile; sections: Sec
                 }}
                 aria-label="Bölüm süresi (dk)"
               />
-              <span className="muted small">dk süre</span>
+              <span className="muted small">dk süre (0 = süre yok, boş = sınırsız)</span>
             </label>
           </div>
           <input

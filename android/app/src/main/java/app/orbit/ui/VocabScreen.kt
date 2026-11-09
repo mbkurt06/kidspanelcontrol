@@ -206,6 +206,8 @@ private fun DeckDetail(s: VState, d: VDeck, onBack: () -> Unit, onStudy: () -> U
     var text by remember { mutableStateOf("") }
     var msg by remember { mutableStateOf("") }
     var edit by remember { mutableStateOf<VCard?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var askDelete by remember { mutableStateOf<VCard?>(null) }
     val tts = rememberTts()
     val parsed = remember(text) { Vocab.parseLines(text) }
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -232,16 +234,24 @@ private fun DeckDetail(s: VState, d: VDeck, onBack: () -> Unit, onStudy: () -> U
             OutlinedTextField(text, { text = it }, modifier = Modifier.fillMaxWidth().height(140.dp), placeholder = { Text("le chat - die Katze\nle chien - der Hund") })
             if (text.isNotBlank()) Muted("${parsed.size} kelime algılandı", 12)
             if (msg.isNotEmpty()) Text(msg, color = C.good, fontSize = 13.sp)
-            Button(enabled = parsed.isNotEmpty(), onClick = {
+            Button(enabled = parsed.isNotEmpty() && !busy, onClick = {
+                // Çift basmaya karşı: ekleme bitene kadar düğme kapalı, kutu hemen boşalır
+                busy = true
                 val list = parsed.map { Triple(it.first, it.second, null as String?) }
+                val before = text
+                text = ""
+                msg = "Ekleniyor…"
                 scope.launch {
                     val n = withContext(Dispatchers.IO) { Vocab.addCards(d.id, list) }
-                    if (n != null) { text = ""; msg = "$n kelime eklendi" } else msg = "Eklenemedi (internet?)"
+                    busy = false
+                    if (n != null) msg = if (n < list.size) "$n kelime eklendi (${list.size - n} zaten vardı)" else "$n kelime eklendi"
+                    else { text = before; msg = "Eklenemedi (internet?)" }
                 }
-            }) { Text("Ekle") }
+            }) { Text(if (busy) "Ekleniyor…" else "Ekle") }
         }
     }
     Title("Kartlar")
+    if (d.cards.any { it.mine }) Muted("Kendi eklediğin kartı silmek için 🗑, düzeltmek için karta dokun.", 12)
     for (c in d.cards.asReversed()) {
         Card(Modifier.clickable(enabled = c.mine) { edit = c }) {
             Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -255,8 +265,18 @@ private fun DeckDetail(s: VState, d: VDeck, onBack: () -> Unit, onStudy: () -> U
                     color = when { c.isNew -> C.muted; c.learned -> C.good; else -> C.warn }, fontSize = 12.sp,
                 )
                 TextButton(onClick = { tts.say(c.fr, Locale.FRENCH) }) { Text("🔊") }
+                if (c.mine) TextButton(onClick = { askDelete = c }) { Text("🗑") }
             }
         }
+    }
+    askDelete?.let { c ->
+        AlertDialog(
+            onDismissRequest = { askDelete = null },
+            title = { Text("Kart silinsin mi?") },
+            text = { Text("${c.fr} – ${c.de}") },
+            confirmButton = { TextButton(onClick = { askDelete = null; scope.launch(Dispatchers.IO) { Vocab.editCard(c.id, c.fr, c.de, c.ex, true) } }) { Text("Sil", color = C.bad) } },
+            dismissButton = { TextButton(onClick = { askDelete = null }) { Text("Vazgeç") } },
+        )
     }
     edit?.let { c ->
         var fr by remember(c.id) { mutableStateOf(c.fr) }

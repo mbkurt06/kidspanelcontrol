@@ -299,3 +299,28 @@ begin
    where id = dev.child_id;
   perform set_config('orbit.child_bypass', '', true);
 end; $$;
+
+-- Aynı destede aynı kelime bir kez
+update orbit.vocab_cards k set deleted_at = now()
+ where k.deleted_at is null and exists (
+   select 1 from orbit.vocab_cards o
+    where o.deck_id = k.deck_id and o.deleted_at is null and o.id <> k.id
+      and lower(trim(o.fr)) = lower(trim(k.fr)) and lower(trim(o.de)) = lower(trim(k.de))
+      and (o.created_at, o.id) < (k.created_at, k.id));
+create unique index if not exists vocab_cards_unique on orbit.vocab_cards (deck_id, lower(trim(fr)), lower(trim(de))) where deleted_at is null;
+
+create or replace function orbit.device_vocab_add(p_deck uuid, p_cards jsonb) returns int
+language plpgsql security definer set search_path = '' as $$
+declare dev orbit.devices := orbit.current_device(); n int;
+begin
+  if dev.id is null or dev.kind <> 'child_phone' then raise exception 'not_allowed'; end if;
+  if not exists (select 1 from orbit.vocab_decks where id = p_deck and family_id = dev.family_id and deleted_at is null) then raise exception 'not_allowed'; end if;
+  insert into orbit.vocab_cards (deck_id, family_id, fr, de, example, created_by_child)
+  select distinct on (lower(trim(x->>'fr')), lower(trim(x->>'de')))
+         p_deck, dev.family_id, trim(x->>'fr'), trim(x->>'de'), nullif(trim(coalesce(x->>'ex', '')), ''), dev.child_id
+    from jsonb_array_elements(p_cards) x
+   where length(trim(coalesce(x->>'fr', ''))) > 0 and length(trim(coalesce(x->>'de', ''))) > 0
+  on conflict do nothing;
+  get diagnostics n = row_count;
+  return n;
+end $$;

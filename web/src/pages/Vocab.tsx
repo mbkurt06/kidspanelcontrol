@@ -168,13 +168,22 @@ function DeckBox(props: {
   const { deck, cards, kids, study } = props;
   const [text, setText] = useState("");
   const [edit, setEdit] = useState<Card | null>(null);
+  const [busy, setBusy] = useState(false);
   const parsed = useMemo(() => parseLines(text), [text]);
 
   async function add() {
-    const rows = parsed.map((p) => ({ deck_id: deck.id, family_id: props.familyId, fr: p.fr, de: p.de }));
-    const { error } = await supabase.from("vocab_cards").insert(rows);
-    if (error) return props.onErr(errorText(error));
+    if (busy) return;
+    // Destede zaten olanları ve listedeki tekrarları atla (çift basmaya karşı düğme de kilitli)
+    const key = (fr: string, de: string) => `${fr.trim().toLowerCase()}|${de.trim().toLowerCase()}`;
+    const seen = new Set(cards.map((c) => key(c.fr, c.de)));
+    const rows = parsed.filter((p) => { const k = key(p.fr, p.de); if (seen.has(k)) return false; seen.add(k); return true; })
+      .map((p) => ({ deck_id: deck.id, family_id: props.familyId, fr: p.fr, de: p.de }));
     setText("");
+    if (!rows.length) return;
+    setBusy(true);
+    const { error } = await supabase.from("vocab_cards").insert(rows);
+    setBusy(false);
+    if (error) return props.onErr(errorText(error));
     props.onChange();
   }
   async function toggleStudy(childId: string, on: boolean) {
@@ -228,7 +237,7 @@ function DeckBox(props: {
           </label>
           {text.trim() && <p className="muted tiny">{parsed.length} kelime algılandı</p>}
           <div className="row gap-xs">
-            <button className="btn primary" disabled={!parsed.length} onClick={add}>Ekle</button>
+            <button className="btn primary" disabled={!parsed.length || busy} onClick={add}>{busy ? "Ekleniyor…" : "Ekle"}</button>
             <button className="btn ghost danger-text" onClick={removeDeck}>Desteyi sil</button>
           </div>
           <div className="vocab-cards">

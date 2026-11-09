@@ -407,8 +407,10 @@ class RuleEngine(private val rules: Rules) {
         val capLeft = profile.maxTotalMinutes?.let { ((it + allExtra) * 60L - usage.countedSeconds).coerceAtLeast(0) }
         // Bölümde süreli hiçbir şey yoksa (ör. "Kapalı" / "Uyku") kalan süre 0 gösterilir
         val timedPossible = cur != null && timedPossible(cur.section)
+        // "Açık" bölüm (süre sayılmaz, her şey açık): kalan sınırsız gösterilir, "Kapalı" değil
+        val openSection = cur != null && !timedPossible && cur.section.defaultRule == SecRule.OPEN
         val sectionPart = if (!timedPossible) 0L else (curLeft ?: UNLIMITED_SECONDS)
-        var remaining = if (!timedPossible) 0L else (sectionPart + poolLeft).coerceAtMost(UNLIMITED_SECONDS)
+        var remaining = if (openSection) UNLIMITED_SECONDS else if (!timedPossible) 0L else (sectionPart + poolLeft).coerceAtMost(UNLIMITED_SECONDS)
         if (capLeft != null) remaining = minOf(remaining, capLeft)
 
         val allowance = when {

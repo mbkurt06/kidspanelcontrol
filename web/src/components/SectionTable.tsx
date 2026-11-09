@@ -237,8 +237,8 @@ function CellEditor({
   const options: (SecRule | "inherit")[] = target.kind === "default" ? ["open", "timed", "blocked"] : ["inherit", "open", "timed", "blocked"];
   const hint: Record<SecRule | "inherit", string> = {
     inherit: target.kind === "app" ? "Grubunun kuralı geçerli" : "Bölümün “Diğer uygulamalar” kuralı geçerli",
-    open: "Açık, süreden düşmez",
-    timed: "Bölüm süresinden düşer",
+    open: "Süre sınırı yok: her şey açık, süreden düşmez",
+    timed: "Bölüm süresinden düşer, süre bitince kapanır",
     blocked: "Bu bölümde açılmaz",
   };
 

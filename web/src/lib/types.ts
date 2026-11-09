@@ -210,7 +210,7 @@ export type SectionRule = {
 
 export type GroupLimit = { profile_id: string; group_id: string; daily_minutes: number };
 
-export const RULE_LABEL: Record<SecRule, string> = { open: "Açık", timed: "Sınırlı", blocked: "Kilitli" };
+export const RULE_LABEL: Record<SecRule, string> = { open: "Serbest", timed: "Süreli", blocked: "Kilitli" };
 
 export type Profile = {
   id: string;

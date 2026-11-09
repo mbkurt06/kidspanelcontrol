@@ -403,7 +403,11 @@ class RuleEngine(private val rules: Rules) {
             poolUsed += (used - eff).coerceAtLeast(0)
             curLeft = (eff - used).coerceAtLeast(0); curEff = eff
         }
-        val poolLeft = if (virtualWin) 0L else (poolMin * 60L + winCredit - poolUsed).coerceAtLeast(0)
+        val poolRaw = poolMin * 60L + winCredit - poolUsed
+        val poolLeft = if (virtualWin) 0L else poolRaw.coerceAtLeast(0)
+        // Ebeveynin düşürdüğü süre (eksi düzeltme) havuzu aşarsa o anki bölümden / saat aralıklı süreden de düşer
+        val cut = if (virtualWin) (-(adjust + walletDebt) * 60L).coerceAtLeast(0) else (-poolRaw).coerceAtLeast(0).coerceAtMost((-(adjust + walletDebt) * 60L).coerceAtLeast(0))
+        if (cut > 0 && curLeft != null) curLeft = (curLeft!! - cut).coerceAtLeast(0)
         val capLeft = profile.maxTotalMinutes?.let { ((it + allExtra) * 60L - usage.countedSeconds).coerceAtLeast(0) }
         // Bölümde süreli hiçbir şey yoksa (ör. "Kapalı" / "Uyku") kalan süre 0 gösterilir
         val timedPossible = cur != null && timedPossible(cur.section)

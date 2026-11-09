@@ -34,6 +34,8 @@ type Form = {
   fail_on: boolean;
   fail_minutes: string;
   fail_target: "today" | "wallet" | "vault";
+  vocab_on: boolean;
+  vocab_cards: string;
   reward_text: string;
   reward_validity: RewardValidity;
   reward_date: string;
@@ -78,6 +80,7 @@ function defaultsOf(f: Form): TaskDefaults {
     reward_minutes: f.reward_on && f.reward_minutes.trim() !== "" ? Number(f.reward_minutes) : null,
     fail_minutes: f.fail_on && Number(f.fail_minutes) > 0 ? Number(f.fail_minutes) : null,
     fail_target: f.fail_target,
+    vocab_cards: f.vocab_on && Number(f.vocab_cards) > 0 ? Number(f.vocab_cards) : null,
     reward_text: f.reward_text.trim() || null,
     reward_validity: f.reward_validity,
     reward_expires_days: f.reward_expires_days ? Number(f.reward_expires_days) : null,
@@ -118,6 +121,8 @@ function applyDefaults(f: Form, d: TaskDefaults | null | undefined, allChildren:
     fail_on: d.fail_minutes != null,
     fail_minutes: d.fail_minutes == null ? "15" : String(d.fail_minutes),
     fail_target: (d.fail_target as Form["fail_target"]) ?? "today",
+    vocab_on: d.vocab_cards != null,
+    vocab_cards: d.vocab_cards == null ? "20" : String(d.vocab_cards),
     reward_text: d.reward_text ?? f.reward_text,
     reward_validity: d.reward_validity ?? f.reward_validity,
     reward_expires_days: d.reward_expires_days == null ? "" : String(d.reward_expires_days),
@@ -167,6 +172,8 @@ const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; 
   fail_on: false,
   fail_minutes: "15",
   fail_target: "today",
+  vocab_on: false,
+  vocab_cards: "20",
   reward_text: "",
   reward_validity: "today",
   reward_date: todayISO("Europe/Berlin", 1),
@@ -320,6 +327,8 @@ export default function TaskEdit() {
             fail_on: (t.fail_minutes ?? 0) > 0 || (t.reward_minutes ?? 0) < 0,
             fail_minutes: String(t.fail_minutes ?? ((t.reward_minutes ?? 0) < 0 ? -(t.reward_minutes as number) : 15)),
             fail_target: t.fail_target ?? "today",
+            vocab_on: t.vocab_cards != null,
+            vocab_cards: String(t.vocab_cards ?? 20),
             reward_text: t.reward_text ?? "",
             reward_validity: t.reward_validity,
             reward_date: t.reward_date ?? todayISO("Europe/Berlin", 1),
@@ -352,6 +361,8 @@ export default function TaskEdit() {
               fail_on: (data.fail_minutes ?? 0) > 0,
               fail_minutes: String(data.fail_minutes ?? 15),
               fail_target: data.fail_target ?? "today",
+              vocab_on: data.vocab_cards != null,
+              vocab_cards: String(data.vocab_cards ?? 20),
               reward_text: data.reward_text ?? "",
               reward_validity: data.reward_validity,
               reward_expires_days: data.reward_expires_days?.toString() ?? "",
@@ -414,6 +425,7 @@ export default function TaskEdit() {
       reward_minutes: rewardMinutes,
       fail_minutes: failMinutes,
       fail_target: f.fail_target,
+      vocab_cards: f.vocab_on && Number(f.vocab_cards) > 0 ? Math.min(500, Number(f.vocab_cards)) : null,
       reward_text: f.reward_text.trim() || null,
       reward_validity: f.reward_validity,
       reward_date: f.reward_validity === "date" ? f.reward_date : null,
@@ -464,6 +476,7 @@ export default function TaskEdit() {
         reward_minutes: row.reward_minutes,
         fail_minutes: row.fail_minutes,
         fail_target: row.fail_target,
+        vocab_cards: row.vocab_cards,
         reward_text: row.reward_text,
         reward_validity: row.reward_validity === "date" ? "today" : row.reward_validity,
         reward_expires_days: row.reward_expires_days,
@@ -628,6 +641,18 @@ export default function TaskEdit() {
       </div>}
 
       <div className="card">
+        <h2>📚 Kelime kartları <Info>Çocuk Orbit'teki kelime kartlarında bugün bu kadar kart çalışınca görev kendiliğinden tamamlanır ve ödül verilir; onay gerekmez.</Info></h2>
+        <label className="check">
+          <input type="checkbox" checked={f.vocab_on} onChange={(e) => setF((x) => ({ ...x, vocab_on: e.target.checked, ...(e.target.checked ? { proof: "none", before_after: false, record_on: false, shot_on: false, srec_on: false } : {}) }))} />
+          Kelime kartı hedefi
+        </label>
+        {f.vocab_on && <label className="field">
+          <span>Bugün kaç kart çalışsın</span>
+          <input type="number" min={1} max={500} step={5} value={f.vocab_cards} onChange={(e) => set("vocab_cards", e.target.value)} />
+        </label>}
+      </div>
+
+      {!f.vocab_on && <div className="card">
         <h2>Kanıt <Info>Çocuk yalnızca Orbit kamerasıyla kanıt gönderir (fotoğraf ve/veya kamera kaydı); onay veya redden sonra dosya silinir. Kayıt galeriden seçilemez.</Info></h2>
         <div className="row gap-xs wrap">
           <button className={`chip small ${f.proof === "none" && !f.record_on && !f.shot_on && !f.srec_on ? "on" : ""}`} onClick={() => setF((x) => ({ ...x, proof: "none", before_after: false, record_on: false, shot_on: false, srec_on: false }))}>
@@ -748,7 +773,7 @@ export default function TaskEdit() {
             )}
           </>
         )}
-      </div>
+      </div>}
 
       <div className="card">
         <h2>Kısıtlamalar <Info>Görevin saat aralığında (varsayılan: programdaki açık saatler) ve görev onaylanana kadar geçerlidir. Aralık dışında görevin kısıtlaması uygulanmaz; telefon o saatin kuralıyla çalışır. Ebeveynin verdiği ekstra süre sürerken kısıtlama kalkar.</Info></h2>

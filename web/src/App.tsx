@@ -21,6 +21,7 @@ import Agenda from "./pages/Agenda";
 import TaskEdit from "./pages/TaskEdit";
 import AppRuleEdit from "./pages/AppRuleEdit";
 import Vault from "./pages/Vault";
+import Vocab from "./pages/Vocab";
 import { Icon } from "./components/Icon";
 import { authenticateBiometric, biometricDue, biometricEnabled, markSeen } from "./lib/biometric";
 
@@ -265,6 +266,7 @@ function ShellContent() {
           <button className={fam.selectedChildId === "all" ? "selected" : ""} onClick={() => { fam.setSelectedChildId("all"); setMenuOpen(false); }}>Tümü</button>
           {fam.children.map((c) => <button key={c.id} className={fam.selectedChildId === c.id ? "selected" : ""} onClick={() => { fam.setSelectedChildId(c.id); setMenuOpen(false); }}><span className="dot" style={{ background: c.color }} />{c.name}</button>)}
         </div>
+        <NavLink to="/vocab" className="side-menu-link" onClick={() => setMenuOpen(false)}>📚 Kelime kartları</NavLink>
         <div className="side-menu-bottom"><NavLink to="/settings" onClick={() => setMenuOpen(false)} aria-label="Web sayfası ayarları"><Icon name="gear" /></NavLink></div>
       </aside></div>}
       <div className="scroller" id="scroller">
@@ -287,6 +289,7 @@ function ShellContent() {
           <Route path="/tasks/new" element={<TaskEdit />} />
           <Route path="/tasks/:id" element={<TaskEdit />} />
           <Route path="/agenda" element={<Agenda />} />
+          <Route path="/vocab" element={<Vocab />} />
           <Route path="/events" element={<Events />} />
           <Route path="/messages" element={<MessagesList />} />
           <Route path="/messages/:id" element={<MessagesChat />} />

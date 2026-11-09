@@ -274,3 +274,28 @@ begin
     execute src;
   end if;
 end $$;
+
+-- Çocuk kendi kelime ayarını değiştirebilsin (children korumasından geçer)
+create or replace function orbit.guard_phone_child_profile() returns trigger
+language plpgsql security definer set search_path = '' as $$
+begin
+  if old.id = orbit.device_child() and coalesce(current_setting('orbit.child_bypass', true), '') <> '1' and
+     (to_jsonb(new) - array['profile_nickname', 'profile_avatar']::text[]) is distinct from
+     (to_jsonb(old) - array['profile_nickname', 'profile_avatar']::text[]) then
+    raise exception 'not_allowed';
+  end if;
+  return new;
+end; $$;
+
+create or replace function orbit.device_vocab_settings(p_direction text, p_goal int) returns void
+language plpgsql security definer set search_path = '' as $$
+declare dev orbit.devices := orbit.current_device();
+begin
+  if dev.id is null or dev.kind <> 'child_phone' then raise exception 'not_allowed'; end if;
+  if p_direction not in ('fr_de', 'de_fr', 'mixed') then raise exception 'bad_direction'; end if;
+  perform set_config('orbit.child_bypass', '1', true);
+  update orbit.children
+     set vocab_settings = vocab_settings || jsonb_build_object('direction', p_direction, 'daily_goal', greatest(5, least(coalesce(p_goal, 20), 200)))
+   where id = dev.child_id;
+  perform set_config('orbit.child_bypass', '', true);
+end; $$;

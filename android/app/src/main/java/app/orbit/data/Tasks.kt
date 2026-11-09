@@ -21,6 +21,9 @@ data class TaskItem(
     val afterCount: Int,
     val rewardMinutes: Int?,
     val failMinutes: Int? = null,
+    /** Kelime kartı hedefi: bugün bu kadar kart çalışınca görev kendiliğinden tamamlanır */
+    val vocabCards: Int? = null,
+    val vocabDone: Int = 0,
     val rewardText: String?,
     val rewardValidity: String,
     val mandatory: Boolean,
@@ -127,6 +130,8 @@ object Tasks {
             afterCount = o.optInt("after_count", stages.count { it == "after" || it == "single" }),
             rewardMinutes = if (o.isNull("reward_minutes")) null else o.optInt("reward_minutes"),
             failMinutes = o.optInt("fail_minutes", 0).takeIf { it > 0 },
+            vocabCards = o.optInt("vocab_cards", 0).takeIf { it > 0 },
+            vocabDone = o.optInt("vocab_done", 0),
             rewardText = o.s("reward_text"),
             rewardValidity = o.optString("reward_validity", "today"),
             mandatory = o.optBoolean("mandatory"),

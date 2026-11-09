@@ -304,6 +304,18 @@ fun TasksCard(tasks: List<TaskItem>) {
                 t.description?.let { Muted(it, 13) }
                 rewardText(t)?.let { Text("Ödül: $it", color = C.good, fontSize = 13.sp) }
                 if (t.open) t.failMinutes?.let { Text("Yapmazsan −$it dk", color = C.bad, fontSize = 13.sp) }
+                if (t.open && t.vocabCards != null) {
+                    val vctx = androidx.compose.ui.platform.LocalContext.current
+                    Text("📚 Bugün ${t.vocabDone} / ${t.vocabCards} kart · hedefe ulaşınca kendiliğinden tamamlanır", color = C.muted, fontSize = 13.sp)
+                    androidx.compose.material3.Button(
+                        onClick = {
+                            vctx.startActivity(android.content.Intent(vctx, MainActivity::class.java)
+                                .putExtra(app.orbit.data.Notifier.EXTRA_SCREEN, Screen.VOCAB.name)
+                                .addFlags(android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP or android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
+                        },
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = C.accent),
+                    ) { Text("📚 Kelime çalış") }
+                }
                 val due = listOfNotNull(taskEntered(t.createdAt), taskDate(t.dueDate), t.dueTime?.let { it }).joinToString(" · ")
                 if (due.isNotBlank()) Muted(due, 12)
                 if (t.firstWins && t.open) Muted("İlk yapan alır", 12)

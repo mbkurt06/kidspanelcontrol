@@ -163,6 +163,7 @@ object Sync {
                     .put("locked", s.locked).put("lock_reason", lockReason ?: JSONObject.NULL)
                     .put("foreground_package", foreground ?: JSONObject.NULL)
                     .put("battery", battery ?: JSONObject.NULL)
+                    .put("grant_used", grantUsed(usage))
                     .put("updated_at", Instant.now().toString()),
                 upsert = true,
             )
@@ -174,6 +175,20 @@ object Sync {
                     .put("model", "${Build.MANUFACTURER} ${Build.MODEL}"),
             )
         }.onFailure { Log.w(TAG, "durum gönderilemedi", it) }
+    }
+
+    /** Saat aralıklı sürelerden kullanılan dakika (panel bu dakikanın altına indiremez) */
+    private fun grantUsed(u: DayUsage): JSONObject {
+        val m = HashMap<String, Long>()
+        for ((k, v) in u.buckets) {
+            val id = when {
+                k.startsWith("w:") -> k.removePrefix("w:")
+                k.startsWith("s:grant:") -> k.removePrefix("s:grant:").substringBefore("@")
+                else -> null
+            } ?: continue
+            m[id] = (m[id] ?: 0L) + v
+        }
+        return JSONObject().apply { for ((id, sec) in m) if (sec >= 60) put(id, (sec / 60).toInt()) }
     }
 
     fun pushUpdateStatus(status: String, target: Int? = null, error: String? = null) {

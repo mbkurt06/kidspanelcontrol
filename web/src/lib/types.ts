@@ -270,6 +270,7 @@ export type DeviceStatus = {
   used_minutes: number;
   allowance_minutes: number;
   remaining_minutes: number;
+  grant_used?: Record<string, number> | null;
   current_mode_name: string | null;
   locked: boolean;
   lock_reason: string | null;
@@ -333,6 +334,7 @@ export type TimeGrant = {
   window_end: string | null;
   /** Gece yarısını geçen süre: kalan kısmın devam edeceği ertesi gün kaydı */
   carry_to?: string | null;
+  settled_at?: string | null;
 };
 
 export type OrbitEvent = {

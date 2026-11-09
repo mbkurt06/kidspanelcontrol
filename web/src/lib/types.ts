@@ -78,7 +78,7 @@ export type Section = {
   music?: boolean;
 };
 
-export type KioskScreen = "tasks" | "agenda" | "messages" | "music" | "timer" | "alarms" | "day" | "wallet" | "ask" | "vault";
+export type KioskScreen = "tasks" | "agenda" | "vocab" | "messages" | "music" | "timer" | "alarms" | "day" | "wallet" | "ask" | "vault";
 export const KIOSK_SCREENS: [KioskScreen, string][] = [
   ["tasks", "✅ Görevler"],
   ["agenda", "🗓 Ajanda"],

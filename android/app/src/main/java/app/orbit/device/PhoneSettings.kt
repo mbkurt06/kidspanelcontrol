@@ -407,6 +407,7 @@ object PhoneSettings {
         }
         o.put("android", Build.VERSION.RELEASE).put("sdk", Build.VERSION.SDK_INT).put("model", "${Build.MANUFACTURER} ${Build.MODEL}")
         o.put("errors", errors)
+        runCatching { o.put("rec_upload", app.orbit.data.Recorder.uploadState()) }
         return o
     }
 

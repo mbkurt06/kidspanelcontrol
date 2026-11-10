@@ -258,6 +258,10 @@ class RecordService : LifecycleService() {
             Recorder.segmentClosed(recId, runId, file, dur * 30, start, start + dur * 1000L)
         } else {
             if (ev.hasError()) Log.w(TAG, "parça kaydedilemedi: ${ev.error}", ev.cause)
+            // Panelde görünsün: kayıt dosyası oluşmadıysa nedeni
+            val why = "Parça kaydedilemedi (kod ${ev.error}, ${file.length()} bayt, $dur sn): ${ev.cause?.message ?: ""}".take(200)
+            Recorder.lastSegmentError = why
+            net { Sync.event("recording_error", JSONObject().put("run_id", runId).put("rec_id", recId).put("error", why)) }
             file.delete()
         }
         net { Recorder.pump() }

@@ -85,11 +85,17 @@ object Cloud {
         }
     }.getOrDefault(0L)
 
-    /** Büyük video için ücretsiz (Wi-Fi) bağlantı var mı */
+    /**
+     * Büyük video yüklenebilir mi: Wi-Fi'de (Android ağı "ücretli" saysa da — ör. mobil modem / hotspot Wi-Fi'si) ya da ücretsiz ağda.
+     * Panelde "kayıtlar mobil veride de yüklensin" açıksa her bağlantıda.
+     */
     fun unmetered(ctx: Context): Boolean = runCatching {
         val cm = ctx.getSystemService(ConnectivityManager::class.java)
         val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
-        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) ||
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+            caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ||
+            app.orbit.device.PhoneSettings.desired().optBoolean("rec_mobile_upload")
     }.getOrDefault(false)
 
     fun log(msg: String, t: Throwable? = null) = Log.w(TAG, msg, t)

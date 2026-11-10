@@ -139,6 +139,7 @@ export default function PhoneSettingsTab({ childId }: { childId: string }) {
           </select>
           <ErrText p={p} k="private_dns" />
         </div>
+        <LockRow p={p} k="rec_mobile_upload" label="Görev kayıtları mobil veride de yüklensin" hint="Kapalıyken büyük video kayıtları sadece Wi-Fi'de yüklenir (dakikası ~15 MB)." />
         <p className="muted tiny">Ekran kapalıyken Wi-Fi: telefonda Orbit'in pil izni {r.power_exempt === true ? "var ✓" : r.power_exempt === false ? "yok — aşağıda Sistem'den iste" : "bilinmiyor"}.</p>
       </Section>
 
@@ -231,6 +232,18 @@ export default function PhoneSettingsTab({ childId }: { childId: string }) {
           <button type="button" className="chip-btn" onClick={() => act("reapply")}>Ayarları yeniden uygula</button>
           {r.power_exempt === false && <button type="button" className="chip-btn" onClick={() => act("ask_power")}>Telefonda pil izni iste</button>}
         </div>
+        {(() => {
+          const u = r.rec_upload as { pending?: number; pending_mb?: number; oldest?: string | null; error?: string | null; segment_error?: string | null; cloud?: boolean } | undefined;
+          if (!u) return null;
+          return (
+            <div className={`tiny ${u.pending || u.segment_error ? "warn-text" : "muted"}`}>
+              Görev kayıtları: {u.pending ? `${u.pending} parça telefonda bekliyor (${u.pending_mb} MB${u.oldest ? `, ${new Date(u.oldest).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}'den beri` : ""})` : "bekleyen yok"}
+              {u.error ? ` · ${u.error}` : ""}
+              {u.segment_error ? ` · Son hata: ${u.segment_error}` : ""}
+              {u.cloud === false ? " · OneDrive bağlı değil (Orbit deposuna yüklenir)" : ""}
+            </div>
+          );
+        })()}
         <div className="muted tiny">
           {r.storage_free_mb != null && <>Depolama: {Math.round(Number(r.storage_free_mb) / 1024)} GB boş / {Math.round(Number(r.storage_total_mb) / 1024)} GB · </>}
           Pil izni: {r.power_exempt === true ? "var" : r.power_exempt === false ? "yok" : "?"} · Yönetici: {r.owner === true ? "evet" : r.owner === false ? "hayır" : "?"}

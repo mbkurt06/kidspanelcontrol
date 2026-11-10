@@ -466,6 +466,9 @@ class OrbitService : Service() {
                     Store.previousUsage()?.let { prev ->
                         runCatching { Sync.pushUsage(prev) }.onSuccess { Store.savePreviousUsage(null) }
                     }
+                    // Bekleyen kayıt parçaları: kayıt bittikten sonra da (Wi-Fi gelince) yüklensin.
+                    // Önceden sadece kayıt ekranı/servisi açıkken deneniyordu; kayıt bitince bir daha denenmiyordu.
+                    if (app.orbit.data.Recorder.current()?.active != true) runCatching { app.orbit.data.Recorder.pump() }
                 } finally {
                     pushBusy.set(false)
                 }

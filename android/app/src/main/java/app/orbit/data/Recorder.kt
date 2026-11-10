@@ -194,6 +194,22 @@ object Recorder {
         pending.value = pendingFiles().size
     }
 
+    /** Panele bildirilen yükleme durumu (Telefon ayarları → Sistem) */
+    @Volatile var lastUploadError: String? = null
+    @Volatile var lastUploadErrorAt = 0L
+    @Volatile var lastSegmentError: String? = null
+
+    fun uploadState(): JSONObject {
+        val files = pendingFiles().map { File(it.path.removeSuffix(".json") + ".mp4") }.filter { it.exists() }
+        return JSONObject()
+            .put("pending", files.size)
+            .put("pending_mb", files.sumOf { it.length() } / 1_048_576)
+            .put("oldest", files.minOfOrNull { it.lastModified() }?.let { Instant.ofEpochMilli(it).toString() } ?: JSONObject.NULL)
+            .put("error", lastUploadError ?: JSONObject.NULL)
+            .put("segment_error", lastSegmentError ?: JSONObject.NULL)
+            .put("cloud", Cloud.available)
+    }
+
     private fun pendingFiles(): List<File> =
         if (!::appCtx.isInitialized) emptyList()
         else recDir().listFiles()?.flatMap { d -> d.listFiles()?.filter { it.name.endsWith(".json") } ?: emptyList() }?.sortedBy { it.name } ?: emptyList()
@@ -217,7 +233,7 @@ object Recorder {
             if (m == null) { meta.delete(); continue }
             val runId = m.getString("runId")
             // Büyük video parçaları sadece Wi-Fi'de; önce OneDrive (yarıda kalırsa kaldığı yerden), yoksa Orbit deposu
-            if (video.length() > 8_000_000 && !Cloud.unmetered(appCtx)) continue
+            if (video.length() > 8_000_000 && !Cloud.unmetered(appCtx)) { lastUploadError = "Wi-Fi bekleniyor"; continue }
             var path = "${c.familyId}/$runId/rec-${recId.take(8)}-$seq.mp4"
             val ok = runCatching {
                 var url = m.optString("odUrl").takeIf { it.isNotBlank() }
@@ -237,8 +253,13 @@ object Recorder {
                     .put("p_id", recId).put("p_seq", seq).put("p_path", path).put("p_frames", m.optInt("frames"))
                     .put("p_start", Instant.ofEpochMilli(m.optLong("start")).toString())
                     .put("p_end", Instant.ofEpochMilli(m.optLong("end")).toString()))
-            }.onFailure { Log.w(TAG, "parça yüklenemedi", it) }.isSuccess
+            }.onFailure {
+                Log.w(TAG, "parça yüklenemedi", it)
+                lastUploadError = "Yüklenemedi: ${(it.message ?: it.javaClass.simpleName).take(140)}"
+                lastUploadErrorAt = System.currentTimeMillis()
+            }.isSuccess
             if (!ok) break
+            lastUploadError = null
             video.delete()
             meta.delete()
             File(recDir(), recId).takeIf { it.listFiles()?.isEmpty() == true }?.delete()

@@ -228,9 +228,9 @@ export async function seedDefaults(familyId: string, childIds: string[]) {
   const { data: modes, error: me } = await supabase
     .from("modes")
     .insert([
-      { family_id: familyId, name: "Ders zamanı", icon: "book", color: "#3FA7D6", allowed_groups: ["always_open"], others_blocked: true, priority: 70 },
-      { family_id: familyId, name: "Dinlenme zamanı", icon: "pause", color: "#59C3A5", allowed_groups: ["always_open"], others_blocked: true, priority: 60 },
-      { family_id: familyId, name: "Uyku zamanı", icon: "moon", color: "#6B5CE7", allowed_groups: ["always_open"], others_blocked: true, priority: 90 },
+      { family_id: familyId, name: "Ders zamanı", icon: "📚", color: "#3FA7D6", allowed_groups: ["always_open"], others_blocked: true, priority: 70 },
+      { family_id: familyId, name: "Dinlenme zamanı", icon: "⏸️", color: "#59C3A5", allowed_groups: ["always_open"], others_blocked: true, priority: 60 },
+      { family_id: familyId, name: "Uyku zamanı", icon: "🌙", color: "#6B5CE7", allowed_groups: ["always_open"], others_blocked: true, priority: 90 },
     ])
     .select("id, name");
   if (me) throw me;

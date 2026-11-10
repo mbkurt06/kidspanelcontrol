@@ -1,3 +1,4 @@
+import { RestrictionSelect } from "../components/RestrictionSelect";
 import { useEffect, useRef, useState } from "react";
 import { DateField, TimeField } from "../components/DateTime";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -781,24 +782,15 @@ export default function TaskEdit() {
           <p className="muted small">Seçmeli görev telefonu kısıtlamaz. Kısıtlama sadece zorunlu görevlerde seçilir.</p>
         ) : (
           <label className="field">
-            <span>Yapılmazsa</span>
-            <select
-              value={f.phone_restriction === "mode" ? `mode:${f.restriction_mode_id}` : f.phone_restriction}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v.startsWith("mode:")) setF((x) => ({ ...x, phone_restriction: "mode", restriction_mode_id: v.slice(5) }));
-                else setF((x) => ({ ...x, phone_restriction: v as TaskPhoneRestriction, restriction_mode_id: "" }));
-              }}
-            >
-              <option value="none">Telefonu kısıtlama — sadece ödülleri beklet</option>
-              <option value="kiosk">🔒 Kilitle — sadece Orbit</option>
-              <option value="limit">🌙 Sınırla — sadece her zaman açık uygulamalar</option>
-              {fam.modes.filter((x) => !x.builtin).map((m) => <option key={m.id} value={`mode:${m.id}`}>{m.icon} {m.name}</option>)}
-            </select>
+            <span>Yapılmazsa hangi kullanım profili <Info>Kullanım profilleri Kurallar → Kullanım profilleri'nden düzenlenir; orada oluşturduğun profiller burada çıkar.</Info></span>
+            <RestrictionSelect
+              value={{ restriction: f.phone_restriction, modeId: f.restriction_mode_id || null }}
+              onChange={(v) => setF((x) => ({ ...x, phone_restriction: v.restriction as TaskPhoneRestriction, restriction_mode_id: v.modeId ?? "" }))}
+            />
             <span className="muted tiny">
               {f.phone_restriction === "none"
                 ? f.group_id ? "Telefon normal kurallarıyla çalışır; bu görev yapılmadan gruptan kazanılan ekstra süreler kullanılamaz." : "Telefon normal kurallarıyla çalışır, sadece ödül verilir."
-                : "Görev yapılıp onaylanana kadar telefon bu durumda kalır. Onay beklerken de sürer. Birden fazla zorunlu görev varsa en sıkı olanı geçerli olur (Kilitle > Sınırla > diğer)."}
+                : "Görev yapılıp onaylanana kadar telefon bu durumda kalır. Onay beklerken de sürer. Birden fazla zorunlu görev varsa en sıkı olanı geçerli olur (Tam kilit > Kilitli > diğer)."}
             </span>
           </label>
         )}

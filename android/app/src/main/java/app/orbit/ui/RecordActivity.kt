@@ -101,6 +101,8 @@ class RecordActivity : ComponentActivity() {
                 s != null && s.active && s.reached -> Reached(task)
                 s != null && s.active -> Recording()
                 s != null -> Finished()
+                // Kayıt bitip gönderildiyse (ya da görev onaylandıysa) başlangıç ekranı tekrar açılmasın: Orbit ana ekranına dön
+                task != null && !startable(task) -> LaunchedEffect(Unit) { finish() }
                 task != null -> Start(task)
                 else -> Column(Modifier.padding(20.dp)) {
                     Muted("Görev bulunamadı.")
@@ -108,6 +110,12 @@ class RecordActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /** Yeni kayıt başlatılabilir mi: görev açık ve kaydı bitmemiş (ya da iade edilip yeniden istenmiş) */
+    private fun startable(t: TaskItem): Boolean {
+        val live = Tasks.current().firstOrNull { it.runId == t.runId } ?: t
+        return live.open && (live.status == "rejected" || !live.recordingDone)
     }
 
     @Composable

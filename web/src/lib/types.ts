@@ -171,6 +171,10 @@ export type TaskGroup = {
   bundles_sequential: boolean;
   use_mode: UseMode;
   use_within_minutes: number | null;
+  /** Grup kısıtlaması: seçilen kullanım profili, ne zamana kadar */
+  restriction?: "none" | "limit" | "kiosk" | "mode";
+  restriction_mode_id?: string | null;
+  restriction_until?: "mandatory" | "condition" | "all";
   defaults: TaskDefaults | null;
   sort: number;
   created_at: string;

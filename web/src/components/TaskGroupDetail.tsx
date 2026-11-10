@@ -1,3 +1,4 @@
+import { RestrictionSelect } from "./RestrictionSelect";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useFamily } from "../lib/family";
@@ -358,6 +359,9 @@ function GroupSettings({ group, tasks, onSaved, onRemove }: { group: TaskGroup; 
       bundles_sequential: f.bundles_sequential ?? true,
       use_mode: f.use_mode ?? "usage",
       use_within_minutes: f.use_mode === "within" ? f.use_within_minutes ?? 120 : null,
+      restriction: f.restriction ?? "none",
+      restriction_mode_id: f.restriction === "mode" ? f.restriction_mode_id ?? null : null,
+      restriction_until: f.restriction_until ?? "mandatory",
     };
     const { error } = await supabase.from("task_groups").update(row).eq("id", group.id);
     if (!error && f.child_ids.length) await supabase.from("tasks").update({ child_ids: f.child_ids }).eq("group_id", group.id);
@@ -443,6 +447,28 @@ function GroupSettings({ group, tasks, onSaved, onRemove }: { group: TaskGroup; 
           </div>
           {mandatory > 0 && <span className="muted tiny">{mandatory} zorunlu görev var.</span>}
         </div>
+      </section>
+
+      <section className="card extra-card">
+        <b className="card-title">Kısıtlama <Info>Grubun saat aralığında, seçtiğin koşul sağlanana kadar telefon bu kullanım profilinde kalır. Görevin kendi kısıtlaması da varsa en sıkısı geçerli olur. Ebeveynin verdiği ekstra süre sürerken kısıtlama kalkar.</Info></b>
+        <div className="extra-group">
+          <span className="pop-label">KULLANIM PROFİLİ</span>
+          <RestrictionSelect
+            value={{ restriction: f.restriction ?? "none", modeId: f.restriction_mode_id ?? null }}
+            onChange={(v) => setF((x) => ({ ...x, restriction: v.restriction, restriction_mode_id: v.modeId }))}
+          />
+        </div>
+        {(f.restriction ?? "none") !== "none" && (
+          <div className="extra-group">
+            <span className="pop-label">NE ZAMANA KADAR</span>
+            <div className="chips">
+              {chip((f.restriction_until ?? "mandatory") === "mandatory", "Zorunlu görevler onaylanana kadar", () => set("restriction_until", "mandatory"))}
+              {chip(f.restriction_until === "condition", f.min_count != null ? `En az ${f.min_count} görev yapılana kadar` : "Tamamlama koşulu sağlanana kadar", () => set("restriction_until", "condition"))}
+              {chip(f.restriction_until === "all", "Bütün görevler bitene kadar", () => set("restriction_until", "all"))}
+            </div>
+            {(f.restriction_until ?? "mandatory") === "mandatory" && !mandatory && <span className="tiny warn-text">Bu grupta zorunlu görev yok; bu seçenekte telefon kısıtlanmaz.</span>}
+          </div>
+        )}
       </section>
 
       <section className="card extra-card">

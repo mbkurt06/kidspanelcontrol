@@ -188,7 +188,7 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
       {open && (
         <>
           {!segs.length ? (
-            <p className="muted small">Kayıt parçaları henüz yüklenmedi (telefon internete bağlanınca gelir).</p>
+            <PendingUpload childId={rec.child_id} />
           ) : (
             <>
               <div className="rec-video">
@@ -260,5 +260,21 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
         </>
       )}
     </div>
+  );
+}
+
+/** Telefonda bekleyen kayıt parçaları ve son yükleme hatası (Telefon ayarları raporundan) */
+function PendingUpload({ childId }: { childId: string }) {
+  const [u, setU] = useState<{ pending?: number; pending_mb?: number; error?: string | null } | null>(null);
+  useEffect(() => {
+    supabase.from("device_settings").select("reported").eq("child_id", childId).maybeSingle()
+      .then(({ data }) => setU(((data as { reported?: { rec_upload?: typeof u } } | null)?.reported?.rec_upload ?? null)));
+  }, [childId]);
+  return (
+    <p className="muted small">
+      Kayıt parçaları henüz yüklenmedi (telefon internete bağlanınca gelir).
+      {u?.pending ? ` Telefonda ${u.pending} parça bekliyor (${u.pending_mb} MB).` : ""}
+      {u?.error ? ` Son durum: ${u.error}` : ""}
+    </p>
   );
 }

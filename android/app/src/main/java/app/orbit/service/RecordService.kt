@@ -254,7 +254,9 @@ class RecordService : LifecycleService() {
 
     private fun onFinalized(ev: VideoRecordEvent.Finalize, file: File, start: Long, recId: String, runId: String) {
         recording = null
-        val dur = (ev.recordingStats.recordedDurationNanos / 1_000_000_000L).toInt()
+        val nanos = ev.recordingStats.recordedDurationNanos
+        // 1 sn'den kısa ama verisi olan parça da saklansın (eskiden 0 sn sayılıp siliniyordu)
+        val dur = if (nanos > 0) ((nanos + 999_999_999L) / 1_000_000_000L).toInt() else 0
         if (file.exists() && file.length() > 0 && dur > 0) {
             Recorder.segmentClosed(recId, runId, file, dur * 30, start, start + dur * 1000L)
         } else {

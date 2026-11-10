@@ -212,7 +212,9 @@ object Recorder {
 
     private fun pendingFiles(): List<File> =
         if (!::appCtx.isInitialized) emptyList()
-        else recDir().listFiles()?.flatMap { d -> d.listFiles()?.filter { it.name.endsWith(".json") } ?: emptyList() }?.sortedBy { it.name } ?: emptyList()
+        else recDir().listFiles()?.flatMap { d -> d.listFiles()?.filter { it.name.endsWith(".json") } ?: emptyList() }
+            // En yeni kayıt önce yüklensin (ebeveyn onay beklerken eski birikmiş kayıtların arkasında kalmasın)
+            ?.sortedWith(compareByDescending<File> { it.parentFile?.lastModified() ?: 0L }.thenBy { it.name }) ?: emptyList()
 
     /** Aynı anda tek yükleme: birden çok yerden çağrılınca aynı parça iki kez gönderiliyordu */
     private val uploading = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -244,7 +246,8 @@ object Recorder {
                 if (url != null) {
                     val id = runCatching { Cloud.uploadFile(video, url, "video/mp4") }.getOrElse { e ->
                         // Oturumun süresi dolduysa yenisini açmak için sil
-                        if (e is Api.ApiError && (e.code == 404 || e.code == 410)) { m.remove("odUrl"); meta.writeText(m.toString()) }
+                        // (OneDrive süresi dolan oturuma 401 "expiredToken" de dönüyor; eskiden bu durumda parça sonsuza kadar takılıyordu)
+                        if (e is Api.ApiError && e.code in setOf(401, 403, 404, 410)) { m.remove("odUrl"); meta.writeText(m.toString()) }
                         throw e
                     }
                     path = "${c.familyId}/$runId/od:$id"

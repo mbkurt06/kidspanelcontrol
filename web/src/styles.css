@@ -2285,3 +2285,9 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .card-actions { flex-wrap: nowrap; }
 .card-actions > .btn:first-child { flex: 0 1 auto; min-width: 0; white-space: nowrap; padding-left: 12px; padding-right: 12px; }
 .card-actions .give-box { min-width: 0; flex: 1 1 auto; }
+
+/* Halkayı çevirerek süre */
+.dial { display: inline-flex; touch-action: none; border-radius: 50%; cursor: grab; position: relative; }
+.dial.on { cursor: grabbing; }
+.dial.on::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px dashed var(--line); pointer-events: none; }
+.dial-bar { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 10px; border-radius: 14px; background: var(--bg); flex-wrap: wrap; }

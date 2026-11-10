@@ -196,6 +196,60 @@ function ChildCard({ child }: { child: Child }) {
   const holdUp = useHold(() => step(1));
   const holdDown = useHold(() => step(-1));
 
+  // Halkayı çevirerek süre: saat yönü artırır, ters yönü azaltır (6° = 1 dk, tam tur 60 dk). Bırakınca "Uygula" bekler.
+  const [dial, setDial] = useState(0);
+  const dialRef = useRef<{ cx: number; cy: number; last: number; acc: number; moved: boolean; base: number } | null>(null);
+  const dialed = useRef(false);
+  const remainingNow = st && open && !unlimited ? st.remaining_minutes : 0;
+  const dialMin = -remainingNow;
+  const clampDial = (v: number) => Math.max(dialMin, Math.min(600, v));
+  const angleOf = (x: number, y: number, cx: number, cy: number) => (Math.atan2(y - cy, x - cx) * 180) / Math.PI;
+  const dialHandlers = {
+    onPointerDown: (e: React.PointerEvent<HTMLSpanElement>) => {
+      if (!st) return;
+      const r = e.currentTarget.getBoundingClientRect();
+      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      dialRef.current = { cx, cy, last: angleOf(e.clientX, e.clientY, cx, cy), acc: 0, moved: false, base: dial };
+      dialed.current = false;
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+    },
+    onPointerMove: (e: React.PointerEvent<HTMLSpanElement>) => {
+      const d = dialRef.current;
+      if (!d) return;
+      const a = angleOf(e.clientX, e.clientY, d.cx, d.cy);
+      let delta = a - d.last;
+      if (delta > 180) delta -= 360;
+      if (delta < -180) delta += 360;
+      d.last = a;
+      d.acc += delta;
+      if (!d.moved && Math.abs(d.acc) < 10) return;
+      d.moved = true;
+      dialed.current = true;
+      e.preventDefault();
+      const next = clampDial(d.base + Math.trunc(d.acc / 6));
+      setDial((prev) => {
+        if (prev !== next) try { navigator.vibrate?.(4); } catch { /* */ }
+        return next;
+      });
+    },
+    onPointerUp: () => { dialRef.current = null; },
+    onPointerCancel: () => { dialRef.current = null; },
+    onClickCapture: (e: React.MouseEvent) => {
+      // Çevirdiyse sayfaya gitme
+      if (dialed.current) { e.preventDefault(); e.stopPropagation(); dialed.current = false; }
+    },
+  };
+  function applyDial() {
+    const d = dial;
+    if (!d) return;
+    setDial(0);
+    if (d > 0) {
+      run("give", async () => giveNow(child.id, d, fam, st, { kiosk, limited: limited || closed || finished }), (r) => `+${minutesText(d)} · ${r}`);
+    } else {
+      run("give", async () => { await sendCommand(child.id, "adjust_minutes", { minutes: d }); return "telefona iletildi"; }, () => `−${minutesText(-d)} · süreden düşüldü`);
+    }
+  }
+
   // Halka içi
   const ringColor = kiosk ? "var(--bad)" : limited || closed ? "var(--warn)" : child.color;
   const ringInner = !st ? (
@@ -225,9 +279,16 @@ function ChildCard({ child }: { child: Child }) {
   return (
     <div className="card child-card">
       <Link to={`/child/${child.id}`} className="child-main">
-        <Ring value={open && !unlimited ? st!.remaining_minutes : kiosk || limited || closed ? 1 : 0} max={open && !unlimited ? Math.max(st!.allowance_minutes, st!.remaining_minutes + st!.used_minutes, 1) : 1} color={ringColor} size={66}>
-          {ringInner}
-        </Ring>
+        <span className={`dial ${dial ? "on" : ""}`} {...dialHandlers} title="Çevirerek süre ekle / düşür">
+          <Ring
+            value={dial ? Math.max(0, remainingNow + dial) : open && !unlimited ? st!.remaining_minutes : kiosk || limited || closed ? 1 : 0}
+            max={dial ? Math.max(60, remainingNow + Math.max(dial, 0), remainingNow) : open && !unlimited ? Math.max(st!.allowance_minutes, st!.remaining_minutes + st!.used_minutes, 1) : 1}
+            color={dial > 0 ? "var(--good)" : dial < 0 ? "var(--bad)" : ringColor}
+            size={66}
+          >
+            {dial ? <span className="ring-state"><b>{dial > 0 ? "+" : "−"}{Math.abs(dial)}</b><small>dk</small></span> : ringInner}
+          </Ring>
+        </span>
         <div className="grow">
           <div className="row between name-row">
             <h2>{child.name}</h2>
@@ -371,6 +432,16 @@ function ChildCard({ child }: { child: Child }) {
           <Icon name="chat" size={16} />
         </Link>
       </div>
+      {dial !== 0 && (
+        <div className="dial-bar">
+          <span className="grow small">
+            {dial > 0 ? `+${minutesText(dial)}` : `−${minutesText(-dial)}`}
+            {open && !unlimited ? ` · kalan ${minutesText(remainingNow)} → ${minutesText(Math.max(0, remainingNow + dial))}` : ""}
+          </span>
+          <button className="pill-btn primary" disabled={!!busy} onClick={applyDial}>✓ Uygula</button>
+          <button className="pill-btn" onClick={() => setDial(0)}>Vazgeç</button>
+        </div>
+      )}
       {st && staleMin > 15 && (
         <p className="small warn-text">⚠ Telefon {staleMin >= 60 ? `${Math.floor(staleMin / 60)} saattir` : `${staleMin} dakikadır`} bağlanmadı</p>
       )}

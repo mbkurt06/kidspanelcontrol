@@ -254,3 +254,34 @@ export async function seedDefaults(familyId: string, childIds: string[]) {
     if (error) throw error;
   }
 }
+
+
+/** Açık ebeveyn modu (telefonda bütün kilitler geçici kalkar): bitiş zamanı, yoksa null */
+export async function parentModeUntil(childId: string): Promise<Date | null> {
+  const { data } = await supabase
+    .from("commands")
+    .select("until_at")
+    .eq("child_id", childId)
+    .eq("type", "resync")
+    .eq("payload->>maintenance", "true")
+    .is("cancelled_at", null)
+    .gt("until_at", new Date().toISOString())
+    .order("until_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const u = (data as { until_at: string } | null)?.until_at;
+  return u ? new Date(u) : null;
+}
+
+/** Ebeveyn modunu süresi dolmadan kapat: telefon hemen normal kurallara (ve varsa görev kilidine) döner */
+export async function stopParentMode(childId: string) {
+  const { error } = await supabase
+    .from("commands")
+    .update({ cancelled_at: new Date().toISOString() })
+    .eq("child_id", childId)
+    .eq("type", "resync")
+    .eq("payload->>maintenance", "true")
+    .is("cancelled_at", null);
+  if (error) throw error;
+  await sendCommand(childId, "resync", {});
+}

@@ -273,12 +273,12 @@ function ParentModeCard({ childId }: { childId: string }) {
     <div className={`card ${active ? "parent-mode-on" : ""}`}>
       <div className="row gap-s wrap" style={{ alignItems: "center" }}>
         <div className="grow">
-          <h2 style={{ margin: 0 }}>Ebeveyn modu{active ? " açık" : ""} <Info>Telefonda işlem yaparken sınırlamaları geçici olarak kaldırır. Süre bitince kurallar geri gelir.</Info></h2>
+          <h2 style={{ margin: 0 }}>Ebeveyn modu{active ? " açık" : ""} <Info>Telefonda işlem yaparken bütün kilitleri ve sınırları geçici olarak kaldırır. Süre bitince (ya da “Kapat” deyince) telefon kaldığı yerden devam eder: görev kilidi görev onaylanana kadar sürer.</Info></h2>
           {active && <p className="muted tiny" style={{ margin: "4px 0 0" }}>{until!.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}'e kadar açık.</p>}
         </div>
         {active ? (
           <button className="pill-btn" disabled={busy} onClick={stop}>
-            Bitir
+            Kapat
           </button>
         ) : (
           <div className="row gap-s" style={{ alignItems: "center" }}>

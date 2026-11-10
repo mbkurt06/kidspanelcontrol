@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { supabase, errorText } from "../lib/supabase";
-import { giveNow, seedDefaults, sendCommand } from "../lib/actions";
+import { giveNow, parentModeUntil, seedDefaults, sendCommand, stopParentMode } from "../lib/actions";
 import { kioskOf, lockNow, unlockNow, untilFrom } from "./Lock";
 import { currentSectionFor, hm, mins, nowBerlin, timedPossible } from "../lib/sections";
 import { TimeField } from "../components/DateTime";
@@ -98,6 +98,14 @@ function ChildCard({ child }: { child: Child }) {
   // Kilidi aç: geçici aç (ebeveyn modu, dakika seçilir) ya da tamamen kaldır (görev kilidi değilse)
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [parentMin, setParentMin] = useState(5);
+  // Açık ebeveyn modu (geçici açma): bitiş saati ve erken kapatma
+  const [pmUntil, setPmUntil] = useState<Date | null>(null);
+  const loadPm = async () => setPmUntil(await parentModeUntil(child.id));
+  useEffect(() => {
+    loadPm();
+    const t = setInterval(loadPm, 30000);
+    return () => clearInterval(t);
+  }, [child.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const [lockKind, setLockKind] = useState<LockKind>("kiosk");
   const [lockDur, setLockDur] = useState("none");
   const [lockUntil, setLockUntil] = useState("19:00");
@@ -317,6 +325,14 @@ function ChildCard({ child }: { child: Child }) {
       </Link>
 
       <div className="card-divider" />
+      {pmUntil && pmUntil.getTime() > Date.now() && (
+        <div className="row gap-s pm-row" style={{ alignItems: "center" }}>
+          <span className="grow small">🛠 Ebeveyn modu açık · {pmUntil.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}'e kadar <span className="muted tiny">· bitince kilitler kaldığı yerden sürer</span></span>
+          <button className="pill-btn" disabled={!!busy} onClick={() => run("unlock", async () => { await stopParentMode(child.id); setPmUntil(null); return "Ebeveyn modu kapatıldı"; }, (r) => String(r))}>
+            Kapat
+          </button>
+        </div>
+      )}
       <div className="card-actions">
         <div className="lock-wrap">
           <button
@@ -354,6 +370,7 @@ function ChildCard({ child }: { child: Child }) {
                       setUnlockOpen(false);
                       run("unlock", async () => {
                         await sendCommand(child.id, "resync", { maintenance: true }, new Date(Date.now() + parentMin * 60000).toISOString());
+                        await loadPm();
                         return `${minutesText(parentMin)} geçici açıldı · sonra kilit kaldığı yerden sürer`;
                       }, (r) => String(r));
                     }}

@@ -249,7 +249,7 @@ function ChildCard({ child }: { child: Child }) {
         : closed
           ? { cls: "warn", text: [st.current_mode_name ?? "Kapalı saatler", nextOpen].filter(Boolean).join(" · ") }
           : finished
-            ? { cls: "warn", text: `${st.current_mode_name ?? "Bugün"} · süresi bitti` }
+            ? { cls: "warn", text: [st.current_mode_name ?? "Bugün", sec ? `${hhmm(sec.end_time)}'e kadar` : null].filter(Boolean).join(" · ") }
             : { cls: "good", text: [st.current_mode_name ?? "Açık", sec && open ? `${hhmm(sec.end_time)}'e kadar` : null].filter(Boolean).join(" · ") };
 
   return (

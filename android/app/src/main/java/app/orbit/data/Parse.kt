@@ -64,6 +64,7 @@ object Parse {
                 runId = t.optString("run_id"), modeId = t.str("restriction_mode_id"), window = win,
                 dueDate = if (t.optString("recurrence") == "once") date(t.str("due_date")) else date(t.str("day")),
                 allowed = allowed,
+                createdAtMs = runCatching { java.time.OffsetDateTime.parse(t.getString("created_at")).toInstant().toEpochMilli() }.getOrDefault(0L),
             )
         }
     }
@@ -133,7 +134,8 @@ object Parse {
         Grant(o.getString("id"), o.optInt("minutes"), date(o.str("valid_on")), date(o.str("expires_on")), date(o.str("activated_on")), o.str("note"), o.str("section_id"),
             o.optBoolean("vault"),
             runCatching { if (o.isNull("window_start") || !o.has("window_start")) null else TimeWindow(time(o.getString("window_start")), time(o.getString("window_end"))) }.getOrNull(),
-            toVault = o.optBoolean("to_vault"), settled = !o.isNull("settled_at") && o.has("settled_at"))
+            toVault = o.optBoolean("to_vault"), settled = !o.isNull("settled_at") && o.has("settled_at"), source = o.str("source"),
+            createdAtMs = runCatching { java.time.OffsetDateTime.parse(o.getString("created_at")).toInstant().toEpochMilli() }.getOrDefault(0L))
     }
 
     fun commands(a: JSONArray): List<Command> = (0 until a.length()).mapNotNull {

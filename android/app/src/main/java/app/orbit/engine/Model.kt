@@ -88,6 +88,9 @@ data class Grant(
     /** Kullanılmayan kısmı bitişte kasaya aktarılır */
     val toVault: Boolean = false,
     val settled: Boolean = false,
+    /** manual = ebeveyn verdi; task = görev ödülü; leftover / daily_surplus … */
+    val source: String? = null,
+    val createdAtMs: Long = 0L,
 )
 
 /** Bölüm kuralı: açık (süre saymaz) / süreli / kapalı */
@@ -142,6 +145,8 @@ data class TaskRestriction(
     val dueDate: LocalDate? = null,
     /** Kısıtlıyken izinli uygulamalar: paket → günlük dakika (null = sınırsız) */
     val allowed: Map<String, Int?> = emptyMap(),
+    /** Görevin (koşunun) oluşturulma anı: ebeveyn bundan sonra süre verdiyse kısıtlama o süre boyunca kalkar */
+    val createdAtMs: Long = 0L,
 ) {
     val active get() = status in setOf("open", "started", "submitted", "rejected")
     val rank get() = when (phoneMode) { "kiosk" -> 3; "limit" -> 2; "mode" -> 1; else -> 0 }

@@ -203,12 +203,13 @@ class RuleEngine(private val rules: Rules) {
         // Ebeveynin şu an için verdiği saat aralıklı süre "Sınırla"yı (elle ya da programdan) o süre boyunca açar
         val windowNow = activeWindows(day, t).isNotEmpty()
         val locked0 = lockedCmd && !windowNow
-        // Zorunlu görevin kısıtlaması (verilen süre sürerken kalkar)
-        val taskR = if (windowNow) null else taskRestrictionNow(day, t)
+        // Görevin kısıtlaması: sadece ebeveynin elle verdiği süre sürerken kalkar
+        // (görev ödülü ya da cüzdandan açılan süre kısıtlamayı kaldırmaz)
+        val taskR = taskRestrictionNow(day, t)
         raNow = if (taskR != null) restrictedAllowedNow(day, t) else emptyMap()
         raDay = day
         // Kilit programı: "Sınırla" (sadece her zaman açık uygulamalar) ve "Serbest"
-        val limit = if (locked0 || windowNow) null else Extras.limitNow(rules, this, day, t)
+        val limit = if (locked0) null else (if (windowNow) null else Extras.limitNow(rules, this, day, t))
             ?: taskR?.takeIf { it.phoneMode == "limit" }?.let { r ->
                 "Önce görev: ${r.title}" to (r.window?.end?.let { day.atTime(it).atZone(zone).toInstant().toEpochMilli() } ?: dayEnd)
             }
@@ -287,8 +288,11 @@ class RuleEngine(private val rules: Rules) {
     }
 
     /** En sıkı kısıtlama: Kilitle > Sınırla > durum */
-    fun taskRestrictionNow(day: LocalDate, t: LocalTime): TaskRestriction? =
-        if (activeWindows(day, t).isNotEmpty()) null else taskRestrictionsNow(day, t).maxByOrNull { it.rank }
+    fun taskRestrictionNow(day: LocalDate, t: LocalTime): TaskRestriction? {
+        // Görevden sonra ebeveynin elle verdiği süre sürerken o görevin kısıtlaması kalkar
+        val parent = activeWindows(day, t).filter { it.source == "manual" }
+        return taskRestrictionsNow(day, t).filter { r -> parent.none { it.createdAtMs > r.createdAtMs } }.maxByOrNull { it.rank }
+    }
 
     /** Kısıtlıyken izinli uygulamalar: paket → günlük dakika sınırı */
     fun restrictedAllowedNow(day: LocalDate, t: LocalTime): Map<String, Int?> {

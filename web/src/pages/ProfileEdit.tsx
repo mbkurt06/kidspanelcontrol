@@ -33,6 +33,11 @@ export async function createDefaultSections(p: Profile) {
 
 function SectionsEditor({ profile, sections }: { profile: Profile; sections: Section[] }) {
   const fam = useFamily();
+  const BUILT_ORDER = ["open", "timed", "blocked", "kiosk"];
+  const modeOptions = [...fam.modes].sort((a, b) => {
+    const ia = a.builtin ? BUILT_ORDER.indexOf(a.builtin) : 99, ib = b.builtin ? BUILT_ORDER.indexOf(b.builtin) : 99;
+    return ia - ib || a.name.localeCompare(b.name, "tr");
+  });
   const [err, setErr] = useState("");
 
   async function patch(s: Section, v: Partial<Section>) {
@@ -133,18 +138,13 @@ function SectionsEditor({ profile, sections }: { profile: Profile; sections: Sec
 
             <label className="row gap-xs">
               <span className="muted small">Bu saatlerde:</span>
-              <select
-                value={s.kiosk ? "kiosk" : s.default_rule}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  patch(s, v === "kiosk" ? { default_rule: "blocked", kiosk: true } : { default_rule: v as SecRule, kiosk: false });
-                }}
-              >
-                <option value="open">Serbest — her şey açık, süre sayılmaz</option>
-                <option value="timed">Süreli — süreden düşer, bitince kapanır</option>
-                <option value="blocked">Kilitli — sadece "her zaman açık" uygulamalar</option>
-                <option value="kiosk">🔒 Tam kilit — sadece Orbit ekranı</option>
+              <select value={s.mode_id ?? ""} onChange={(e) => e.target.value && patch(s, { mode_id: e.target.value })}>
+                {!s.mode_id && <option value="">—</option>}
+                {modeOptions.map((m) => (
+                  <option key={m.id} value={m.id}>{m.builtin ? `${m.name} — ${BUILTIN_HINT[m.builtin]}` : `${m.name} (kullanım profili)`}</option>
+                ))}
               </select>
+              {s.mode_id && <Link className="link small" to={`/rules/mode/${s.mode_id}`}>Profil ayarları ›</Link>}
             </label>
           </div>
         </div>
@@ -160,6 +160,13 @@ function SectionsEditor({ profile, sections }: { profile: Profile; sections: Sec
     </div>
   );
 }
+
+const BUILTIN_HINT: Record<string, string> = {
+  open: "her şey açık, süre sayılmaz",
+  timed: "süreden düşer, bitince kapanır",
+  blocked: "sadece seçili uygulamalar açık",
+  kiosk: "sadece Orbit ekranı",
+};
 
 export default function ProfileEdit() {
   const { id } = useParams();
@@ -376,7 +383,7 @@ export default function ProfileEdit() {
         <div className="sub-card">
           <select value={slot.mode_id} onChange={(e) => setSlot({ ...slot, mode_id: e.target.value })}>
             <option value="">Profil seç</option>
-            {fam.modes.map((m) => (
+            {fam.modes.filter((x) => !x.builtin).map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
               </option>

@@ -2291,3 +2291,6 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .dial.on { cursor: grabbing; }
 .dial.on::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px dashed var(--line); pointer-events: none; }
 .dial-bar { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 10px; border-radius: 14px; background: var(--bg); flex-wrap: wrap; }
+
+.used-in-row { padding: 10px 0; border-bottom: 1px solid var(--line); color: var(--text); text-decoration: none; }
+.used-in-row:last-child { border-bottom: 0; }

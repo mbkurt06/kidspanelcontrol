@@ -145,6 +145,11 @@ class RuleEngine(private val rules: Rules) {
             }
             if (crosses && s.profileId == yesterday && ydow in s.days && t < s.end) out += m to s.end
         }
+        // Bölümün kullanım profili (Serbest / Süreli / Tam kilit bölüm türüyle işler; ek süre aralığında uygulanmaz)
+        if (windowSection(day, t) == null) regularSection(day, t)?.let { sn ->
+            val m = sn.section.modeId?.let { rules.modes[it] }
+            if (m != null && m.builtin != "open" && m.builtin != "timed" && m.builtin != "kiosk") out += m to sn.section.end
+        }
         return out
     }
 

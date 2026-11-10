@@ -793,7 +793,7 @@ export default function TaskEdit() {
               <option value="none">Telefonu kısıtlama — sadece ödülleri beklet</option>
               <option value="kiosk">🔒 Kilitle — sadece Orbit</option>
               <option value="limit">🌙 Sınırla — sadece her zaman açık uygulamalar</option>
-              {fam.modes.map((m) => <option key={m.id} value={`mode:${m.id}`}>{m.icon} {m.name}</option>)}
+              {fam.modes.filter((x) => !x.builtin).map((m) => <option key={m.id} value={`mode:${m.id}`}>{m.icon} {m.name}</option>)}
             </select>
             <span className="muted tiny">
               {f.phone_restriction === "none"

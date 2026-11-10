@@ -363,7 +363,7 @@ function ChildCard({ child }: { child: Child }) {
                   {[
                     { id: "kiosk", name: "Kilitle" },
                     { id: "limit", name: "Sınırla" },
-                    ...fam.modes.map((m) => ({ id: m.id, name: m.name.replace(/ zamanı$/i, "") })),
+                    ...fam.modes.filter((m) => !m.builtin).map((m) => ({ id: m.id, name: m.name.replace(/ zamanı$/i, "") })),
                   ].map((o) => (
                     <button key={o.id} className={`chip-btn ${lockKind === o.id ? "on" : ""}`} onClick={() => setLockKind(o.id)}>
                       {o.name}

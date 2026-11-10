@@ -186,11 +186,15 @@ export default function Rules() {
         <summary className="section-collapse-head"><span>Kullanım profilleri <Info>Uyku, ders, dinlenme ve serbest gibi profillerde kiosk, menü, uygulama ve süre davranışını belirler.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <div className="stack">
           <div className="row between"><span className="muted small">Kiosk, uygulama ve süre profilleri</span><button className="btn small" onClick={newMode}><Icon name="plus" size={16} /> Yeni</button></div>
-          {fam.modes.map((m) => (
+          {[...fam.modes].sort((a, b) => {
+            const o = ["open", "timed", "blocked", "kiosk"];
+            const ia = a.builtin ? o.indexOf(a.builtin) : 99, ib = b.builtin ? o.indexOf(b.builtin) : 99;
+            return ia - ib || a.name.localeCompare(b.name, "tr");
+          }).map((m) => (
           <Link to={`/rules/mode/${m.id}`} className="card link-card" key={m.id}>
             <span className="dot" style={{ background: m.color }} />
             <div className="grow">
-              <b>{m.name}</b>
+              <b>{m.name}</b>{m.builtin && <span className="pill small"> hazır</span>}
               <div className="muted small">
                 {m.budget_minutes != null ? `${minutesText(m.budget_minutes)} süre` : "Süre sınırı yok"}
                 {" · "}

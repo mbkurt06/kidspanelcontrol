@@ -109,6 +109,7 @@ object Parse {
             o.intOrNull("budget_minutes"), o.optBoolean("counts_toward_daily"), o.optBoolean("others_blocked", true),
             o.optBoolean("extra_time_allowed"), ints(o.optJSONArray("warn_minutes")), o.optInt("priority", 50),
             o.optBoolean("kiosk_enabled", false), strings(o.optJSONArray("kiosk_screens")).toSet(), o.optString("kiosk_calls", "emergency"),
+            o.str("builtin"), o.str("kiosk_message")?.takeIf { it.isNotBlank() },
         )
     }
 
@@ -158,6 +159,7 @@ object Parse {
                 o.intOrNull("budget_minutes"), o.optBoolean("carry_over"), SecRule.of(o.str("default_rule")), o.optInt("sort_order"),
                 o.str("icon")?.takeIf { it.isNotBlank() }, o.str("message")?.takeIf { it.isNotBlank() },
                 o.optBoolean("kiosk", false), if (o.has("music")) o.optBoolean("music", true) else true,
+                o.str("mode_id"),
             )
         }.getOrNull()
     }

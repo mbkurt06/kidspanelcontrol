@@ -567,7 +567,7 @@ function ProgramTab({ childId }: { childId: string }) {
         <div className="row gap-s wrap">
           <select value={modeId} onChange={(e) => setModeId(e.target.value)} className="grow">
             <option value="">Durum seç</option>
-            {fam.modes.map((m) => (
+            {fam.modes.filter((x) => !x.builtin).map((m) => (
               <option key={m.id} value={m.id}>
                 {m.name}
               </option>

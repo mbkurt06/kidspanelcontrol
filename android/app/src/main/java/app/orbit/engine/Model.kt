@@ -56,6 +56,9 @@ data class Mode(
     val kioskEnabled: Boolean = false,
     val kioskScreens: Set<String> = emptySet(),
     val kioskCalls: String = "emergency",
+    /** Hazır profil: open | timed | blocked | kiosk (gün profili bölüm türleri) */
+    val builtin: String? = null,
+    val kioskMessage: String? = null,
 )
 
 data class ModeSlot(
@@ -114,6 +117,8 @@ data class Section(
     val kiosk: Boolean = false,
     /** Bu bölümde müzik çalabilir mi */
     val music: Boolean = true,
+    /** Bölümün kullanım profili */
+    val modeId: String? = null,
 ) {
     val crossesMidnight get() = start > end
 }

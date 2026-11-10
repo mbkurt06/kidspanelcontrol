@@ -75,6 +75,8 @@ export type Section = {
   icon: string | null;
   message: string | null;
   kiosk?: boolean;
+  /** Bölümün kullanım profili */
+  mode_id?: string | null;
   music?: boolean;
 };
 
@@ -242,6 +244,9 @@ export type Mode = {
   kiosk_enabled?: boolean;
   kiosk_screens?: KioskScreen[];
   kiosk_calls?: "emergency" | "all";
+  /** Hazır profil (gün profili bölüm türü): open | timed | blocked | kiosk */
+  builtin?: "open" | "timed" | "blocked" | "kiosk" | null;
+  kiosk_message?: string | null;
 };
 
 export type ModeSlot = {

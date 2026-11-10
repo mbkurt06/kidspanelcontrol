@@ -50,7 +50,7 @@ object Extras {
         // Ebeveynin verdiği (ya da görevden kazanılan) saat aralıklı süre sürerken kilit kalkar
         if (engine.activeWindows(day, t).isNotEmpty()) return null
         engine.activeModeAt(day, t)?.takeIf { it.kioskEnabled }?.let { mode ->
-            return KioskNow("profile", mode.name, def.message, mode.kioskScreens.ifEmpty { def.screens }, null)
+            return KioskNow("profile", mode.name, mode.kioskMessage ?: def.message, mode.kioskScreens.ifEmpty { def.screens }, null)
         }
         engine.taskRestrictionNow(day, t)?.takeIf { it.phoneMode == "kiosk" || (it.phoneMode == "mode" && rules.modes[it.modeId]?.kioskEnabled == true) }?.let { task ->
             val end = task.window?.end?.let { day.atTime(it).atZone(engine.zone()).toInstant().toEpochMilli() }
@@ -68,7 +68,9 @@ object Extras {
             val s = sec.section
             val start = ms(engine, sec.startDay, s.start)
             val end = ms(engine, if (s.crossesMidnight) sec.startDay.plusDays(1) else sec.startDay, s.end)
-            if (start > endedAt) return KioskNow("section", s.name, s.message ?: def.message, def.screens, end)
+            // Tam kilit bölümü: ekranlar ve mesaj "Tam kilit" kullanım profilinden
+            val m = s.modeId?.let { rules.modes[it] }
+            if (start > endedAt) return KioskNow("section", s.name, s.message ?: m?.kioskMessage ?: def.message, m?.kioskScreens?.ifEmpty { null } ?: def.screens, end)
         }
         return null
     }

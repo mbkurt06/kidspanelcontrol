@@ -288,7 +288,7 @@ function ChildCard({ child }: { child: Child }) {
             }}
             aria-expanded={kiosk || limited ? undefined : lockOpen}
           >
-            <Icon name={kiosk || limited ? "unlock" : "lock"} size={15} /> {kiosk || limited ? "Kilidi kaldır" : "Kilitle"}
+            <Icon name={kiosk || limited ? "unlock" : "lock"} size={15} /> {kiosk || limited ? "Kilidi aç" : "Kilitle"}
           </button>
           {lockOpen && (
             <>

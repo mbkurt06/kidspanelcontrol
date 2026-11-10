@@ -2280,3 +2280,8 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .grant-row > .icon-btn { margin-left: auto; }
 .grant-row > select { flex: 1 1 auto; min-width: 0; max-width: 260px; }
 .grant-minutes .row { flex-wrap: wrap; align-items: center; }
+
+/* Ana kart düğmeleri tek satırda kalsın (kilitliyken mesaj düğmesi alta kaymasın) */
+.card-actions { flex-wrap: nowrap; }
+.card-actions > .btn:first-child { flex: 0 1 auto; min-width: 0; white-space: nowrap; padding-left: 12px; padding-right: 12px; }
+.card-actions .give-box { min-width: 0; flex: 1 1 auto; }

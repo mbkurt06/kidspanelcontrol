@@ -154,6 +154,7 @@ function NowCard({ child, onErr }: { child: Child; onErr: (e: string) => void })
   }, [load]);
 
   async function go(kind: "kiosk" | "limit") {
+    if (!confirm(`${child.name} ${kind === "kiosk" ? "kilitlensin" : "sınırlansın"} mı?`)) return;
     onErr("");
     try {
       await lockNow(child.id, kind, untilFrom(dur, until), kioskOf(child).message);
@@ -165,6 +166,7 @@ function NowCard({ child, onErr }: { child: Child; onErr: (e: string) => void })
     }
   }
   async function release() {
+    if (!confirm(`${child.name} kilidi açılsın mı?`)) return;
     onErr("");
     try {
       await unlockNow(child.id);

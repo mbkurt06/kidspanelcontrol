@@ -165,6 +165,8 @@ function ChildCard({ child }: { child: Child }) {
   }
 
   function applyLock() {
+    const what = lockKind === "kiosk" ? "kilitlensin" : lockKind === "limit" ? "sınırlansın" : "profili başlasın";
+    if (!confirm(`${child.name} ${what} mı?`)) return;
     const until =
       lockDur === "none" ? null : lockDur === "until" ? untilFrom("until", lockUntil) : new Date(Date.now() + Number(lockDur) * 60000).toISOString();
     setLockOpen(false);
@@ -342,6 +344,7 @@ function ChildCard({ child }: { child: Child }) {
             disabled={!!busy}
             onClick={() => {
               if (kiosk || limited) {
+                if (!confirm(`${child.name} kilidi açılsın mı?`)) return;
                 setLockOpen(false);
                 setPending({ kind: "open", at: Date.now() });
                 run("unlock", () => unlockNow(child.id), "");

@@ -166,7 +166,13 @@ object PhoneSettings {
             // İzin gerektiren ayarlar (rahatsız etme) izin gelince tekrar denensin diye başarısızsa kaydetme
             if (r.isSuccess) { done.put(k, v); changed = true }
         }
-        if (changed) Store.prefs().edit().putString("psApplied", done.toString()).apply()
+        if (changed) {
+            Store.prefs().edit().putString("psApplied", done.toString()).apply()
+            // Panel hemen görsün: uygulanan ayarı beklemeden bildir (bir saniye sonra; sistem değeri otursun)
+            Thread.sleep(1000)
+            lastReport = null
+            report(ctx)
+        }
     }
 
     private fun pct(p: Int, max: Int) = (p.coerceIn(0, 100) * max + 50) / 100

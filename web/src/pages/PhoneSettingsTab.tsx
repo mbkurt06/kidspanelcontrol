@@ -59,6 +59,16 @@ export default function PhoneSettingsTab({ childId }: { childId: string }) {
     const t = setInterval(load, 8000);
     return () => clearInterval(t);
   }, [load]);
+  // Değişiklik gönderilince telefonun cevabını hızlı izle (1,5 sn'de bir, 30 sn boyunca)
+  const [fastUntil, setFastUntil] = useState(0);
+  useEffect(() => {
+    if (fastUntil <= Date.now()) return;
+    const t = setInterval(() => {
+      if (Date.now() > fastUntil) clearInterval(t);
+      else load();
+    }, 1500);
+    return () => clearInterval(t);
+  }, [fastUntil, load]);
 
   const d: Desired = row?.desired ?? {};
   const r: Reported = row?.reported ?? {};
@@ -75,7 +85,7 @@ export default function PhoneSettingsTab({ childId }: { childId: string }) {
       .from("device_settings")
       .upsert({ child_id: childId, family_id: fam.familyId, desired: next, updated_at: new Date().toISOString() }, { onConflict: "child_id" });
     if (error) setErr(errorText(error));
-    else setMsg("Telefona gönderildi");
+    else { setMsg("Telefona gönderildi"); setFastUntil(Date.now() + 30_000); }
   }
   /** Değer: telefonda bir kez uygulanır (aynı değer tekrar seçilse de yeniden uygulanır) */
   const setValue = (k: string, v: unknown) => save({ [k]: v }, [k]);
@@ -89,6 +99,7 @@ export default function PhoneSettingsTab({ childId }: { childId: string }) {
     try {
       await sendCommand(childId, "resync", { phone: { action, ...(pkg ? { package: pkg } : {}) } });
       setMsg(`${ACTION_TEXT[action] ?? action}: telefona gönderildi`);
+      setFastUntil(Date.now() + 30_000);
       setTimeout(load, 4000);
     } catch (e) {
       setErr(errorText(e));
@@ -101,7 +112,7 @@ export default function PhoneSettingsTab({ childId }: { childId: string }) {
 
   if (!row) return <p className="muted">Yükleniyor…</p>;
 
-  const p: P = { d, r, rs, errors, setValue, setLock, lockOn };
+  const p: P = { d, r, rs, errors, setValue, setLock, lockOn, reportedAt: row?.reported_at ? new Date(row.reported_at).getTime() : 0 };
 
   return (
     <div className="stack">
@@ -345,7 +356,20 @@ type P = {
   setValue: (k: string, v: unknown) => Promise<void>;
   setLock: (k: string, v: boolean) => Promise<void>;
   lockOn: (k: string) => boolean;
+  reportedAt: number;
 };
+
+/** Değer telefona gönderildi ama telefon henüz bildirmedi mi (ms cinsinden ne kadar süredir) */
+function pendingMs(p: P, k: string): number | null {
+  const rev = Number(p.d._rev?.[k] ?? 0);
+  if (!rev || rev <= p.reportedAt) return null;
+  return Date.now() - rev;
+}
+
+function Pending({ ms }: { ms: number | null }) {
+  if (ms == null) return null;
+  return <span className="tiny muted"> · {ms < 20_000 ? "telefona gidiyor…" : "telefon henüz almadı (ekranı kapalı ya da internetsiz olabilir)"}</span>;
+}
 
 function ErrText({ p, k }: { p: P; k: string }) {
   return p.errors[k] ? <span className="tiny warn-text"> · {p.errors[k]}</span> : null;
@@ -354,13 +378,15 @@ function ErrText({ p, k }: { p: P; k: string }) {
 /** Değer anahtarı (bir kez uygulanır): telefondaki güncel durumu gösterir */
 function ToggleRow({ p, k, label, hint }: { p: P; k: string; label: string; hint?: string }) {
   const cur = typeof p.r[k] === "boolean" ? (p.r[k] as boolean) : undefined;
-  const on = cur ?? !!p.d[k];
+  const pend = pendingMs(p, k);
+  // Gönderilmiş ama telefon henüz bildirmemişse seçilen değer görünsün
+  const on = pend != null ? !!p.d[k] : cur ?? !!p.d[k];
   return (
     <label className="check ps-row">
       <input type="checkbox" checked={on} onChange={(e) => p.setValue(k, e.target.checked)} />
       <span className="grow">
         {label} {hint && <Info>{hint}</Info>}
-        {cur !== undefined && p.d[k] !== undefined && cur !== p.d[k] && <span className="tiny muted"> · telefona gidiyor…</span>}
+        <Pending ms={pend} />
         <ErrText p={p} k={k} />
       </span>
     </label>
@@ -410,7 +436,8 @@ function SliderRow({ p, k, label }: { p: P; k: string; label: string }) {
 }
 
 function SegRow({ p, k, opts }: { p: P; k: string; opts: [string, string][] }) {
-  const raw = p.r[k] ?? p.d[k];
+  const pend = pendingMs(p, k);
+  const raw = pend != null ? p.d[k] : p.r[k] ?? p.d[k];
   const cur = raw == null ? "" : String(raw);
   return (
     <div className="chips">
@@ -419,6 +446,7 @@ function SegRow({ p, k, opts }: { p: P; k: string; opts: [string, string][] }) {
           {l}
         </button>
       ))}
+      <Pending ms={pend} />
       <ErrText p={p} k={k} />
     </div>
   );

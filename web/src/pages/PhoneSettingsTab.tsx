@@ -135,7 +135,7 @@ export default function PhoneSettingsTab({ childId }: { childId: string }) {
       {msg && <p className="small muted">{msg}</p>}
 
       <Section icon="📶" title="Ağ ve internet" open>
-        <ToggleRow p={p} k="wifi_on" label="Wi-Fi" />
+        <WifiRow p={p} childName={child.name} />
         <LockRow p={p} k="lock_wifi" label="Wi-Fi ayarlarını kilitle" hint="Çocuk telefonun Wi-Fi ayarlarında ağ ekleyemez/değiştiremez. Orbit'in kendi Wi-Fi ekranı çalışır." />
         <LockRow p={p} k="lock_mobile" label="Mobil ağ ayarlarını kilitle" />
         <LockRow p={p} k="no_roaming" label="Veri dolaşımını engelle" />
@@ -461,5 +461,54 @@ function Section({ icon, title, children, open }: { icon: string; title: string;
       </summary>
       <div className="stack-s">{children}</div>
     </details>
+  );
+}
+
+/**
+ * Wi-Fi: telefonlarda SIM yok; uzaktan kapatılırsa telefon bir daha panele bağlanamaz.
+ * Kapatmak üç adım: anahtarı aç → kutuyu kaldır → onayla. Açmak serbest.
+ */
+function WifiRow({ p, childName }: { p: P; childName: string }) {
+  const [unlocked, setUnlocked] = useState(false);
+  const cur = typeof p.r.wifi_on === "boolean" ? (p.r.wifi_on as boolean) : undefined;
+  const pend = pendingMs(p, "wifi_on");
+  const on = pend != null ? !!p.d.wifi_on : cur ?? (p.d.wifi_on === undefined ? true : !!p.d.wifi_on);
+  // Anahtar 30 sn sonra kendiliğinden kilitlenir
+  useEffect(() => {
+    if (!unlocked) return;
+    const t = setTimeout(() => setUnlocked(false), 30_000);
+    return () => clearTimeout(t);
+  }, [unlocked]);
+  return (
+    <div className="check ps-row" style={{ alignItems: "center" }}>
+      <input
+        type="checkbox"
+        checked={on}
+        disabled={on && !unlocked}
+        onChange={(e) => {
+          if (e.target.checked) { p.setValue("wifi_on", true); return; }
+          if (!confirm(`${childName} telefonunun Wi-Fi'ı kapatılsın mı?\n\nTelefonda SIM yok: Wi-Fi kapanınca telefon panele bağlanamaz ve uzaktan tekrar AÇILAMAZ. Ancak telefonun başına gidip elle açabilirsin.`)) return;
+          setUnlocked(false);
+          p.setValue("wifi_on", false);
+        }}
+      />
+      <span className="grow">
+        Wi-Fi <Info>Kapatmak için önce yanındaki anahtara bas (30 sn açık kalır), sonra kutuyu kaldır ve onayla. Telefonda SIM olmadığı için Wi-Fi kapanırsa uzaktan açılamaz.</Info>
+        {!on || unlocked ? null : <span className="tiny muted"> · kapatmak kilitli</span>}
+        <Pending ms={pend} />
+        <ErrText p={p} k="wifi_on" />
+      </span>
+      {on && (
+        <button
+          type="button"
+          className={`icon-pill ${unlocked ? "on" : ""}`}
+          title={unlocked ? "Kilitle" : "Kapatmaya izin ver"}
+          aria-label={unlocked ? "Wi-Fi kapatma kilidini kapat" : "Wi-Fi kapatma kilidini aç"}
+          onClick={() => setUnlocked(!unlocked)}
+        >
+          {unlocked ? "🔓" : "🔑"}
+        </button>
+      )}
+    </div>
   );
 }

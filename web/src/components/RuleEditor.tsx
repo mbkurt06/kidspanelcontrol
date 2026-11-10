@@ -193,15 +193,25 @@ export function RuleCard({ r, kinds, open, onToggle, onErr }: { r: TimeRule; kin
             <button className={`chip small ${!r.child_ids.length ? "on" : ""}`} onClick={() => patch({ child_ids: [] })}>
               Hepsi
             </button>
-            {fam.children.map((c) => (
-              <button
-                key={c.id}
-                className={`chip small ${r.child_ids.includes(c.id) ? "on" : ""}`}
-                onClick={() => patch({ child_ids: r.child_ids.includes(c.id) ? r.child_ids.filter((x) => x !== c.id) : [...r.child_ids, c.id] })}
-              >
-                {c.name}
-              </button>
-            ))}
+            {fam.children.map((c) => {
+              // "Hepsi" = herkes seçili; çocuğa dokununca o çocuk çıkar / eklenir. Herkes seçilirse yine "Hepsi" olur.
+              const all = fam.children.map((x) => x.id);
+              const eff = r.child_ids.length ? r.child_ids : all;
+              const on = eff.includes(c.id);
+              return (
+                <button
+                  key={c.id}
+                  className={`chip small ${on ? "on" : ""}`}
+                  onClick={() => {
+                    const next = on ? eff.filter((x) => x !== c.id) : [...eff, c.id];
+                    if (!next.length) return;
+                    patch({ child_ids: all.every((x) => next.includes(x)) ? [] : next });
+                  }}
+                >
+                  {c.name}
+                </button>
+              );
+            })}
           </div>
           {r.kind === "kiosk" && (
             <>

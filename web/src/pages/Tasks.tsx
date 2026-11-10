@@ -244,7 +244,7 @@ export default function Tasks() {
       else (out[i] as { runs: TaskRun[] }).runs.push(r);
     }
     // Grup: koşul kararı verilmişse, hepsi bitmişse ya da süresi geçmişse tamamı; grup sürüyorsa sadece biten görevleri
-    return out.flatMap((row) => {
+    return out.flatMap((row): (typeof out)[number][] => {
       if (row.kind === "task") return [row];
       const gr = groupRuns.find((x) => x.group_id === row.group.id && x.child_id === row.child && x.day === row.day);
       if (gr && gr.status !== "open") return [row];

@@ -117,7 +117,17 @@ class OrbitService : Service() {
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
-            if (i.action == Intent.ACTION_SCREEN_ON || i.action == Intent.ACTION_USER_PRESENT) Live.syncRequested = true
+            if (i.action == Intent.ACTION_SCREEN_ON || i.action == Intent.ACTION_USER_PRESENT) {
+                Live.syncRequested = true
+                app.orbit.data.Realtime.kick()
+            }
+        }
+    }
+
+    private val netCallback = object : android.net.ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: android.net.Network) {
+            Live.syncRequested = true
+            app.orbit.data.Realtime.kick()
         }
     }
 
@@ -147,6 +157,10 @@ class OrbitService : Service() {
         scope.launch(Dispatchers.IO) { runCatching { app.orbit.data.Alarms.reschedule(force = true) } }
         // Panelden gelen değişiklikleri anında almak için canlı bağlantı
         app.orbit.data.Realtime.start()
+        // İnternet geri gelince canlı bağlantıyı ve eşitlemeyi beklemeden yenile
+        runCatching {
+            getSystemService(android.net.ConnectivityManager::class.java).registerDefaultNetworkCallback(netCallback)
+        }
         registerReceiver(screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_USER_PRESENT)
         })
@@ -163,6 +177,7 @@ class OrbitService : Service() {
     override fun onDestroy() {
         mediaFocus?.let { runCatching { getSystemService(AudioManager::class.java).abandonAudioFocusRequest(it) } }
         if (lastMediaLocked == true) Policy.setLockedMediaControls(this, false)
+        runCatching { getSystemService(android.net.ConnectivityManager::class.java).unregisterNetworkCallback(netCallback) }
         runCatching { unregisterReceiver(screenReceiver) }
         runCatching { unregisterReceiver(packageReceiver) }
         app.orbit.data.Realtime.stop()

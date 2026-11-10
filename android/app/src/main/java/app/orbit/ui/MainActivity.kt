@@ -116,6 +116,26 @@ class MainActivity : ComponentActivity() {
             ensureNotifications()
             OrbitService.start(this)
             Live.syncRequested = true
+            askPowerExemption()
+        }
+    }
+
+    /**
+     * Pil optimizasyonu muafiyeti: yoksa Android ekran kapalıyken Orbit'i uyutur, panelden gelen
+     * değişiklikler dakikalarca gecikir. Günde en fazla bir kez sorulur.
+     */
+    private fun askPowerExemption() {
+        val pm = getSystemService(android.os.PowerManager::class.java)
+        if (pm.isIgnoringBatteryOptimizations(packageName)) return
+        val p = Store.prefs()
+        val now = System.currentTimeMillis()
+        if (now - p.getLong("powerAskAt", 0L) < 24 * 3600_000L) return
+        p.edit().putLong("powerAskAt", now).apply()
+        runCatching {
+            startActivity(
+                android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                    .setData(android.net.Uri.parse("package:$packageName"))
+            )
         }
     }
 }

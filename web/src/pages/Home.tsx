@@ -107,8 +107,8 @@ function ChildCard({ child }: { child: Child }) {
   }, [child.id, fam.sections, st?.updated_at]);
 
   const staleMin = st ? Math.floor((Date.now() - new Date(st.updated_at).getTime()) / 60000) : 0;
-  // Bağlantı: yeşil = son 2 dk, sarı = 2–15 dk, gri = daha uzun
-  const conn = !st ? null : staleMin < 2 ? "on" : staleMin < 15 ? "idle" : "off";
+  // Bağlantı: yeşil = son 4 dk (telefon değişiklik yoksa 3 dk'da bir bildirir), sarı = 4–15 dk, gri = daha uzun
+  const conn = !st ? null : staleMin < 4 ? "on" : staleMin < 15 ? "idle" : "off";
   const [showSeen, setShowSeen] = useState(false);
   // Telefonun bildirdiği durum
   const realKiosk = !!st?.lock_reason?.startsWith("🔒");
@@ -425,6 +425,12 @@ function ChildCard({ child }: { child: Child }) {
       )}
       {st && staleMin > 15 && (
         <p className="small warn-text">⚠ Telefon {staleMin >= 60 ? `${Math.floor(staleMin / 60)} saattir` : `${staleMin} dakikadır`} bağlanmadı</p>
+      )}
+      {st && staleMin <= 15 && st.power_exempt === false && (
+        <p className="small warn-text">⚠ Telefonda Orbit pil optimizasyonunda · ekran kapalıyken değişiklikler gecikebilir (telefonda Orbit'i açıp “İzin ver” de)</p>
+      )}
+      {st && staleMin <= 15 && st.power_exempt !== false && st.live === false && (
+        <p className="small muted">Canlı bağlantı kapalı · değişiklikler 30 sn içinde gelir</p>
       )}
       {msg && <p className="small muted center">{msg}</p>}
     </div>

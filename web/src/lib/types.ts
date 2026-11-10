@@ -279,6 +279,10 @@ export type DeviceStatus = {
   allowance_minutes: number;
   remaining_minutes: number;
   grant_used?: Record<string, number> | null;
+  /** Telefon canlı bağlantıda mı (değişiklikleri anında alır) */
+  live?: boolean | null;
+  /** Telefonda pil optimizasyonu muafiyeti var mı */
+  power_exempt?: boolean | null;
   current_mode_name: string | null;
   locked: boolean;
   lock_reason: string | null;

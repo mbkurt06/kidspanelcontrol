@@ -18,6 +18,14 @@ import kotlinx.coroutines.coroutineScope
 /** Sunucu ile alışveriş: kuralları çek, durumu ve kullanımı gönder, komutları onayla. */
 object Sync {
     private const val TAG = "OrbitSync"
+    private val extrasBusy = java.util.concurrent.atomic.AtomicBoolean(false)
+    // Son gönderilen durum / kullanım: değişmeyen veri tekrar yazılmasın (sunucu disk yükü)
+    private var lastStatusKey: String? = null
+    private var lastStatusAt = 0L
+    private var lastDeviceKey: String? = null
+    private var lastDeviceAt = 0L
+    private val lastUsage = HashMap<String, String>()
+    private var lastUsageDay: String? = null
 
     private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
@@ -95,16 +103,26 @@ object Sync {
             }
             Store.rulesJson = bundle.toString()
             kid.optJSONObject(0)?.optString("name")?.let { Store.childName = it }
-            Wifi.applySettings(kid.optJSONObject(0)?.optJSONObject("wifi_settings"))
-            // Kasadaki Wi-Fi ağları (panelden eklenenler dahil) telefona tanıtılır; 5 dk'da bir
-            runCatching { Wifi.syncVault() }.onFailure { Log.w(TAG, "wifi kasa", it) }
-            // Panelde alarm sesi seçilebilsin diye telefonun ses listesi (değişince)
-            runCatching { Sounds.report(Store.appCtx) }
             Store.lastSync = System.currentTimeMillis()
-            runCatching { TaskAlerts.onTasks(Tasks.current()) }
-            runCatching { Alarms.reschedule() }
-            runCatching { Messages.refresh() }
+            // Komutlar hemen onaylanır; yavaş yan işler (Wi-Fi kasası, ses listesi, alarmlar, mesajlar) eşitlemeyi bekletmez
             ackCommands(bundle.getJSONArray("commands"))
+            val wifi = kid.optJSONObject(0)?.optJSONObject("wifi_settings")
+            if (extrasBusy.compareAndSet(false, true)) {
+                Thread {
+                    try {
+                        runCatching { Wifi.applySettings(wifi) }
+                        // Kasadaki Wi-Fi ağları (panelden eklenenler dahil) telefona tanıtılır; 5 dk'da bir
+                        runCatching { Wifi.syncVault() }.onFailure { Log.w(TAG, "wifi kasa", it) }
+                        // Panelde alarm sesi seçilebilsin diye telefonun ses listesi (değişince)
+                        runCatching { Sounds.report(Store.appCtx) }
+                        runCatching { TaskAlerts.onTasks(Tasks.current()) }
+                        runCatching { Alarms.reschedule() }
+                        runCatching { Messages.refresh() }
+                    } finally {
+                        extrasBusy.set(false)
+                    }
+                }.start()
+            }
             true
         } catch (e: Throwable) {
             Log.w(TAG, "kurallar alınamadı", e)
@@ -149,31 +167,42 @@ object Sync {
             .onFailure { Log.w(TAG, "uygulamalar bildirilemedi", it) }
     }
 
+    /**
+     * Durum gönder. Değişen bir şey yoksa en fazla 3 dk'da bir (panel "bağlı" görsün);
+     * cihaz bilgisi (sürüm vb.) sadece değişince ya da 10 dk'da bir.
+     */
     fun pushStatus(ctx: Context, s: Snapshot, usage: DayUsage, foreground: String?, lockReason: String?, battery: Int?) {
         val c = Store.creds ?: return
         runCatching {
-            Api.post(
-                "device_status?on_conflict=child_id",
-                JSONObject()
-                    .put("child_id", c.childId).put("device_id", c.deviceId).put("day", s.day.toString())
-                    .put("used_minutes", s.usedMinutes).put("allowance_minutes", s.allowanceMinutes)
-                    .put("remaining_minutes", (s.remainingSeconds / 60).toInt())
-                    .put("current_mode_id", s.activeMode?.id ?: JSONObject.NULL)
-                    .put("current_mode_name", s.activeMode?.name ?: s.section?.section?.name ?: JSONObject.NULL)
-                    .put("locked", s.locked).put("lock_reason", lockReason ?: JSONObject.NULL)
-                    .put("foreground_package", foreground ?: JSONObject.NULL)
-                    .put("battery", battery ?: JSONObject.NULL)
-                    .put("grant_used", grantUsed(usage))
-                    .put("updated_at", Instant.now().toString()),
-                upsert = true,
-            )
+            val now = System.currentTimeMillis()
+            val body = JSONObject()
+                .put("child_id", c.childId).put("device_id", c.deviceId).put("day", s.day.toString())
+                .put("used_minutes", s.usedMinutes).put("allowance_minutes", s.allowanceMinutes)
+                .put("remaining_minutes", (s.remainingSeconds / 60).toInt())
+                .put("current_mode_id", s.activeMode?.id ?: JSONObject.NULL)
+                .put("current_mode_name", s.activeMode?.name ?: s.section?.section?.name ?: JSONObject.NULL)
+                .put("locked", s.locked).put("lock_reason", lockReason ?: JSONObject.NULL)
+                .put("foreground_package", foreground ?: JSONObject.NULL)
+                .put("battery", battery?.let { it / 5 * 5 } ?: JSONObject.NULL)
+                .put("grant_used", grantUsed(usage))
+                .put("live", Realtime.isConnected)
+                .put("power_exempt", runCatching { ctx.getSystemService(android.os.PowerManager::class.java).isIgnoringBatteryOptimizations(ctx.packageName) }.getOrDefault(false))
+            val key = body.toString()
+            if (key != lastStatusKey || now - lastStatusAt > 3 * 60_000L) {
+                Api.post("device_status?on_conflict=child_id", JSONObject(key).put("updated_at", Instant.now().toString()), upsert = true)
+                lastStatusKey = key
+                lastStatusAt = now
+            }
             pushUsage(usage)
-            Api.patch(
-                "devices?id=eq.${c.deviceId}",
-                JSONObject().put("last_seen_at", Instant.now().toString()).put("app_version", BuildConfig.VERSION_NAME)
-                    .put("is_device_owner", Policy.isOwner(ctx)).put("os_version", Build.VERSION.RELEASE)
-                    .put("model", "${Build.MANUFACTURER} ${Build.MODEL}"),
-            )
+            val dev = JSONObject().put("app_version", BuildConfig.VERSION_NAME)
+                .put("is_device_owner", Policy.isOwner(ctx)).put("os_version", Build.VERSION.RELEASE)
+                .put("model", "${Build.MANUFACTURER} ${Build.MODEL}")
+            val dkey = dev.toString()
+            if (dkey != lastDeviceKey || now - lastDeviceAt > 10 * 60_000L) {
+                Api.patch("devices?id=eq.${c.deviceId}", dev.put("last_seen_at", Instant.now().toString()))
+                lastDeviceKey = dkey
+                lastDeviceAt = now
+            }
         }.onFailure { Log.w(TAG, "durum gönderilemedi", it) }
     }
 
@@ -206,21 +235,31 @@ object Sync {
         }.onFailure { Log.w(TAG, "güncelleme durumu bildirilemedi", it) }
     }
 
+    /** Sadece değişen uygulamaların kullanımı yazılır */
     fun pushUsage(u: DayUsage) {
         val c = Store.creds ?: return
         if (u.perAppTotal.isEmpty()) return
+        val day = u.day.toString()
+        if (day != lastUsageDay) { lastUsage.clear(); lastUsageDay = day }
         val arr = JSONArray()
+        val sent = HashMap<String, String>()
         for ((pkg, sec) in u.perAppTotal) {
+            val m = (sec / 60).toInt()
+            val cm = ((u.perAppCounted[pkg] ?: 0) / 60).toInt()
+            val v = "$m/$cm"
+            if (lastUsage[pkg] == v) continue
+            sent[pkg] = v
             arr.put(
-                JSONObject().put("child_id", c.childId).put("day", u.day.toString()).put("package", pkg)
-                    .put("minutes", (sec / 60).toInt()).put("counted_minutes", ((u.perAppCounted[pkg] ?: 0) / 60).toInt())
+                JSONObject().put("child_id", c.childId).put("day", day).put("package", pkg)
+                    .put("minutes", m).put("counted_minutes", cm)
                     .put("updated_at", Instant.now().toString())
             )
         }
+        if (arr.length() == 0) return
         Api.post("usage_daily?on_conflict=child_id,day,package", arr, upsert = true)
+        lastUsage.putAll(sent)
     }
 
-    /** Gün sonunda kullanılmayan hakkı idempotent olarak süre kasasına aktarır. */
     fun storeDailySurplus(day: java.time.LocalDate, minutes: Int): Boolean {
         if (minutes <= 0) return true
         return runCatching {

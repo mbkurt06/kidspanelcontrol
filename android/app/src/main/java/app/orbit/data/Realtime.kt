@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * Sunucuyla sürekli açık canlı bağlantı (Supabase Realtime).
  * Panelde bir değişiklik olunca (kural, komut, süre, görev, yeni ebeveyn cihazı…) sunucu hemen haber verir;
  * telefon 1–2 sn içinde kuralları yeniden alır. Bağlantı koparsa kendiliğinden yeniden bağlanır.
- * 30 sn'lik düzenli kontrol yedek olarak devam eder.
+ * 30 sn'lik düzenli kontrol yedek olarak devam eder. Tek yayın kanalı kullanılır (sunucu disk yükü az).
  */
 object Realtime {
     private const val TAG = "OrbitRealtime"
@@ -32,17 +32,17 @@ object Realtime {
     private val ref = AtomicInteger(1)
     @Volatile private var ws: WebSocket? = null
     @Volatile private var connected = false
+    @Volatile private var lastMsgAt = 0L
+    @Volatile private var kicked = false
     private var loop: Job? = null
 
-    /** Telefonun kendi yazdıkları (durum, kullanım, olaylar) burada yok — kendi kendini tetiklemesin. */
-    private val childTables = listOf("commands", "child_apps", "time_grants", "profile_assignments", "day_overrides", "task_runs", "messages", "timer_sessions", "alarms", "agenda_items", "task_group_runs")
-    private val familyTables = listOf(
-        "rule_profiles", "modes", "mode_slots", "profile_sections", "section_rules",
-        "app_groups", "app_group_members", "profile_group_limits", "tasks", "vault_holders", "focus_profiles", "activities",
-        "time_rules", "children",
-    )
-
     val isConnected get() = connected
+
+    /** Ekran açıldı / internet geldi: bağlı değilse beklemeden yeniden bağlan */
+    fun kick() {
+        if (!connected) kicked = true
+        if (loop?.isActive != true) start()
+    }
 
     fun start() {
         if (loop?.isActive == true) return
@@ -51,19 +51,29 @@ object Realtime {
             while (isActive) {
                 val c = Store.creds
                 if (c == null) { delay(10_000); continue }
+                kicked = false
                 val opened = runCatching { connect(c.childId) }.getOrElse { Log.w(TAG, "bağlanamadı", it); false }
                 if (opened) {
                     backoff = 2_000L
-                    // Bağlıyken: kalp atışı ve oturum anahtarını tazele; kopunca döngü yeniden bağlar
+                    // Bağlıyken: kalp atışı; 70 sn hiç cevap gelmezse bağlantı ölü sayılır ve yenilenir
                     var beats = 0
                     while (isActive && connected) {
                         delay(25_000)
+                        if (!connected) break
+                        if (System.currentTimeMillis() - lastMsgAt > 70_000) {
+                            Log.w(TAG, "cevap yok, yeniden bağlanılıyor")
+                            connected = false
+                            ws?.cancel(); ws = null
+                            break
+                        }
                         send("phoenix", "heartbeat", JSONObject())
                         if (++beats % 80 == 0) runCatching { send(topic(c.childId), "access_token", JSONObject().put("access_token", Api.accessToken())) }
                     }
                 }
-                delay(backoff)
-                backoff = (backoff * 2).coerceAtMost(60_000)
+                // Bekleme sırasında ekran açılırsa (kick) hemen dene
+                var waited = 0L
+                while (isActive && waited < backoff && !kicked) { delay(1_000); waited += 1_000 }
+                backoff = if (kicked) 2_000L else (backoff * 2).coerceAtMost(60_000)
             }
         }
     }
@@ -76,27 +86,29 @@ object Realtime {
 
     private fun topic(child: String) = "realtime:orbit-$child"
 
+    /** Tek yayın kanalı: sunucu ilgili tablolar değişince "changed" gönderir (orbit.rt_notify) */
     private fun connect(child: String): Boolean {
         val token = Api.accessToken()
         val url = Api.baseUrl.replaceFirst("https://", "wss://") + "/realtime/v1/websocket?apikey=${Api.apiKey}&vsn=1.0.0"
-        val changes = JSONArray()
-        for (t in childTables) changes.put(JSONObject().put("event", "*").put("schema", "orbit").put("table", t).put("filter", "child_id=eq.$child"))
-        for (t in familyTables) changes.put(JSONObject().put("event", "*").put("schema", "orbit").put("table", t))
         val join = JSONObject()
             .put("config", JSONObject()
-                .put("broadcast", JSONObject().put("self", false))
+                .put("broadcast", JSONObject().put("self", false).put("ack", false))
                 .put("presence", JSONObject().put("key", ""))
-                .put("postgres_changes", changes))
+                .put("postgres_changes", JSONArray())
+                .put("private", false))
             .put("access_token", token)
 
         val done = java.util.concurrent.CountDownLatch(1)
         var ok = false
+        ws?.cancel()
         ws = client.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
+                lastMsgAt = System.currentTimeMillis()
                 webSocket.send(msg(topic(child), "phx_join", join))
             }
 
             override fun onMessage(webSocket: WebSocket, text: String) {
+                lastMsgAt = System.currentTimeMillis()
                 val m = runCatching { JSONObject(text) }.getOrNull() ?: return
                 when (m.optString("event")) {
                     "phx_reply" -> if (m.optString("topic") == topic(child) && !ok) {
@@ -105,8 +117,8 @@ object Realtime {
                         if (ok) Live.syncRequested = true
                         done.countDown()
                     }
-                    "postgres_changes" -> onChange(m.optJSONObject("payload")?.optJSONObject("data"))
-                    "phx_error", "phx_close" -> { connected = false; done.countDown() }
+                    "broadcast" -> onChange(m.optJSONObject("payload")?.optJSONObject("payload"))
+                    "phx_error", "phx_close" -> if (m.optString("topic") == topic(child)) { connected = false; done.countDown() }
                 }
             }
 
@@ -129,7 +141,7 @@ object Realtime {
         if (table == "commands" && rec?.optJSONObject("payload")?.has("find") == true) {
             runCatching { app.orbit.ui.FindPhone.handle(Store.appCtx, rec.getString("id"), rec.getJSONObject("payload"), rec.optString("created_at")) }
         }
-        if (table == "vault_holders" || table == "commands" && d.optJSONObject("record")?.optJSONObject("payload")?.optBoolean("vault") == true) {
+        if (table == "vault_holders" || table == "commands" && rec?.optJSONObject("payload")?.optBoolean("vault") == true) {
             Vault.shareSoon()
         }
     }

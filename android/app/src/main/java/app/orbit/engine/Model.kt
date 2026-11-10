@@ -15,7 +15,9 @@ enum class Group(val key: String) {
 data class TimeWindow(val start: LocalTime, val end: LocalTime) {
     /** Bitiş başlangıçtan önceyse gece yarısını geçer (21:00–07:00). */
     fun contains(t: LocalTime): Boolean =
-        if (start < end) t >= start && t < end
+        // 23:59 bitişi "gün sonuna kadar" demek: son dakika da içeride (yoksa 23:59–00:00 arası bir dakika kilitleniyordu)
+        if (end == LocalTime.of(23, 59)) t >= start
+        else if (start < end) t >= start && t < end
         else if (start > end) t >= start || t < end
         else false
 }

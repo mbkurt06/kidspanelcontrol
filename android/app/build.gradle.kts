@@ -15,7 +15,8 @@ android {
     defaultConfig {
         applicationId = "app.orbit"
         minSdk = 28
-        targetSdk = 35
+        // 34: Android 15+ "modes" kuralı 35 hedefleyen uygulamaların kullanıcının açtığı Rahatsız Etme'yi kapatmasına izin vermiyor
+        targetSdk = 34
         versionCode = orbitVersionCode
         versionName = "0.1.$orbitVersionCode"
         buildConfigField("String", "SUPABASE_URL", "\"https://pwxbrkbljcknstjbccwu.supabase.co\"")

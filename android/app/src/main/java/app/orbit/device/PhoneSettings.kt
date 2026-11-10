@@ -140,7 +140,7 @@ object PhoneSettings {
 
     /**
      * Rahatsız etme kuralı (panel → Ses → "Rahatsız etme açılabilsin mi"):
-     *  off   = hiç açılamaz, açılırsa hemen kapatılır
+     *  off   = hiç açılamaz, açılırsa hemen kapatılır (sessiz zil de normale döner)
      *  calls = açılabilir ama aramalar (herkesten, tekrar arayanlar dahil) her zaman çalar
      * Telefonda "Rahatsız etme erişimi" izni gerekir. Rahatsız etme değişince de hemen çağrılır (OrbitService).
      */
@@ -155,6 +155,7 @@ object PhoneSettings {
             when (mode) {
                 "off" -> if (nm.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL) {
                     nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
+                    if (nm.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL) throw IllegalStateException("Telefon rahatsız etmeyi kapatmaya izin vermedi")
                 }
                 "calls" -> {
                     val p = nm.notificationPolicy
@@ -169,6 +170,9 @@ object PhoneSettings {
                     }
                 }
             }
+            // Ulaşılabilir olsun: sessiz moddaysa zil normale (titreşim serbest)
+            val am = ctx.getSystemService(AudioManager::class.java)
+            if (am.ringerMode == AudioManager.RINGER_MODE_SILENT) am.ringerMode = AudioManager.RINGER_MODE_NORMAL
         }.also { err("dnd_lock", it.exceptionOrNull()) }
     }
 

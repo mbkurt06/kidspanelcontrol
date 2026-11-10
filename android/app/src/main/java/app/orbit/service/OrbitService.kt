@@ -184,7 +184,10 @@ class OrbitService : Service() {
             getSystemService(android.net.ConnectivityManager::class.java).registerDefaultNetworkCallback(netCallback)
         }
         // Rahatsız etme açılınca (panelde yasaksa) hemen geri al
-        runCatching { registerReceiver(dndReceiver, IntentFilter(android.app.NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED)) }
+        runCatching { registerReceiver(dndReceiver, IntentFilter().apply {
+            addAction(android.app.NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED)
+            addAction(android.media.AudioManager.RINGER_MODE_CHANGED_ACTION)
+        }) }
         registerReceiver(screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_USER_PRESENT)
         })

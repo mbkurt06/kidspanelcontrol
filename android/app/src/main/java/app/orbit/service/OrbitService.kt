@@ -463,6 +463,14 @@ class OrbitService : Service() {
             if (!v.allowed) {
                 lockReason = v.reason ?: lockReason
                 showLock(v.reason ?: "Bu uygulama şu an kapalı", fg, nowMs)
+                // Listede olmayan (ana ekranda simgesi olmayan) uygulama açıldı: panelin uygulama listesine ekle
+                if (rules.apps[fg] == null) {
+                    val seen = Store.prefs().getStringSet("seenPkgs", emptySet())!!
+                    if (fg !in seen) {
+                        Store.prefs().edit().putStringSet("seenPkgs", seen + fg).apply()
+                        scope.launch(Dispatchers.IO) { runCatching { Sync.reportApps(this@OrbitService, initial = false) } }
+                    }
+                }
             }
         }
 

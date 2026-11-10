@@ -162,7 +162,15 @@ object Sync {
     fun reportApps(ctx: Context, initial: Boolean) {
         val essentials = Policy.essentials(ctx)
         val arr = JSONArray()
-        for (a in (Policy.launchables(ctx) + Policy.hiddenFeedApps(ctx) + app.orbit.device.PhoneSettings.hiddenApps(ctx)).distinctBy { it.pkg }) {
+        // Ana ekranda simgesi olmayan ama açılmaya çalışılan uygulamalar (ör. galerinin video oynatıcısı)
+        val seen = Store.prefs().getStringSet("seenPkgs", emptySet())!!.mapNotNull { pkg ->
+            runCatching {
+                val ai = ctx.packageManager.getApplicationInfo(pkg, 0)
+                // Sistem uygulaması sayılmasın: panelde "Sistem" seçmeden de görünsün
+                Policy.Launchable(pkg, ai.loadLabel(ctx.packageManager).toString(), false)
+            }.getOrNull()
+        }
+        for (a in (Policy.launchables(ctx) + Policy.hiddenFeedApps(ctx) + app.orbit.device.PhoneSettings.hiddenApps(ctx) + seen).distinctBy { it.pkg }) {
             val o = JSONObject().put("package", a.pkg).put("label", a.label).put("system", a.system)
             a.category?.let { o.put("category", it) }
             if (a.pkg in essentials) o.put("default_group", "always_open").put("preapproved", true)

@@ -285,6 +285,30 @@ private fun TodayScreen(go: (Screen) -> Unit) {
             }) { Text("Ayarı aç") }
         }
     }
+    // Pil izni yoksa Android ekran kapalıyken Orbit'i uyutur: panelden gelenler gecikir. Ebeveyn buradan verir.
+    val powerOk = remember(live.lastSync, live.snapshot?.now?.minute) {
+        runCatching { ctx.getSystemService(android.os.PowerManager::class.java).isIgnoringBatteryOptimizations(ctx.packageName) }.getOrDefault(true)
+    }
+    if (!powerOk) {
+        Card {
+            Text("Pil izni gerekli", color = C.warn, fontWeight = FontWeight.SemiBold)
+            Muted("Orbit ekran kapalıyken de çalışsın diye pil kısıtlamasından muaf olmalı. Açılan ekranda “İzin ver” de. Pencere çıkmazsa ayarlarda Orbit → Pil → “Kısıtlama yok” seç (ayar açılmazsa önce panelden ebeveyn modunu aç).")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    val pkg = android.net.Uri.parse("package:${ctx.packageName}")
+                    val ok = runCatching {
+                        ctx.startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }.isSuccess
+                    if (!ok) runCatching { ctx.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                }) { Text("İzin ver") }
+                OutlinedButton(onClick = {
+                    runCatching {
+                        ctx.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, android.net.Uri.parse("package:${ctx.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                    }
+                }) { Text("Uygulama ayarları") }
+            }
+        }
+    }
     if (s == null) {
         Muted("Kurallar yükleniyor…")
         return

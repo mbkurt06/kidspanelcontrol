@@ -1122,14 +1122,12 @@ function TimeTab({ childId }: { childId: string }) {
   );
 }
 
-/** Verilen sürenin dakikası: − / + (1 dk, basılı tut hızlanır), elle yazılabilir; 1 sn sonra kaydedilir. 0 → silinsin mi? */
+/** Verilen sürenin dakikası: − / + (1 dk, basılı tut hızlanır), elle yazılabilir. Değişince "✓ Kaydet" / "Vazgeç" çıkar; 0 → silinsin mi? */
 function GrantMinutes({ g, used, onChanged }: { g: TimeGrant; used: number; onChanged: () => void }) {
   const [v, setV] = useState(g.minutes);
   const [state, setState] = useState<"" | "saving" | "saved" | "error">("");
-  const timer = useRef<number | null>(null);
-  const editing = useRef(false);
-  useEffect(() => { if (!editing.current) setV(g.minutes); }, [g.minutes]);
-  useEffect(() => () => { if (timer.current) window.clearTimeout(timer.current); }, []);
+  const dirty = v !== g.minutes;
+  useEffect(() => { setV(g.minutes); }, [g.minutes]);
 
   async function remove() {
     await supabase.from("time_grants").delete().eq("id", g.id);
@@ -1138,32 +1136,34 @@ function GrantMinutes({ g, used, onChanged }: { g: TimeGrant; used: number; onCh
   }
   function change(n: number) {
     if (n <= 0) {
-      if (timer.current) window.clearTimeout(timer.current);
       if (confirm("Bu süre silinsin mi?")) remove();
       else setV(Math.max(1, used));
       return;
     }
-    setV(n);
-    editing.current = true;
     setState("");
-    if (timer.current) window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(async () => {
-      setState("saving");
-      const { data, error } = await supabase.rpc("parent_set_grant_minutes", { p_grant: g.id, p_minutes: n });
-      editing.current = false;
-      if (error) { setState("error"); setV(g.minutes); return; }
-      if (typeof data === "number" && data !== n) setV(data);
-      setState("saved");
-      onChanged();
-      window.setTimeout(() => setState((x) => (x === "saved" ? "" : x)), 2000);
-    }, 1000);
+    setV(n);
+  }
+  async function save() {
+    setState("saving");
+    const { data, error } = await supabase.rpc("parent_set_grant_minutes", { p_grant: g.id, p_minutes: v });
+    if (error) { setState("error"); return; }
+    if (typeof data === "number") setV(data);
+    setState("saved");
+    onChanged();
+    window.setTimeout(() => setState((x) => (x === "saved" ? "" : x)), 2000);
   }
   return (
     <div className="grant-minutes">
       <MinuteStepper value={v} onChange={change} min={used > 0 ? used : 0} max={1440} step={1} label="Dakika" />
+      {dirty && (
+        <div className="row gap-xs">
+          <button className="btn small primary" disabled={state === "saving"} onClick={save}>{state === "saving" ? "Kaydediliyor…" : `✓ Kaydet (${minutesText(g.minutes)} → ${minutesText(v)})`}</button>
+          <button className="btn small ghost" onClick={() => { setV(g.minutes); setState(""); }}>Vazgeç</button>
+        </div>
+      )}
       <span className="muted tiny">
         {used > 0 ? `${used} dk kullanıldı` : ""}
-        {state === "saving" ? " · kaydediliyor…" : state === "saved" ? " · ✓ kaydedildi" : state === "error" ? " · kaydedilemedi" : ""}
+        {state === "saved" ? " ✓ kaydedildi" : state === "error" ? " kaydedilemedi" : ""}
       </span>
     </div>
   );

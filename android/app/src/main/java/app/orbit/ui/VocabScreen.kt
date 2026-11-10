@@ -388,7 +388,11 @@ private fun StudySession(s: VState, deckId: String?, onDone: () -> Unit) {
     val front = if (frFront[c.id] != false) c.fr else c.de
     val back = if (frFront[c.id] != false) c.de else c.fr
     val frontLoc = if (frFront[c.id] != false) Locale.FRENCH else Locale.GERMAN
-    val rot by animateFloatAsState(if (flipped) 180f else 0f, tween(300), label = "flip")
+    // Her kart için ayrı dönme: yeni kart hep ön yüzüyle başlar (önceden geri dönme animasyonu sırasında
+    // yeni kartın arka yüzü — cevabı — bir an görünüyordu)
+    val rotAnim = remember(c.id) { Animatable(0f) }
+    LaunchedEffect(c.id, flipped) { rotAnim.animateTo(if (flipped) 180f else 0f, tween(300)) }
+    val rot = rotAnim.value
 
     Row(verticalAlignment = Alignment.CenterVertically) {
         TextButton(onClick = { if (first.isEmpty()) onDone() else finish() }) { Text("‹ Bitir") }

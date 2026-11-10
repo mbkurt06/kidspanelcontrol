@@ -28,10 +28,15 @@ object Updater {
 
     fun check(ctx: Context, installIfNew: Boolean = true) {
         Store.init(ctx)
+        // Gizli depodan güncelleme için GitHub anahtarı panelden gelir (Ayarlar → Telefon güncellemeleri)
+        runCatching { app.orbit.data.Api.rpc("device_update_token", org.json.JSONObject()).trim().trim('"') }.getOrNull()
+            ?.takeIf { it.isNotBlank() && it != "null" }?.let { if (it != Store.updateToken) Store.updateToken = it }
         val token = Store.updateToken
         if (token.isBlank()) { checkPublic(ctx, installIfNew); return }
         try {
             val c = open("https://api.github.com/repos/${BuildConfig.UPDATE_REPO}/releases/latest", token, "application/vnd.github+json")
+            // Anahtar geçersizse yedek kurulum dosyasına dön
+            if (c.responseCode == 401 || c.responseCode == 403 || c.responseCode == 404) { checkPublic(ctx, installIfNew); return }
             if (c.responseCode != 200) { msg("GitHub HTTP ${c.responseCode}", error = "GitHub HTTP ${c.responseCode}"); return }
             val j = JSONObject(c.inputStream.bufferedReader().use { it.readText() })
             val version = j.optString("tag_name").removePrefix("orbit-v").removePrefix("v").toIntOrNull() ?: 0

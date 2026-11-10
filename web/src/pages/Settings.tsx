@@ -116,6 +116,7 @@ export default function Settings() {
       {msg && <p className="ok">{msg}</p>}
 
       <OneDriveCard />
+      <UpdateTokenCard familyId={fam.familyId} />
       <ThemeCard />
       <BiometricCard />
 
@@ -781,5 +782,43 @@ function GraceSelect() {
         document.body,
       )}
     </>
+  );
+}
+
+/**
+ * Telefon güncellemeleri gizli GitHub deposunun sürümlerinden iner. Salt okunur anahtar burada saklanır;
+ * telefonlar kendi ailelerinin anahtarını alır. Anahtar yoksa yedek kurulum dosyası kullanılır.
+ */
+function UpdateTokenCard({ familyId }: { familyId: string | null }) {
+  const [saved, setSaved] = useState<string | null>(null);
+  const [val, setVal] = useState("");
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!familyId) return;
+    supabase.from("family_secrets").select("update_token").eq("family_id", familyId).maybeSingle()
+      .then(({ data }) => setSaved((data as { update_token: string | null } | null)?.update_token ?? null));
+  }, [familyId]);
+  const save = async (token: string | null) => {
+    if (!familyId) return;
+    setBusy(true);
+    setMsg("");
+    const { error } = await supabase.from("family_secrets")
+      .upsert({ family_id: familyId, update_token: token, updated_at: new Date().toISOString() }, { onConflict: "family_id" });
+    setBusy(false);
+    if (error) setMsg(errorText(error));
+    else { setSaved(token); setVal(""); setMsg(token ? "Kaydedildi · telefonlar bir sonraki kontrolde kullanır" : "Silindi"); }
+  };
+  return (
+    <div className="card">
+      <h2>Telefon güncellemeleri <Info>Telefonlar yeni Orbit sürümünü gizli GitHub deposundan indirir. GitHub'da “Fine-grained token” oluştur: sadece kidspanelcontrol deposu, izin: Contents → Read-only. Anahtarı buraya yapıştır. Anahtar yoksa ya da geçersizse telefonlar yedek kurulum dosyasını kullanır.</Info></h2>
+      <p className="small">{saved ? <>GitHub anahtarı kayıtlı ✓ <span className="muted tiny">(…{saved.slice(-4)})</span></> : <span className="muted">GitHub anahtarı yok · yedek kurulum dosyası kullanılıyor</span>}</p>
+      <div className="row gap-s" style={{ alignItems: "center" }}>
+        <input className="grow" type="password" autoComplete="off" placeholder="github_pat_…" value={val} onChange={(e) => setVal(e.target.value)} />
+        <button className="btn small" disabled={busy || val.trim().length < 20} onClick={() => save(val.trim())}>Kaydet</button>
+        {saved && <button className="btn small ghost" disabled={busy} onClick={() => confirm("Güncelleme anahtarı silinsin mi?") && save(null)}>Sil</button>}
+      </div>
+      {msg && <p className="tiny muted">{msg}</p>}
+    </div>
   );
 }

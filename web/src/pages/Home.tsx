@@ -210,7 +210,19 @@ function ChildCard({ child }: { child: Child }) {
     if (d > 0) {
       run("give", async () => giveNow(child.id, d, fam, st, { kiosk, limited: limited || closed || finished }), (r) => `+${minutesText(d)} · ${r}`);
     } else {
-      run("give", async () => { await sendCommand(child.id, "adjust_minutes", { minutes: d }); return "telefona iletildi"; }, () => `−${minutesText(-d)} · süreden düşüldü`);
+      // Önce bugün verilen ekstra süreler sunucuda geri alınır (telefon çevrimdışı olsa da); artan kısım telefona komut olarak gider
+      run(
+        "give",
+        async () => {
+          const { data, error } = await supabase.rpc("parent_reduce_time", { p_child: child.id, p_minutes: -d });
+          if (error) throw error;
+          const rest = Number(data ?? 0);
+          if (rest > 0) await sendCommand(child.id, "adjust_minutes", { minutes: -rest });
+          fam.reload();
+          return rest === -d ? "telefona iletildi" : rest > 0 ? `ekstra süre geri alındı · ${minutesText(rest)} telefona iletildi` : "ekstra süre geri alındı";
+        },
+        (r) => `−${minutesText(-d)} · ${r}`
+      );
     }
   }
 

@@ -642,9 +642,9 @@ export default function TaskEdit() {
       </div>}
 
       <div className="card">
-        <h2>📚 Kelime kartları <Info>Çocuk Orbit'teki kelime kartlarında bugün bu kadar kart çalışınca görev kendiliğinden tamamlanır ve ödül verilir; onay gerekmez.</Info></h2>
+        <h2>📚 Kelime kartları <Info>Çocuk Orbit'teki kelime kartlarında bugün bu kadar kart çalışınca görev kendiliğinden tamamlanır ve ödül verilir; onay gerekmez. Aşağıdan kanıt da istersen (ör. ekran kaydı) görev kendiliğinden tamamlanmaz: çocuk kanıtla gönderir, sen onaylarsın.</Info></h2>
         <label className="check">
-          <input type="checkbox" checked={f.vocab_on} onChange={(e) => setF((x) => ({ ...x, vocab_on: e.target.checked, ...(e.target.checked ? { proof: "none", before_after: false, record_on: false, shot_on: false, srec_on: false } : {}) }))} />
+          <input type="checkbox" checked={f.vocab_on} onChange={(e) => setF((x) => ({ ...x, vocab_on: e.target.checked }))} />
           Kelime kartı hedefi
         </label>
         {f.vocab_on && <label className="field">
@@ -653,7 +653,7 @@ export default function TaskEdit() {
         </label>}
       </div>
 
-      {!f.vocab_on && <div className="card">
+      {<div className="card">
         <h2>Kanıt <Info>Çocuk yalnızca Orbit kamerasıyla kanıt gönderir (fotoğraf ve/veya kamera kaydı); onay veya redden sonra dosya silinir. Kayıt galeriden seçilemez.</Info></h2>
         <div className="row gap-xs wrap">
           <button className={`chip small ${f.proof === "none" && !f.record_on && !f.shot_on && !f.srec_on ? "on" : ""}`} onClick={() => setF((x) => ({ ...x, proof: "none", before_after: false, record_on: false, shot_on: false, srec_on: false }))}>

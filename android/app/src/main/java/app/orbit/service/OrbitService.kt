@@ -135,6 +135,7 @@ class OrbitService : Service() {
     private val packageReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context, i: Intent) {
             if (i.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return
+            if (i.action == Intent.ACTION_PACKAGE_ADDED) i.data?.schemeSpecificPart?.let { app.orbit.device.PhoneSettings.onPackageAdded(c, it) }
             scope.launch(Dispatchers.IO) {
                 Sync.reportApps(this@OrbitService, initial = false)
                 Live.syncRequested = true
@@ -390,7 +391,8 @@ class OrbitService : Service() {
         }
         Policy.syncSuspended(this, suspend, full = firstRun, all = launchables.map { it.pkg })
         // Ana ekran haber akışı (Google vb.): kapalıyken gizle, açıkken göster — normal uygulama kuralıyla
-        Policy.syncHidden(this, Policy.HIDE_WHEN_CLOSED.keys.associateWith { p -> !(verdicts[p] ?: engine.verdict(p, snap, usage)).allowed })
+        val parentHidden = app.orbit.device.PhoneSettings.hiddenSet()
+        Policy.syncHidden(this, Policy.HIDE_WHEN_CLOSED.keys.associateWith { p -> p in parentHidden || !(verdicts[p] ?: engine.verdict(p, snap, usage)).allowed })
 
         // 6) Ön plandaki uygulama kapalıysa kilit ekranını göster
         var lockReason: String? = when {

@@ -29,23 +29,6 @@ object Policy {
 
     fun isOwner(ctx: Context): Boolean = dpm(ctx).isDeviceOwnerApp(ctx.packageName)
 
-    /** Kalıcı kısıtlamalar. Bakım modunda geliştirici seçenekleri geçici olarak açılır. */
-    private val RESTRICTIONS = listOf(
-        UserManager.DISALLOW_FACTORY_RESET,
-        UserManager.DISALLOW_SAFE_BOOT,
-        UserManager.DISALLOW_ADD_USER,
-        UserManager.DISALLOW_REMOVE_USER,
-        UserManager.DISALLOW_ADD_MANAGED_PROFILE,
-        UserManager.DISALLOW_CONFIG_DATE_TIME,
-        UserManager.DISALLOW_APPS_CONTROL,
-        UserManager.DISALLOW_INSTALL_UNKNOWN_SOURCES,
-        "no_install_unknown_sources_globally",
-        "no_add_clone_profile",
-    )
-
-    /** Ebeveyn modunda bile kalan kısıtlamalar (yanlışlıkla sıfırlanıp Orbit'in yetkisi kaybolmasın). */
-    private val ALWAYS = setOf(UserManager.DISALLOW_FACTORY_RESET)
-
     /**
      * maintenance = ebeveyn modu: kısıtlamalar (uygulama yükleme/yönetme, geliştirici seçenekleri) kalkar,
      * uygulamaların izin istekleri sorulmadan verilir. Süre bitince her şey geri gelir.
@@ -59,7 +42,7 @@ object Policy {
      */
     fun applyWifiLock(ctx: Context, maintenance: Boolean = lastMaintenance) {
         if (!isOwner(ctx)) return
-        val free = maintenance || app.orbit.data.Store.prefs().getBoolean("systemWifi", false)
+        val free = maintenance || !PhoneSettings.wifiLocked()
         runCatching {
             if (free) dpm(ctx).clearUserRestriction(admin(ctx), UserManager.DISALLOW_CONFIG_WIFI)
             else dpm(ctx).addUserRestriction(admin(ctx), UserManager.DISALLOW_CONFIG_WIFI)
@@ -72,24 +55,19 @@ object Policy {
         applyWifiLock(ctx, maintenance)
         val d = dpm(ctx)
         val a = admin(ctx)
-        for (r in RESTRICTIONS) runCatching {
-            if (maintenance && r !in ALWAYS) d.clearUserRestriction(a, r) else d.addUserRestriction(a, r)
-        }.onFailure { Log.w(TAG, "kısıtlama $r", it) }
-        runCatching {
-            if (maintenance) d.clearUserRestriction(a, UserManager.DISALLOW_DEBUGGING_FEATURES)
-            else d.addUserRestriction(a, UserManager.DISALLOW_DEBUGGING_FEATURES)
-        }
+        // Kısıtlamalar ve panelden yönetilen telefon ayarları (Telefon ayarları sekmesi)
+        PhoneSettings.applyRestrictions(ctx, maintenance)
         runCatching {
             d.setPermissionPolicy(a, if (maintenance) DevicePolicyManager.PERMISSION_POLICY_AUTO_GRANT else DevicePolicyManager.PERMISSION_POLICY_PROMPT)
         }
         runCatching { d.setUninstallBlocked(a, ctx.packageName, true) }
         // Çocuk Orbit'i "durmaya zorla" veya "verileri sil" yapamasın
         if (Build.VERSION.SDK_INT >= 30) runCatching { d.setUserControlDisabledPackages(a, listOf(ctx.packageName)) }
-        // Saat her zaman ağdan alınsın (saati geri alarak süre kazanılamasın)
-        if (Build.VERSION.SDK_INT >= 30) runCatching { d.setAutoTimeEnabled(a, true) }
-        else @Suppress("DEPRECATION") runCatching { d.setAutoTimeRequired(a, true) }
+        // Saat ağdan alınsın (panelde kapatılmadıysa) — PhoneSettings.applyRestrictions içinde
+        if (Build.VERSION.SDK_INT < 30) @Suppress("DEPRECATION") runCatching { d.setAutoTimeRequired(a, true) }
         // Bildirim, kamera ve mikrofon (görev kanıtı) izinleri kendiliğinden verilsin
         val perms = mutableListOf("android.permission.CAMERA", "android.permission.RECORD_AUDIO")
+        if (Build.VERSION.SDK_INT >= 31) perms += "android.permission.BLUETOOTH_CONNECT"
         if (Build.VERSION.SDK_INT >= 33) perms += listOf("android.permission.POST_NOTIFICATIONS", "android.permission.READ_MEDIA_AUDIO", "android.permission.READ_MEDIA_IMAGES")
         else perms += "android.permission.READ_EXTERNAL_STORAGE"
         for (perm in perms) runCatching {

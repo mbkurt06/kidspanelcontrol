@@ -108,6 +108,8 @@ object Updater {
 
     private fun install(ctx: Context, apk: ByteArray, version: Int) {
         Store.prefs().edit().putInt("updateTarget", version).apply()
+        // Panelde "uygulama yükleme engelli" açıksa Orbit kendi güncellemesi için geçici kaldırır (bir dakika içinde geri gelir)
+        app.orbit.device.PhoneSettings.allowSelfInstall(ctx)
         val pi = ctx.packageManager.packageInstaller
         val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
         params.setAppPackageName(ctx.packageName)

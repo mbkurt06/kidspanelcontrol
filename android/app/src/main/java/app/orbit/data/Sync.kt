@@ -71,6 +71,7 @@ object Sync {
                 val timerSessions = async(Dispatchers.IO) { runCatching { Api.get("timer_sessions?child_id=eq.$child&status=in.(running,paused)&select=*") }.getOrElse { JSONArray() } }
                 val alarms = async(Dispatchers.IO) { runCatching { Api.get("alarms?child_id=eq.$child&select=*&order=at_time") }.getOrElse { JSONArray() } }
                 val tasks = async(Dispatchers.IO) { runCatching { JSONArray(Api.rpc("device_tasks", JSONObject().put("p_day", today))) }.getOrElse { JSONArray() } }
+                val deviceSettings = async(Dispatchers.IO) { runCatching { Api.get("device_settings?child_id=eq.$child&select=desired") }.getOrElse { JSONArray() } }
                 val agenda = async(Dispatchers.IO) { runCatching { Api.get("agenda_items?child_id=eq.$child&select=*&order=due_date.asc,due_time.asc,entered_at.desc") }.getOrElse { JSONArray() } }
 
                 JSONObject()
@@ -100,6 +101,7 @@ object Sync {
                     .put("alarms", alarms.await())
                     .put("tasks", tasks.await())
                     .put("agenda", agenda.await())
+                    .put("device_settings", deviceSettings.await().optJSONObject(0)?.optJSONObject("desired") ?: JSONObject())
             }
             Store.rulesJson = bundle.toString()
             kid.optJSONObject(0)?.optString("name")?.let { Store.childName = it }
@@ -139,6 +141,11 @@ object Sync {
         if (fresh.any { it.optJSONObject("payload")?.optBoolean("check_update") == true }) { Store.updateCheckOnly = true; Store.lastUpdateCheck = 0 }
         // Panel kasa anahtarı istiyor (yeni ebeveyn cihazı)
         if (fresh.any { it.optJSONObject("payload")?.optBoolean("vault") == true }) Vault.shareSoon()
+        // Telefon ayarları: tek seferlik işler (uygulama kaldır, veri temizle, yeniden başlat…)
+        for (c in fresh.sortedBy { it.optString("created_at") }) {
+            val ph = c.optJSONObject("payload")?.optJSONObject("phone") ?: continue
+            runCatching { app.orbit.device.PhoneSettings.action(Store.appCtx, ph) }.onFailure { Log.w(TAG, "telefon işi", it) }
+        }
         // Telefonu bul (panelden çaldır / ses / durdur)
         for (c in fresh.sortedBy { it.optString("created_at") }) {
             val pl = c.optJSONObject("payload") ?: continue
@@ -155,7 +162,7 @@ object Sync {
     fun reportApps(ctx: Context, initial: Boolean) {
         val essentials = Policy.essentials(ctx)
         val arr = JSONArray()
-        for (a in Policy.launchables(ctx) + Policy.hiddenFeedApps(ctx)) {
+        for (a in (Policy.launchables(ctx) + Policy.hiddenFeedApps(ctx) + app.orbit.device.PhoneSettings.hiddenApps(ctx)).distinctBy { it.pkg }) {
             val o = JSONObject().put("package", a.pkg).put("label", a.label).put("system", a.system)
             a.category?.let { o.put("category", it) }
             if (a.pkg in essentials) o.put("default_group", "always_open").put("preapproved", true)
@@ -194,6 +201,7 @@ object Sync {
                 lastStatusAt = now
             }
             pushUsage(usage)
+            app.orbit.device.PhoneSettings.report(ctx)
             val dev = JSONObject().put("app_version", BuildConfig.VERSION_NAME)
                 .put("is_device_owner", Policy.isOwner(ctx)).put("os_version", Build.VERSION.RELEASE)
                 .put("model", "${Build.MANUFACTURER} ${Build.MODEL}")

@@ -229,10 +229,10 @@ export function RuleCard({ r, kinds, open, onToggle, onErr }: { r: TimeRule; kin
 }
 
 /** Yeni kural ekler (varsayılan değerlerle) ve id'sini döner. */
-export async function addRule(familyId: string | null, kind: RuleKind, childId: string | null, name: string, start: string, end: string, days: number[]) {
+export async function addRule(familyId: string | null, kind: RuleKind, childId: string | string[] | null, name: string, start: string, end: string, days: number[]) {
   const { data, error } = await supabase
     .from("time_rules")
-    .insert({ family_id: familyId, name, kind, start_time: start, end_time: end, days, child_ids: childId ? [childId] : [] })
+    .insert({ family_id: familyId, name, kind, start_time: start, end_time: end, days, child_ids: Array.isArray(childId) ? childId : childId ? [childId] : [] })
     .select("id")
     .single();
   if (error) throw error;

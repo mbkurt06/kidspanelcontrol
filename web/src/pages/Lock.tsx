@@ -41,16 +41,24 @@ export default function Lock({ embeddedChildId, inline = false }: { embeddedChil
   const fam = useFamily();
   const [params] = useSearchParams();
   const childParam = embeddedChildId ?? params.get("child");
-  const [kid, setKid] = useState<string>(childParam ?? (fam.selectedChildId === "all" ? "all" : fam.selectedChildId));
+  // Çoklu seçim: boş = Hepsi (herkes işaretli); çocuğa dokununca çıkar / eklenir
+  const [kids, setKids] = useState<string[]>(childParam ? [childParam] : fam.selectedChildId === "all" ? [] : [fam.selectedChildId]);
   const [openRule, setOpenRule] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const kinds = ["kiosk", "limit", "free"] as const;
   const shownChildren = fam.visibleChildren.filter((c) => !childParam || c.id === childParam);
-  const rules = fam.timeRules.filter((r) => (kinds as readonly string[]).includes(r.kind) && (kid === "all" || !r.child_ids.length || r.child_ids.includes(kid)));
+  const allIds = shownChildren.map((c) => c.id);
+  const sel = kids.length ? kids : allIds;
+  const toggleKid = (id: string) => {
+    const next = sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id];
+    if (!next.length) return;
+    setKids(allIds.every((x) => next.includes(x)) ? [] : next);
+  };
+  const rules = fam.timeRules.filter((r) => (kinds as readonly string[]).includes(r.kind) && (!kids.length || !r.child_ids.length || r.child_ids.some((x) => kids.includes(x))));
 
   async function add() {
     try {
-      const id = await addRule(fam.familyId, "kiosk", kid === "all" ? null : kid, "Yeni kural", "21:00", "07:00", [1, 2, 3, 4, 5, 6, 7]);
+      const id = await addRule(fam.familyId, "kiosk", kids, "Yeni kural", "21:00", "07:00", [1, 2, 3, 4, 5, 6, 7]);
       await fam.reload();
       setOpenRule(id);
     } catch (e) {
@@ -87,8 +95,8 @@ export default function Lock({ embeddedChildId, inline = false }: { embeddedChil
             </button>
           </div>
           <div className="row gap-xs wrap">
-            <button className={`chip small ${kid === "all" ? "on" : ""}`} onClick={() => setKid("all")}>Hepsi</button>
-            {shownChildren.map((c) => <button key={c.id} className={`chip small ${kid === c.id ? "on" : ""}`} onClick={() => setKid(c.id)}>{c.name}</button>)}
+            <button className={`chip small ${!kids.length ? "on" : ""}`} onClick={() => setKids([])}>Hepsi</button>
+            {shownChildren.map((c) => <button key={c.id} className={`chip small ${sel.includes(c.id) ? "on" : ""}`} onClick={() => toggleKid(c.id)}>{c.name}</button>)}
           </div>
           <div className="card">
             <WeekGrid

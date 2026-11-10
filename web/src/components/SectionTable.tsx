@@ -100,7 +100,7 @@ export function SectionTable({ profile, sections }: { profile: Profile; sections
                   <span className="muted tiny">
                     {hhmm(s.start_time)}–{hhmm(s.end_time)}
                   </span>
-                  <span className="muted tiny">{s.budget_minutes == null ? "sınırsız" : s.budget_minutes === 0 ? "süre yok" : minutesText(s.budget_minutes)}</span>
+                  <span className="muted tiny">{s.kiosk ? "🔒 tam kilit" : s.default_rule === "blocked" ? "kilitli" : s.default_rule === "open" ? "serbest" : s.budget_minutes == null ? "sınırsız" : s.budget_minutes === 0 ? "süre yok" : minutesText(s.budget_minutes)}</span>
                 </th>
               ))}
               <th className="muted tiny">Günde en fazla</th>

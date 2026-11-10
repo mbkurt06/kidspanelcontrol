@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { daysText, hhmm, minutesText } from "../lib/util";
-import { RULE_LABEL, type ModeSlot, type Profile, type SecRule, type Section } from "../lib/types";
+import { type ModeSlot, type Profile, type SecRule, type Section } from "../lib/types";
 import { DayPicker, WindowsEditor } from "../components/Windows";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
@@ -133,12 +133,17 @@ function SectionsEditor({ profile, sections }: { profile: Profile; sections: Sec
 
             <label className="row gap-xs">
               <span className="muted small">Bu saatlerde:</span>
-              <select value={s.default_rule} onChange={(e) => patch(s, { default_rule: e.target.value as SecRule })}>
-                {(["open", "timed", "blocked"] as SecRule[]).map((r) => (
-                  <option key={r} value={r}>
-                  {RULE_LABEL[r]}
-                  </option>
-                ))}
+              <select
+                value={s.kiosk ? "kiosk" : s.default_rule}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  patch(s, v === "kiosk" ? { default_rule: "blocked", kiosk: true } : { default_rule: v as SecRule, kiosk: false });
+                }}
+              >
+                <option value="open">Serbest — her şey açık, süre sayılmaz</option>
+                <option value="timed">Süreli — süreden düşer, bitince kapanır</option>
+                <option value="blocked">Kilitli — sadece "her zaman açık" uygulamalar</option>
+                <option value="kiosk">🔒 Tam kilit — sadece Orbit ekranı</option>
               </select>
             </label>
           </div>

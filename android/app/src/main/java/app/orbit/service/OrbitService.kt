@@ -124,6 +124,20 @@ class OrbitService : Service() {
         }
     }
 
+    /**
+     * Orbit ekranı (ör. "music") şu an kısıtlı mı? Ana ekrandaki menü ile aynı kurallar:
+     * tam kilit ekranları, odak profili, görev kısıtlaması ekranları, etkin kullanım profilinin Orbit ekranları.
+     */
+    private fun orbitScreenBlocked(key: String, kiosk: app.orbit.engine.KioskNow?, snap: app.orbit.engine.Snapshot, rules: app.orbit.engine.Rules): String? {
+        if (kiosk != null) return if (key in kiosk.screens) null else "${kiosk.name}: kapalı"
+        app.orbit.data.Timers.activeFocus()?.takeIf { it.screens.isNotEmpty() && key !in it.screens }?.let { return "${it.name}: kapalı" }
+        val taskSets = rules.taskRestrictions.filter { it.active && it.screens.isNotEmpty() }.map { it.screens }
+        if (taskSets.isNotEmpty() && key !in taskSets.reduce { a, b -> a intersect b }) return "Önce görev: kapalı"
+        val m = snap.activeMode ?: snap.section?.section?.modeId?.let { rules.modes[it] }
+        if (m != null && m.kioskScreens.isNotEmpty() && key !in m.kioskScreens) return "${m.name}: kapalı"
+        return null
+    }
+
     private val netCallback = object : android.net.ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: android.net.Network) {
             Live.syncRequested = true
@@ -368,7 +382,10 @@ class OrbitService : Service() {
             Policy.setKiosk(this, kiosk != null, rules.kiosk.calls == "all", rules.taskAllowedPackages)
         }
         // Müzik: kurallar kapattıysa durdur
-        app.orbit.data.Music.blocked.value = runCatching { app.orbit.engine.Extras.musicBlocked(rules, engine, now) }.getOrNull()
+        // Orbit menüsünden "Müzik" kaldırıldıysa (tam kilit / kullanım profili / görev / odak ekranları) müzik de durur:
+        // ekran gizlenince arka planda ve kilit ekranında çalmaya devam etmesin
+        val musicScreenOff = if (snap.parentMode) null else runCatching { orbitScreenBlocked("music", kiosk, snap, rules) }.getOrNull()
+        app.orbit.data.Music.blocked.value = musicScreenOff ?: runCatching { app.orbit.engine.Extras.musicBlocked(rules, engine, now) }.getOrNull()
         app.orbit.data.Music.enforce()
 
         // 5) Kuralları uygula: kapalı olması gerekenleri askıya al

@@ -311,9 +311,22 @@ object Music {
     }
 
     /** Kurallar müziği kapattıysa çalmayı durdur (her iş parçacığından çağrılabilir). */
+    /** Müzik ne zamandan beri kapalı (bildirimi hemen silmeden önce kısa bekleme; anlık kural titremelerinde liste gitmesin) */
+    private var blockedSince = 0L
+
     fun enforce() {
-        if (blocked.value == null) return
+        if (blocked.value == null) { blockedSince = 0L; return }
+        if (blockedSince == 0L) blockedSince = System.currentTimeMillis()
         val p = player ?: return
-        Handler(Looper.getMainLooper()).post { runCatching { if (p.isPlaying) p.pause() } }
+        // Durdur ve listeyi boşalt: bildirim / kilit ekranı oynatıcısı da kaybolur, oradan yeniden çalınamaz
+        Handler(Looper.getMainLooper()).post {
+            runCatching {
+                if (p.isPlaying) p.pause()
+                if (p.mediaItemCount > 0 && System.currentTimeMillis() - blockedSince.coerceAtLeast(1) > 5_000) {
+                    p.stop()
+                    p.clearMediaItems()
+                }
+            }
+        }
     }
 }

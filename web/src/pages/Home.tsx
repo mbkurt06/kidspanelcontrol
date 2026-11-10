@@ -12,6 +12,7 @@ import { hhmm, minutesText } from "../lib/util";
 import { Ring } from "../components/Ring";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
+import { MinuteStepper } from "../components/MinuteStepper";
 import type { Child, Section } from "../lib/types";
 
 const COLORS = ["#4F7CFF", "#FF7A59", "#2BB673", "#C25BFF"];
@@ -94,6 +95,9 @@ function ChildCard({ child }: { child: Child }) {
   const [busy, setBusy] = useState("");
   const [msg, setMsg] = useState("");
   const [lockOpen, setLockOpen] = useState(false);
+  // Kilidi aç: geçici aç (ebeveyn modu, dakika seçilir) ya da tamamen kaldır (görev kilidi değilse)
+  const [unlockOpen, setUnlockOpen] = useState(false);
+  const [parentMin, setParentMin] = useState(5);
   const [lockKind, setLockKind] = useState<LockKind>("kiosk");
   const [lockDur, setLockDur] = useState("none");
   const [lockUntil, setLockUntil] = useState("19:00");
@@ -112,6 +116,8 @@ function ChildCard({ child }: { child: Child }) {
   const [showSeen, setShowSeen] = useState(false);
   // Telefonun bildirdiği durum
   const realKiosk = !!st?.lock_reason?.startsWith("🔒");
+  // Kilit bir görevden mi ("Önce görev: Ödev")
+  const taskLock = (st?.lock_reason ?? "").replace("🔒", "").trim().match(/^Önce görev:\s*(.+)$/)?.[1] ?? null;
   const realLimited = !realKiosk && !!st?.locked;
   // Tuşa basınca ekran hemen değişir; telefon onaylayınca gerçek duruma geçilir (en fazla 20 sn bekler)
   const [pending, setPending] = useState<{ kind: "kiosk" | "limit" | "open"; at: number } | null>(null);
@@ -318,16 +324,64 @@ function ChildCard({ child }: { child: Child }) {
             disabled={!!busy}
             onClick={() => {
               if (kiosk || limited) {
-                if (!confirm(`${child.name} kilidi açılsın mı?`)) return;
                 setLockOpen(false);
-                setPending({ kind: "open", at: Date.now() });
-                run("unlock", () => unlockNow(child.id), "");
+                setUnlockOpen(true);
               } else setLockOpen(!lockOpen);
             }}
             aria-expanded={kiosk || limited ? undefined : lockOpen}
           >
             <Icon name={kiosk || limited ? "unlock" : "lock"} size={15} /> {kiosk || limited ? "Kilidi aç" : "Kilitle"}
           </button>
+          {unlockOpen && createPortal(
+            <>
+              <div className="pop-backdrop sheet-like" onClick={() => setUnlockOpen(false)} />
+              <div className="lock-pop sheet-pop" role="dialog" aria-label="Kilidi aç">
+                <b className="sheet-pop-title">{child.name}</b>
+                {taskLock ? (
+                  <p className="small muted" style={{ margin: 0 }}>
+                    Bu kilit <b>{taskLock}</b> görevinden. Görev onaylanınca kendiliğinden kalkar.
+                  </p>
+                ) : (
+                  <p className="small muted" style={{ margin: 0 }}>{(st?.lock_reason ?? "").replace("🔒", "").trim() || "Telefon kilitli."}</p>
+                )}
+                <span className="pop-label">GEÇİCİ AÇ <Info>Ebeveyn modu: bu süre boyunca bütün kilitler ve sınırlar kalkar (telefonda ayar yapmak, kulaklık bağlamak için). Süre bitince telefon kaldığı yerden devam eder: görev kilidi görev onaylanana kadar sürer.</Info></span>
+                <div className="row gap-s" style={{ alignItems: "center" }}>
+                  <MinuteStepper value={parentMin} onChange={setParentMin} min={1} max={240} label="Geçici açma süresi" />
+                  <button
+                    className="pill-btn primary"
+                    disabled={!!busy}
+                    onClick={() => {
+                      setUnlockOpen(false);
+                      run("unlock", async () => {
+                        await sendCommand(child.id, "resync", { maintenance: true }, new Date(Date.now() + parentMin * 60000).toISOString());
+                        return `${minutesText(parentMin)} geçici açıldı · sonra kilit kaldığı yerden sürer`;
+                      }, (r) => String(r));
+                    }}
+                  >
+                    Başlat
+                  </button>
+                </div>
+                <div className="pop-actions">
+                  <button className="pill-btn ghost" onClick={() => setUnlockOpen(false)}>Vazgeç</button>
+                  {!taskLock && (
+                    <button
+                      className="pill-btn"
+                      disabled={!!busy}
+                      onClick={() => {
+                        if (!confirm(`${child.name} kilidi tamamen kaldırılsın mı?`)) return;
+                        setUnlockOpen(false);
+                        setPending({ kind: "open", at: Date.now() });
+                        run("unlock", () => unlockNow(child.id), "");
+                      }}
+                    >
+                      Kilidi kaldır
+                    </button>
+                  )}
+                </div>
+              </div>
+            </>,
+            document.body
+          )}
           {lockOpen && createPortal(
             <>
               <div className="pop-backdrop sheet-like" onClick={() => setLockOpen(false)} />

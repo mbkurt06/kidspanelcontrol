@@ -209,6 +209,7 @@ function UpdateCard({ childId, device }: { childId: string; device?: Device }) {
  */
 function ParentModeCard({ childId }: { childId: string }) {
   const [until, setUntil] = useState<Date | null>(null);
+  const [pmMin, setPmMin] = useState(5);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [, tick] = useState(0);
@@ -280,12 +281,9 @@ function ParentModeCard({ childId }: { childId: string }) {
             Bitir
           </button>
         ) : (
-          <div className="chips">
-            {[30, 60, 180].map((m) => (
-              <button key={m} className="chip-btn" disabled={busy} onClick={() => start(m)}>
-                {m < 60 ? `${m} dk` : `${m / 60} sa`}
-              </button>
-            ))}
+          <div className="row gap-s" style={{ alignItems: "center" }}>
+            <MinuteStepper value={pmMin} onChange={setPmMin} min={1} max={600} label="Ebeveyn modu süresi" />
+            <button className="pill-btn primary" disabled={busy} onClick={() => start(pmMin)}>Başlat</button>
           </div>
         )}
       </div>

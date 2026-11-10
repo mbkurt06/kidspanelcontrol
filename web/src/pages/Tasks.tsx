@@ -193,7 +193,10 @@ export default function Tasks() {
     if (!visibleChildIds.has(r.child_id) || (childFilter !== "all" && r.child_id !== childFilter)) return false;
     const from = historyView === "range" ? rangeFrom : historyView === "month" ? monthStart : historyView === "week" ? todayISO("Europe/Berlin", -6) : today;
     const to = historyView === "range" ? rangeTo : today;
-    if (r.day < from || r.day > to) return false;
+    // Biten görev, bittiği güne göre de görünür (ör. birkaç gün süren grupta bugün onaylanan görev)
+    const fin = FINAL.has(r.status);
+    const doneDay = fin && r.decided_at ? new Date(r.decided_at).toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" }) : r.day;
+    if ((r.day < from || r.day > to) && !(fin && doneDay >= from && doneDay <= to)) return false;
     const t = taskById[r.task_id];
     if (!t) return FINAL.has(r.status);
     if (t.group_id) return true; // grup satırında karar verilir
@@ -230,7 +233,7 @@ export default function Tasks() {
   const otherSingles = singles.filter((t) => !todayTaskIds.has(t.id));
   // Geçmiş: gruptaki görevler grup adıyla tek satır
   const historyRows = useMemo(() => {
-    const out: Array<{ key: string; kind: "task"; run: TaskRun } | { key: string; kind: "group"; group: TaskGroup; child: string; day: string; runs: TaskRun[] }> = [];
+    const out: Array<{ key: string; kind: "task"; run: TaskRun } | { key: string; kind: "group"; group: TaskGroup; child: string; day: string; runs: TaskRun[]; ongoing?: boolean; allRuns?: TaskRun[] }> = [];
     const seen = new Map<string, number>();
     for (const r of history) {
       const g = groups.find((x) => x.id === taskById[r.task_id]?.group_id);
@@ -240,14 +243,16 @@ export default function Tasks() {
       if (i == null) { seen.set(k, out.length); out.push({ key: k, kind: "group", group: g, child: r.child_id, day: r.day, runs: [r] }); }
       else (out[i] as { runs: TaskRun[] }).runs.push(r);
     }
-    // Grup: koşul kararı verilmişse, hepsi bitmişse ya da süresi geçmişse
-    return out.filter((row) => {
-      if (row.kind === "task") return true;
+    // Grup: koşul kararı verilmişse, hepsi bitmişse ya da süresi geçmişse tamamı; grup sürüyorsa sadece biten görevleri
+    return out.flatMap((row) => {
+      if (row.kind === "task") return [row];
       const gr = groupRuns.find((x) => x.group_id === row.group.id && x.child_id === row.child && x.day === row.day);
-      if (gr && gr.status !== "open") return true;
-      if (row.runs.every((r) => FINAL.has(r.status))) return true;
+      if (gr && gr.status !== "open") return [row];
+      if (row.runs.every((r) => FINAL.has(r.status))) return [row];
       const t = taskById[row.runs[0].task_id];
-      return !!t && winEnded(taskWindow(t, row.group, row.day));
+      if (t && winEnded(taskWindow(t, row.group, row.day))) return [row];
+      const done = row.runs.filter((r) => FINAL.has(r.status));
+      return done.length ? [{ ...row, runs: done, allRuns: row.runs, ongoing: true }] : [];
     });
   }, [history, groups, groupRuns, taskById]);
   const shownGroups = groups.filter((g) => forChild(g.child_ids));
@@ -516,9 +521,9 @@ export default function Tasks() {
                         <Folder />
                         <div className="grow">
                           <b>{row.group.name}</b>
-                          <div className="muted tiny">{childName(row.child)} · {(() => { const t0 = taskById[row.runs[0].task_id]; return t0 ? winText(taskWindow(t0, row.group, row.day)) : dShort(row.day); })()} · {groupText(row.group, row.runs, pr)}{gr?.status === "met" ? " · koşul sağlandı" : gr?.status === "failed" ? " · koşul sağlanmadı" : ""}</div>
+                          <div className="muted tiny">{childName(row.child)} · {(() => { const t0 = taskById[row.runs[0].task_id]; return t0 ? winText(taskWindow(t0, row.group, row.day)) : dShort(row.day); })()} · {groupText(row.group, row.allRuns ?? row.runs, pr)}{gr?.status === "met" ? " · koşul sağlandı" : gr?.status === "failed" ? " · koşul sağlanmadı" : ""}{row.ongoing ? " · grup devam ediyor" : ""}</div>
                         </div>
-                        {groupMeta(row.group, pr, groupStatus(gr ? { status: gr.status } : pr, row.runs), open)}
+                        {groupMeta(row.group, pr, groupStatus(gr ? { status: gr.status } : pr, row.allRuns ?? row.runs), open)}
                       </div>
                       {open && row.runs.map((r) => {
                         const t = taskById[r.task_id];

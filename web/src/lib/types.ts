@@ -247,6 +247,9 @@ export type Mode = {
   /** Hazır profil (gün profili bölüm türü): open | timed | blocked | kiosk */
   builtin?: "open" | "timed" | "blocked" | "kiosk" | null;
   kiosk_message?: string | null;
+  /** Bu profildeyken süre verilince: null = çocuğun varsayılanı, none = kasaya */
+  grant_mode?: "none" | "clock" | "usage" | "within" | "open" | null;
+  grant_within_minutes?: number | null;
 };
 
 export type ModeSlot = {

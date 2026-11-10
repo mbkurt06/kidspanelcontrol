@@ -2,6 +2,7 @@ import type { ClosedMode } from "../lib/actions";
 import { Info } from "./Info";
 
 const OPTS: { k: ClosedMode["mode"]; title: string; hint: string }[] = [
+  { k: "none", title: "Verilemesin", hint: "Bu profil sürerken verilen süre telefonu açmaz, doğrudan kasaya gider." },
   { k: "clock", title: "Saat gibi aksın", hint: "Hangi saat olursa olsun telefon hemen bu kadar dakikalığına açılır, kullanmasa da süre akar. Kullanmadığı dakikalar kasaya gider." },
   { k: "usage", title: "Süre bitene kadar", hint: "Telefon hemen açılır, kullandıkça düşer; süre bitene kadar telefon kapalı duruma geçmez. Kapalı saatler bitince (programdaki ilk açık saat) kalan kasaya gider." },
   { k: "within", title: "Belirli süre içinde", hint: "Telefon hemen açılır, kullandıkça düşer ama seçilen süre içinde kullanılmalı. Süre dolunca kalan kasaya gider." },
@@ -21,12 +22,12 @@ export function sameClosedMode(a: ClosedMode, b: ClosedMode) {
 }
 
 /** Kapalı / sınırlı saatte verilen sürenin davranışı: küçük çipler, açıklamalar (i) içinde. */
-export function ClosedModePicker({ value, onChange }: { value: ClosedMode; onChange: (v: ClosedMode) => void }) {
+export function ClosedModePicker({ value, onChange, allowNone, noFactor }: { value: ClosedMode; onChange: (v: ClosedMode) => void; allowNone?: boolean; noFactor?: boolean }) {
   const within = value.withinFactor ? `x${value.withinFactor}` : String(value.withinMinutes ?? 120);
   return (
     <div className="closed-mode">
       <div className="chips">
-        {OPTS.map((o) => (
+        {OPTS.filter((o) => allowNone || o.k !== "none").map((o) => (
           <span key={o.k} className={`chip-btn with-info ${value.mode === o.k ? "on" : ""}`}>
             <button type="button" onClick={() => onChange({ ...value, mode: o.k })}>
               {o.title}
@@ -48,8 +49,8 @@ export function ClosedModePicker({ value, onChange }: { value: ClosedMode; onCha
           <option value="60">1 saat içinde</option>
           <option value="120">2 saat içinde</option>
           <option value="180">3 saat içinde</option>
-          <option value="x2">Verilen sürenin 2 katı içinde</option>
-          <option value="x4">Verilen sürenin 4 katı içinde</option>
+          {!noFactor && <option value="x2">Verilen sürenin 2 katı içinde</option>}
+          {!noFactor && <option value="x4">Verilen sürenin 4 katı içinde</option>}
         </select>
       )}
     </div>

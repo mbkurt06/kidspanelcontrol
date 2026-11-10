@@ -6,6 +6,8 @@ import { GROUP_LABEL, type AppGroup, type Mode } from "../lib/types";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
 import { ScreenPicker } from "../components/RuleEditor";
+import { ClosedModePicker } from "../components/ClosedModePicker";
+import type { ClosedMode } from "../lib/actions";
 import { KIOSK_SCREENS } from "../lib/types";
 
 type AppOpt = { package: string; label: string };
@@ -66,7 +68,9 @@ export default function ModeEdit() {
         budget_minutes: m!.budget_minutes,
         counts_toward_daily: m!.counts_toward_daily,
         others_blocked: m!.others_blocked,
-        extra_time_allowed: m!.extra_time_allowed,
+        extra_time_allowed: m!.grant_mode !== "none",
+        grant_mode: m!.grant_mode ?? null,
+        grant_within_minutes: m!.grant_mode === "within" ? m!.grant_within_minutes ?? 120 : null,
         warn_minutes: m!.warn_minutes,
         priority: m!.priority,
         kiosk_enabled: !!m!.kiosk_enabled,
@@ -215,10 +219,23 @@ export default function ModeEdit() {
             </label>
           </>}
           {b === "timed" && <p className="muted small">Ne kadar süre olacağı, bu profili kullanan her bölümün kendi süre kutusunda yazılır (0 = süre yok, boş = sınırsız).</p>}
-          <label className="check">
-            <input type="checkbox" checked={m.extra_time_allowed} onChange={(e) => setM({ ...m, extra_time_allowed: e.target.checked })} />
-            Bu profilde ekstra süre kullanılabilsin
-          </label>
+          <div className="field">
+            <span>
+              Bu profildeyken süre verirsem{" "}
+              <Info>Ana ekrandan ya da çocuk sayfasından “hemen” süre verdiğinde, telefon o an bu profildeyse süre buna göre işler. “Varsayılan” seçiliyse çocuğun Kurallar → Kapalıyken verilen süre ayarı geçerli olur.</Info>
+            </span>
+            <div className="chips">
+              <button type="button" className={`chip-btn ${!m.grant_mode ? "on" : ""}`} onClick={() => setM({ ...m, grant_mode: null })}>
+                Varsayılan
+              </button>
+            </div>
+            <ClosedModePicker
+              allowNone
+              noFactor
+              value={{ mode: m.grant_mode ?? ("" as ClosedMode["mode"]), withinMinutes: m.grant_within_minutes ?? 120, withinFactor: null }}
+              onChange={(v) => setM({ ...m, grant_mode: v.mode, grant_within_minutes: v.withinMinutes ?? 120 })}
+            />
+          </div>
           <label className="field">
             <span>Bitmeden önce uyarı (dk, virgülle)</span>
             <input

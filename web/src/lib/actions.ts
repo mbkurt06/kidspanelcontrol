@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 import { currentSectionFor, hm, mins, nowBerlin, profileIdOn, sectionContains, timedPossible } from "./sections";
-import type { Child, DeviceStatus, Section, SectionRule } from "./types";
+import type { Child, DeviceStatus, Mode, Section, SectionRule } from "./types";
 import { todayISO } from "./util";
 
 export async function sendCommand(childId: string, type: string, payload: Record<string, unknown> = {}, untilAt: string | null = null) {
@@ -44,15 +44,26 @@ export async function grantMinutes(
   if (error) throw error;
 }
 
-type FamLike = { sections: Section[]; sectionRules: SectionRule[]; children?: Child[] };
+type FamLike = { sections: Section[]; sectionRules: SectionRule[]; children?: Child[]; modes?: Mode[] };
 /** Kapalı / sınırlı saatte verilen sürenin davranışı (Kurallar → Kapalıyken verilen süre). */
-export type ClosedMode = { mode: "clock" | "usage" | "within" | "open"; withinMinutes: number | null; withinFactor: number | null };
+export type ClosedMode = { mode: "none" | "clock" | "usage" | "within" | "open"; withinMinutes: number | null; withinFactor: number | null };
 export function closedModeOf(child?: Child): ClosedMode {
   return {
     mode: child?.closed_grant_mode ?? "usage",
     withinMinutes: child?.closed_grant_within_minutes ?? null,
     withinFactor: child?.closed_grant_within_factor ?? null,
   };
+}
+/**
+ * Şu an geçerli ayar: o anki bölümün kullanım profilinde "Bu profildeyken süre verirsem" seçiliyse o,
+ * yoksa çocuğun varsayılanı (Kurallar → Kapalıyken verilen süre).
+ */
+export async function closedModeFor(childId: string, fam: FamLike): Promise<{ cm: ClosedMode; from: string | null }> {
+  const child = fam.children?.find((c) => c.id === childId);
+  const sec = await currentSectionFor(childId, fam.sections);
+  const m = sec?.mode_id ? fam.modes?.find((x) => x.id === sec.mode_id) : undefined;
+  if (m?.grant_mode) return { cm: { mode: m.grant_mode, withinMinutes: m.grant_within_minutes ?? 120, withinFactor: null }, from: m.name };
+  return { cm: closedModeOf(child), from: null };
 }
 export type GrantPatch = { valid_on: string | null; section_id: string | null; vault: boolean; window_start: string | null; window_end: string | null };
 
@@ -71,7 +82,8 @@ export async function nowPatch(
     return { patch: { valid_on: todayISO(), section_id: sec.id, vault: false, window_start: null, window_end: null }, text: `${sec.name} süresine eklendi` };
   }
   // Kapalı / sınırlı saatte: çocuğun ayarına göre aralık (Kurallar → Kapalıyken verilen süre)
-  const cm = opts.override ?? closedModeOf(fam.children?.find((c) => c.id === childId));
+  const cm = opts.override ?? (await closedModeFor(childId, fam)).cm;
+  if (cm.mode === "none") return { patch: { valid_on: null, section_id: null, vault: true, window_start: null, window_end: null }, text: "bu profilde süre verilmiyor · kasaya" };
   const mode = cm.mode;
   const { minute } = nowBerlin();
   let end: number;
@@ -106,7 +118,12 @@ export async function giveNow(
   opts: { override?: ClosedMode; note?: string; kiosk?: boolean; limited?: boolean } = {}
 ): Promise<string> {
   // Elle verilen süre: saat, kısıtlama ve gece kuralına bakmadan seçilen moda göre (sunucu hesaplar)
-  const cm = opts.override ?? closedModeOf(fam.children?.find((c) => c.id === childId));
+  const res = opts.override ? { cm: opts.override, from: null } : await closedModeFor(childId, fam);
+  const cm = res.cm;
+  if (cm.mode === "none") {
+    await grantMinutes(childId, minutes, { validOn: null, vault: true, note: opts.note });
+    return `${res.from ?? "bu profil"} süre vermeye kapalı · kasaya eklendi`;
+  }
   const within = cm.mode === "within" ? (cm.withinFactor ? minutes * cm.withinFactor : cm.withinMinutes ?? 120) : null;
   const { error } = await supabase.rpc("parent_give_time", { p_child: childId, p_minutes: minutes, p_mode: cm.mode, p_within: within, p_note: opts.note ?? null });
   if (error) throw error;

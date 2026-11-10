@@ -5,7 +5,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
-import { closedModeOf, fromPatch, giveNow, grantMinutes, insertGrant, nowPatch, sendCommand, type ClosedMode, type GrantPatch } from "../lib/actions";
+import { closedModeFor, closedModeOf, fromPatch, giveNow, grantMinutes, insertGrant, nowPatch, sendCommand, type ClosedMode, type GrantPatch } from "../lib/actions";
 import { ClosedModePicker, closedModeLabel, sameClosedMode } from "../components/ClosedModePicker";
 import { dateText, dateTimeText, hhmm, minutesText, relTime, todayISO } from "../lib/util";
 import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type DayOverride, type Device, type Section, type TimeGrant } from "../lib/types";
@@ -696,9 +696,21 @@ function TimeTab({ childId }: { childId: string }) {
   const [expires, setExpires] = useState("");
   const [note, setNote] = useState("");
   // Kapalı / sınırlı saatte bu verişin davranışı; varsayılan Kurallar'daki ayar
-  const defMode = closedModeOf(child);
+  // Varsayılan: o anki bölümün kullanım profilinde seçim varsa o, yoksa çocuğun ayarı
+  const [def, setDef] = useState<{ cm: ClosedMode; from: string | null }>({ cm: closedModeOf(child), from: null });
+  const defMode = def.cm;
   const [cmode, setCmode] = useState<ClosedMode>(defMode);
-  useEffect(() => setCmode(closedModeOf(child)), [child.id, child.closed_grant_mode, child.closed_grant_within_minutes, child.closed_grant_within_factor]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    let on = true;
+    closedModeFor(childId, fam).then((r) => {
+      if (!on) return;
+      setDef(r);
+      setCmode(r.cm);
+    });
+    return () => {
+      on = false;
+    };
+  }, [childId, child.closed_grant_mode, child.closed_grant_within_minutes, child.closed_grant_within_factor, fam.modes, fam.sections]); // eslint-disable-line react-hooks/exhaustive-deps
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [cur, setCur] = useState<Section | null>(null);
@@ -741,6 +753,9 @@ function TimeTab({ childId }: { childId: string }) {
       if (when === "now") {
         const text = await giveNow(childId, m, fam, fam.statuses[childId], { override: cmode, note: note || undefined });
         setMsg(`${minutesText(m)} verildi · ${text}`);
+      } else if (cmode.mode === "none" && when === "custom") {
+        await grantMinutes(childId, m, { validOn: null, vault: true, note: note || undefined });
+        setMsg(`${minutesText(m)} süre kasasına kaydedildi`);
       } else if (detail === "from" || (detail && cmode.mode !== "usage")) {
         const day = detail === "from" ? (fromDay === "today" ? today : todayISO("Europe/Berlin", 1)) : detail === "today" ? today : detail === "tomorrow" ? todayISO("Europe/Berlin", 1) : date;
         let patch: GrantPatch, text: string;
@@ -915,17 +930,19 @@ function TimeTab({ childId }: { childId: string }) {
                 <span className="collapse-arrow" aria-hidden="true" />
               </summary>
               <div className="stack-s">
-                <ClosedModePicker value={cmode} onChange={setCmode} />
+                <ClosedModePicker value={cmode} onChange={setCmode} allowNone={cmode.mode === "none" || defMode.mode === "none"} />
                 <div className="row gap-s" style={{ alignItems: "center" }}>
                   <span className="muted tiny grow">
-                    Varsayılan: {closedModeLabel(defMode)} <Info>Seçtiğin ayar sadece bu veriş için geçerli. “Varsayılan yap” dersen Kurallar’daki ayar da değişir. Telefon açık saatteyse süre o anki bölüme eklenir; bu ayar kapalı ya da sınırlı saatlerde geçerlidir.</Info>
+                    Varsayılan: {closedModeLabel(defMode)}{def.from ? ` · ${def.from} profilinden` : ""} <Info>Seçtiğin ayar sadece bu veriş için geçerli. “Varsayılan yap” dersen Kurallar’daki ayar da değişir. Telefon açık saatteyse süre o anki bölüme eklenir; bu ayar kapalı ya da sınırlı saatlerde geçerlidir.</Info>
                   </span>
-                  {!sameClosedMode(cmode, defMode) && (
+                  {!sameClosedMode(cmode, defMode) && (def.from ? (
+                    <button type="button" className="chip-btn" onClick={() => setCmode(defMode)}>Geri al</button>
+                  ) : (
                     <>
                       <button type="button" className="chip-btn" onClick={() => setCmode(defMode)}>Geri al</button>
                       <button type="button" className="chip-btn" onClick={saveDefaultMode}>Varsayılan yap</button>
                     </>
-                  )}
+                  ))}
                 </div>
               </div>
             </details>

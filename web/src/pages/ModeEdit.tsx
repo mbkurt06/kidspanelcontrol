@@ -70,7 +70,8 @@ export default function ModeEdit() {
         warn_minutes: m!.warn_minutes,
         priority: m!.priority,
         kiosk_enabled: !!m!.kiosk_enabled,
-        kiosk_screens: m!.kiosk_screens ?? KIOSK_SCREENS.map(([id]) => id),
+        // Hepsi seçiliyse kısıtlama yok ([]); tam kilitte boş = varsayılan ekranlar
+        kiosk_screens: !m!.kiosk_screens?.length || KIOSK_SCREENS.every(([id]) => m!.kiosk_screens!.includes(id)) ? [] : m!.kiosk_screens,
         kiosk_calls: m!.kiosk_calls ?? "emergency",
         kiosk_message: m!.kiosk_message?.trim() || null,
       })
@@ -160,16 +161,25 @@ export default function ModeEdit() {
 
       {showKiosk && (
         <div className="card">
-          <h2>Kilit ekranı</h2>
-          {(
-            <label className="check">
-              <input type="checkbox" checked={!!m.kiosk_enabled} onChange={(e) => setM({ ...m, kiosk_enabled: e.target.checked })} />
-              Tam kilit: telefonda sadece Orbit kalsın
-            </label>
-          )}
+          <h2>Orbit ekranları <Info>Bu profil sürerken çocuğun Orbit uygulamasında hangi ekranların açık olacağı. Hepsi seçiliyse kısıtlama yok. "Günüm" her zaman açıktır.</Info></h2>
+          <ScreenPicker
+            value={m.kiosk_screens?.length ? m.kiosk_screens : KIOSK_SCREENS.map(([id]) => id)}
+            onChange={(v) => setM({ ...m, kiosk_screens: v })}
+          />
+          <p className="muted tiny">
+            {!m.kiosk_screens?.length || KIOSK_SCREENS.every(([id]) => m.kiosk_screens!.includes(id)) ? "Kısıtlama yok: bütün ekranlar açık." : `${m.kiosk_screens.length} ekran açık, diğerleri bu profil sürerken gizli.`}
+          </p>
+        </div>
+      )}
+
+      {showKiosk && (
+        <div className="card">
+          <h2>Tam kilit</h2>
+          <label className="check">
+            <input type="checkbox" checked={!!m.kiosk_enabled} onChange={(e) => setM({ ...m, kiosk_enabled: e.target.checked })} />
+            Telefonda sadece Orbit kalsın (diğer uygulamalar, ayarlar ve bildirimler kapalı)
+          </label>
           {m.kiosk_enabled && <>
-            <span className="muted small">Kilitliyken açık Orbit ekranları</span>
-            <ScreenPicker value={m.kiosk_screens ?? KIOSK_SCREENS.map(([id]) => id)} onChange={(v) => setM({ ...m, kiosk_screens: v })} />
             <label className="field">
               <span>Aramalar</span>
               <select value={m.kiosk_calls ?? "emergency"} onChange={(e) => setM({ ...m, kiosk_calls: e.target.value as "emergency" | "all" })}>

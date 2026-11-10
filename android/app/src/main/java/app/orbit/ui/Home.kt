@@ -102,13 +102,20 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
     val taskScreens = taskScreenSets.reduceOrNull { a, b -> a intersect b }
     // Tam kilit: sadece izin verilen ekranlar
     val kiosk = live.kiosk
+    // Kullanım profilinin Orbit ekran kısıtlaması (tam kilit olmadan da): etkin profil, yoksa o anki bölümün profili
+    val modeScreens = remember(live.lastSync, live.snapshot?.now?.minute) {
+        val snap = live.snapshot
+        val m = snap?.activeMode ?: snap?.section?.section?.modeId?.let { profileRules.modes[it] }
+        m?.kioskScreens?.takeIf { it.isNotEmpty() }
+    }
     // "Hakkında" (sürüm, son güncelleme) her durumda görünür
     // "Hakkında" ve "Wi-Fi" (kilitliyken de internete bağlanabilmek için) her durumda görünür
     fun visible(s: Screen) = s == Screen.ABOUT || s == Screen.WIFI ||
         (kiosk == null || s == Screen.TODAY || s.kioskKey() in kiosk.screens) &&
             (focusNow == null || focusNow.screens.isEmpty() || s == Screen.TODAY || s.kioskKey() in focusNow.screens) &&
-            (taskScreens == null || s == Screen.TODAY || s.kioskKey() in taskScreens)
-    LaunchedEffect(kiosk?.screens, taskScreens) { if (!visible(screen)) screen = Screen.TODAY }
+            (taskScreens == null || s == Screen.TODAY || s.kioskKey() in taskScreens) &&
+            (kiosk != null || modeScreens == null || s == Screen.TODAY || s.kioskKey() in modeScreens)
+    LaunchedEffect(kiosk?.screens, taskScreens, modeScreens) { if (!visible(screen)) screen = Screen.TODAY }
     var pinOpen by remember { mutableStateOf(false) }
     if (pinOpen) PinDialog { pinOpen = false }
     BackHandler(enabled = drawer.isOpen || screen != Screen.TODAY) {

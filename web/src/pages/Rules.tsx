@@ -201,7 +201,8 @@ export default function Rules() {
                 {m.counts_toward_daily ? "günlük süreden düşer" : "günlük süreyi etkilemez"}
                 {" · "}
                 {m.others_blocked ? "diğerleri kapalı" : "diğerleri normal"}
-                {m.kiosk_enabled ? ` · kiosk${m.kiosk_screens?.length ? ` · ${m.kiosk_screens.length} menü` : ""}` : ""}
+                {m.kiosk_enabled ? " · tam kilit" : ""}
+                {m.kiosk_screens?.length ? ` · Orbit'te ${m.kiosk_screens.length} ekran` : ""}
               </div>
             </div>
             <Icon name="chevron" size={18} />

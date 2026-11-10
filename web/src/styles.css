@@ -2287,7 +2287,7 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .card-actions .give-box { min-width: 0; flex: 1 1 auto; }
 
 /* Halkayı çevirerek süre */
-.dial { display: inline-flex; touch-action: none; border-radius: 50%; cursor: grab; position: relative; }
+.dial { display: inline-flex; border-radius: 50%; cursor: pointer; position: relative; }
 .dial.on { cursor: grabbing; }
 .dial.on::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; border: 2px dashed var(--line); pointer-events: none; }
 .dial-bar { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 8px 10px; border-radius: 14px; background: var(--bg); flex-wrap: wrap; }
@@ -2303,3 +2303,10 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
   max-height: calc(100dvh - 120px); overflow-y: auto;
 }
 .sheet-pop-title { font-size: 17px; }
+
+/* Büyük süre çarkı */
+.dial-sheet { gap: 12px; }
+.dial-big { position: relative; width: 260px; height: 260px; margin: 0 auto; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.dial-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; gap: 2px; }
+.dial-center b { font-size: 32px; }
+.center-chips { justify-content: center; }

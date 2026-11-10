@@ -199,49 +199,10 @@ function ChildCard({ child }: { child: Child }) {
   const holdUp = useHold(() => step(1));
   const holdDown = useHold(() => step(-1));
 
-  // Halkayı çevirerek süre: saat yönü artırır, ters yönü azaltır (6° = 1 dk, tam tur 60 dk). Bırakınca "Uygula" bekler.
+  // Halkaya dokununca büyük çark açılır; çevirerek süre eklenir / düşülür, "Uygula" ile onaylanır
+  const [dialOpen, setDialOpen] = useState(false);
   const [dial, setDial] = useState(0);
-  const dialRef = useRef<{ cx: number; cy: number; last: number; acc: number; moved: boolean; base: number } | null>(null);
-  const dialed = useRef(false);
   const remainingNow = st && open && !unlimited ? st.remaining_minutes : 0;
-  const dialMin = -remainingNow;
-  const clampDial = (v: number) => Math.max(dialMin, Math.min(600, v));
-  const angleOf = (x: number, y: number, cx: number, cy: number) => (Math.atan2(y - cy, x - cx) * 180) / Math.PI;
-  const dialHandlers = {
-    onPointerDown: (e: React.PointerEvent<HTMLSpanElement>) => {
-      if (!st) return;
-      const r = e.currentTarget.getBoundingClientRect();
-      const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      dialRef.current = { cx, cy, last: angleOf(e.clientX, e.clientY, cx, cy), acc: 0, moved: false, base: dial };
-      dialed.current = false;
-      e.currentTarget.setPointerCapture?.(e.pointerId);
-    },
-    onPointerMove: (e: React.PointerEvent<HTMLSpanElement>) => {
-      const d = dialRef.current;
-      if (!d) return;
-      const a = angleOf(e.clientX, e.clientY, d.cx, d.cy);
-      let delta = a - d.last;
-      if (delta > 180) delta -= 360;
-      if (delta < -180) delta += 360;
-      d.last = a;
-      d.acc += delta;
-      if (!d.moved && Math.abs(d.acc) < 10) return;
-      d.moved = true;
-      dialed.current = true;
-      e.preventDefault();
-      const next = clampDial(d.base + Math.trunc(d.acc / 6));
-      setDial((prev) => {
-        if (prev !== next) try { navigator.vibrate?.(4); } catch { /* */ }
-        return next;
-      });
-    },
-    onPointerUp: () => { dialRef.current = null; },
-    onPointerCancel: () => { dialRef.current = null; },
-    onClickCapture: (e: React.MouseEvent) => {
-      // Çevirdiyse sayfaya gitme
-      if (dialed.current) { e.preventDefault(); e.stopPropagation(); dialed.current = false; }
-    },
-  };
   function applyDial() {
     const d = dial;
     if (!d) return;
@@ -282,14 +243,14 @@ function ChildCard({ child }: { child: Child }) {
   return (
     <div className="card child-card">
       <Link to={`/child/${child.id}`} className="child-main">
-        <span className={`dial ${dial ? "on" : ""}`} {...dialHandlers} title="Çevirerek süre ekle / düşür">
-          <Ring
-            value={dial ? Math.max(0, remainingNow + dial) : open && !unlimited ? st!.remaining_minutes : kiosk || limited || closed ? 1 : 0}
-            max={dial ? Math.max(60, remainingNow + Math.max(dial, 0), remainingNow) : open && !unlimited ? Math.max(st!.allowance_minutes, st!.remaining_minutes + st!.used_minutes, 1) : 1}
-            color={dial > 0 ? "var(--good)" : dial < 0 ? "var(--bad)" : ringColor}
-            size={66}
-          >
-            {dial ? <span className="ring-state"><b>{dial > 0 ? "+" : "−"}{Math.abs(dial)}</b><small>dk</small></span> : ringInner}
+        <span
+          className="dial"
+          role="button"
+          aria-label="Süreyi çarkla ayarla"
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (st) { setDial(0); setDialOpen(true); } }}
+        >
+          <Ring value={open && !unlimited ? st!.remaining_minutes : kiosk || limited || closed ? 1 : 0} max={open && !unlimited ? Math.max(st!.allowance_minutes, st!.remaining_minutes + st!.used_minutes, 1) : 1} color={ringColor} size={66}>
+            {ringInner}
           </Ring>
         </span>
         <div className="grow">
@@ -438,21 +399,93 @@ function ChildCard({ child }: { child: Child }) {
           <Icon name="chat" size={16} />
         </Link>
       </div>
-      {dial !== 0 && (
-        <div className="dial-bar">
-          <span className="grow small">
-            {dial > 0 ? `+${minutesText(dial)}` : `−${minutesText(-dial)}`}
-            {open && !unlimited ? ` · kalan ${minutesText(remainingNow)} → ${minutesText(Math.max(0, remainingNow + dial))}` : ""}
-          </span>
-          <button className="pill-btn primary" disabled={!!busy} onClick={applyDial}>✓ Uygula</button>
-          <button className="pill-btn" onClick={() => setDial(0)}>Vazgeç</button>
-        </div>
+      {dialOpen && createPortal(
+        <DialSheet
+          name={child.name}
+          remaining={remainingNow}
+          showRemaining={open && !unlimited}
+          value={dial}
+          onChange={setDial}
+          onClose={() => { setDialOpen(false); setDial(0); }}
+          onApply={() => { setDialOpen(false); applyDial(); }}
+        />,
+        document.body
       )}
       {st && staleMin > 15 && (
         <p className="small warn-text">⚠ Telefon {staleMin >= 60 ? `${Math.floor(staleMin / 60)} saattir` : `${staleMin} dakikadır`} bağlanmadı</p>
       )}
       {msg && <p className="small muted center">{msg}</p>}
     </div>
+  );
+}
+
+/** Büyük süre çarkı: tam tur 60 dk, her çentik 1 dk; saat yönü artırır, ters yönü azaltır (kalan sürenin altına inmez). */
+function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, onApply }: {
+  name: string; remaining: number; showRemaining: boolean; value: number;
+  onChange: (v: number) => void; onClose: () => void; onApply: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ last: number; acc: number; base: number } | null>(null);
+  const clamp = (v: number) => Math.max(-remaining, Math.min(600, v));
+  const angle = (x: number, y: number) => {
+    const r = ref.current!.getBoundingClientRect();
+    return (Math.atan2(y - (r.top + r.height / 2), x - (r.left + r.width / 2)) * 180) / Math.PI;
+  };
+  const S = 260, C = S / 2, R = 108;
+  const circ = 2 * Math.PI * R;
+  const frac = Math.min(Math.abs(value), 60) / 60;
+  const knobA = ((value % 60) * 6 * Math.PI) / 180;
+  const ticks = Array.from({ length: 60 }, (_, i) => {
+    const a = (i * 6 * Math.PI) / 180, r1 = i % 5 ? R - 7 : R - 13, r2 = R + 6;
+    return <line key={i} x1={C + r1 * Math.sin(a)} y1={C - r1 * Math.cos(a)} x2={C + r2 * Math.sin(a)} y2={C - r2 * Math.cos(a)} stroke="var(--muted)" strokeWidth={i % 5 ? 1 : 2} opacity={0.6} />;
+  });
+  return (
+    <>
+      <div className="pop-backdrop sheet-like" onClick={onClose} />
+      <div className="lock-pop sheet-pop dial-sheet" role="dialog" aria-label="Süre çarkı">
+        <div className="row between">
+          <b className="sheet-pop-title">{name} · süre ayarla</b>
+          <button className="icon-btn" aria-label="Kapat" onClick={onClose}><Icon name="x" size={18} /></button>
+        </div>
+        <div
+          ref={ref}
+          className="dial-big"
+          onPointerDown={(e) => { drag.current = { last: angle(e.clientX, e.clientY), acc: 0, base: value }; e.currentTarget.setPointerCapture(e.pointerId); }}
+          onPointerMove={(e) => {
+            const d = drag.current; if (!d) return;
+            const a = angle(e.clientX, e.clientY);
+            let x = a - d.last; if (x > 180) x -= 360; if (x < -180) x += 360;
+            d.last = a; d.acc += x;
+            const n = clamp(d.base + Math.trunc(d.acc / 6));
+            if (n !== value) { try { navigator.vibrate?.(4); } catch { /* */ } onChange(n); }
+          }}
+          onPointerUp={() => { drag.current = null; }}
+          onPointerCancel={() => { drag.current = null; }}
+        >
+          <svg width={S} height={S} viewBox={`0 0 ${S} ${S}`}>
+            <circle cx={C} cy={C} r={R} fill="none" stroke="var(--line)" strokeWidth={18} />
+            {ticks}
+            <circle cx={C} cy={C} r={R} fill="none" stroke={value < 0 ? "var(--bad)" : "var(--good)"} strokeWidth={18} strokeLinecap="round"
+              strokeDasharray={`${circ * frac} ${circ}`} transform={value < 0 ? `rotate(-90 ${C} ${C}) scale(1,-1) translate(0,-${S})` : `rotate(-90 ${C} ${C})`} />
+            <circle cx={C + R * Math.sin(knobA)} cy={C - R * Math.cos(knobA)} r={15} fill="var(--surface)" stroke="var(--text)" strokeWidth={2} />
+          </svg>
+          <div className="dial-center">
+            <b>{value > 0 ? "+" : value < 0 ? "−" : ""}{minutesText(Math.abs(value))}</b>
+            {showRemaining && <span className="muted small">kalan {minutesText(remaining)} → {minutesText(Math.max(0, remaining + value))}</span>}
+            <span className="muted tiny">çevir: sağa + · sola −</span>
+          </div>
+        </div>
+        <div className="chips center-chips">
+          {[-5, 5, 15, 30, 60].map((d) => (
+            <button key={d} className="chip-btn" disabled={d < 0 && value + d < -remaining} onClick={() => onChange(clamp(value + d))}>{d > 0 ? "+" : "−"}{d === 60 ? "1 sa" : Math.abs(d)}</button>
+          ))}
+        </div>
+        <div className="row gap-xs">
+          <button className="pill-btn grow" onClick={onClose}>Vazgeç</button>
+          <button className="pill-btn primary grow" disabled={!value} onClick={onApply}>✓ Uygula</button>
+        </div>
+      </div>
+    </>
   );
 }
 

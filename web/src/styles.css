@@ -2294,3 +2294,12 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 
 .used-in-row { padding: 10px 0; border-bottom: 1px solid var(--line); color: var(--text); text-decoration: none; }
 .used-in-row:last-child { border-bottom: 0; }
+
+/* Kilit menüsü: ekranın altında açılan pencere (kart taşmasın) */
+.pop-backdrop.sheet-like { z-index: 80; background: rgba(0, 0, 0, 0.45); }
+.lock-pop.sheet-pop {
+  position: fixed; left: 12px; right: 12px; top: auto; width: auto; max-width: 520px; margin: 0 auto;
+  bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 81;
+  max-height: calc(100dvh - 120px); overflow-y: auto;
+}
+.sheet-pop-title { font-size: 17px; }

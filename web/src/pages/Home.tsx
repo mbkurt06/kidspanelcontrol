@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { useFamily } from "../lib/family";
 import { supabase, errorText } from "../lib/supabase";
@@ -354,10 +355,11 @@ function ChildCard({ child }: { child: Child }) {
           >
             <Icon name={kiosk || limited ? "unlock" : "lock"} size={15} /> {kiosk || limited ? "Kilidi aç" : "Kilitle"}
           </button>
-          {lockOpen && (
+          {lockOpen && createPortal(
             <>
-              <div className="pop-backdrop" onClick={() => setLockOpen(false)} />
-              <div className="lock-pop" role="dialog" aria-label="Kilit">
+              <div className="pop-backdrop sheet-like" onClick={() => setLockOpen(false)} />
+              <div className="lock-pop sheet-pop" role="dialog" aria-label="Kilit">
+                <b className="sheet-pop-title">{child.name}</b>
                 <span className="pop-label">NE OLSUN</span>
                 <div className="chips">
                   {[
@@ -395,7 +397,8 @@ function ChildCard({ child }: { child: Child }) {
                   </button>
                 </div>
               </div>
-            </>
+            </>,
+            document.body
           )}
         </div>
         <span className="grow" />

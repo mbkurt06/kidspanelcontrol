@@ -115,10 +115,10 @@ export default function ModeEdit() {
 
   const b = m.builtin ?? null;
   const BUILTIN_NOTE: Record<string, string> = {
-    open: "Hazır profil. Bu profili kullanan bölümlerde her şey açıktır ve süre sayılmaz.",
-    timed: "Hazır profil. Bu profili kullanan bölümlerde uygulamalar bölümün süre kutusundaki süreden düşer; süre bitince kapanır.",
-    blocked: "Hazır profil. Bu profili kullanan bölümlerde sadece aşağıda seçtiğin uygulamalar açık kalır.",
-    kiosk: "Hazır profil. Bu profili kullanan bölümlerde telefonda sadece Orbit kalır; açık Orbit ekranlarını ve mesajı aşağıdan seçersin.",
+    open: "Hazır profil (silinemez). Başlangıçta her şey açık, süre sayılmaz; aşağıdan istediğin gibi değiştirebilirsin.",
+    timed: "Hazır profil (silinemez). Başlangıçta uygulamalar bölümün süre kutusundaki süreden düşer, bitince kapanır. Süre miktarı her bölümün kendi süre kutusunda.",
+    blocked: "Hazır profil (silinemez). Başlangıçta sadece seçili uygulamalar açık; diğerleri kapalı.",
+    kiosk: "Hazır profil (silinemez). Başlangıçta telefonda sadece Orbit kalır.",
   };
   // Bu profili kullanan gün profili bölümleri ve zaman dilimleri
   const usedIn = [
@@ -129,9 +129,9 @@ export default function ModeEdit() {
       key: x.id, prof: fam.profiles.find((p) => p.id === x.profile_id)?.name ?? "Gün profili", text: `${x.start_time.slice(0, 5)}–${x.end_time.slice(0, 5)}`, profId: x.profile_id,
     })),
   ];
-  const showKiosk = b === "kiosk" || b == null;
-  const showApps = b === "blocked" || b == null;
-  const showTime = b === "timed" || b == null;
+  const showKiosk = true;
+  const showApps = true;
+  const showTime = true;
 
   return (
     <div className="page">
@@ -161,13 +161,13 @@ export default function ModeEdit() {
       {showKiosk && (
         <div className="card">
           <h2>Kilit ekranı</h2>
-          {b == null && (
+          {(
             <label className="check">
               <input type="checkbox" checked={!!m.kiosk_enabled} onChange={(e) => setM({ ...m, kiosk_enabled: e.target.checked })} />
               Tam kilit: telefonda sadece Orbit kalsın
             </label>
           )}
-          {(b === "kiosk" || m.kiosk_enabled) && <>
+          {m.kiosk_enabled && <>
             <span className="muted small">Kilitliyken açık Orbit ekranları</span>
             <ScreenPicker value={m.kiosk_screens ?? KIOSK_SCREENS.map(([id]) => id)} onChange={(v) => setM({ ...m, kiosk_screens: v })} />
             <label className="field">
@@ -188,7 +188,7 @@ export default function ModeEdit() {
       {showTime && (
         <div className="card">
           <h2>Süre</h2>
-          {b == null && <>
+          {<>
             <label className="check">
               <input type="checkbox" checked={m.budget_minutes == null} onChange={(e) => setM({ ...m, budget_minutes: e.target.checked ? null : 30 })} />
               Saat aralığı boyunca sınırsız
@@ -229,7 +229,7 @@ export default function ModeEdit() {
               </button>
             ))}
           </div>
-          {b == null && (
+          {(
             <label className="check">
               <input type="checkbox" checked={m.others_blocked} onChange={(e) => setM({ ...m, others_blocked: e.target.checked })} />
               Profil boyunca diğer uygulamalar kapalı
@@ -263,7 +263,7 @@ export default function ModeEdit() {
         </div>
       )}
 
-      {b == null && (
+      {(
         <div className="card">
           <h2>Diğer</h2>
           <label className="field">

@@ -21,14 +21,10 @@ class ScreenCaptureActivity : Activity() {
         private const val REQ = 41
 
         fun start(ctx: Context, t: TaskItem, mode: String) {
-            // Android Go'da bu izin hiç yok: bildirimden kontrol edilir, izin sayfası açılmaz
-            val lowRam = ctx.getSystemService(android.app.ActivityManager::class.java).isLowRamDevice
-            if (!Settings.canDrawOverlays(ctx) && !lowRam) {
-                Toast.makeText(ctx, "Önce Orbit'e \"diğer uygulamaların üzerinde göster\" izni ver", Toast.LENGTH_LONG).show()
-                runCatching {
-                    ctx.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${ctx.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-                }
-                return
+            // "Diğer uygulamaların üzerinde göster" izni yoksa (Android Go ve bazı Xiaomi'lerde hiç verilemiyor)
+            // engelleme: kayıt yine başlar, durdur/bitir kontrolleri bildirimde olur
+            if (!Settings.canDrawOverlays(ctx)) {
+                Toast.makeText(ctx, "Kayıt kontrolleri bildirimde: bildirim panelini aşağı çek", Toast.LENGTH_LONG).show()
             }
             // Tam kilitteyse ekran sabitlemeyi bırak: sistem izin penceresi ancak böyle açılır.
             // Kilit yine sürer: Orbit ve görevin izinli uygulamaları dışındakiler kapalı kalır.

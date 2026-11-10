@@ -258,21 +258,34 @@ export default function Tasks() {
   const shownGroups = groups.filter((g) => forChild(g.child_ids));
   const otherGroups = shownGroups.filter((g) => !todays.some((r) => taskById[r.task_id]?.group_id === g.id));
   const selected = groups.find((g) => g.id === selectedId) ?? null;
-  const taskMeta = (t: Task | undefined, status: string | null, arrow: JSX.Element | null = null) => {
+  // Onaylanan görevde onay sırasında verilen gerçek süre gösterilir (görevde yazan değil)
+  const earnedText = (r: TaskRun | null | undefined) =>
+    r && r.status === "approved" && r.granted_minutes != null ? (r.granted_minutes > 0 ? `+${r.granted_minutes} dk` : "0 dk") : null;
+  const taskMeta = (t: Task | undefined, status: string | null, arrow: JSX.Element | null = null, run?: TaskRun | null) => {
     const g = t?.group_id ? groups.find((x) => x.id === t.group_id) : null;
     const repeat = !!t && !g && t.recurrence === "days";
-    return <Meta repeat={repeat} repeatTitle="Tekrarlı görev" reward={t ? taskRewardText(t, status) : null} status={status} edit={<EditIcon label="Görevi düzenle" />} arrow={arrow} />;
+    return <Meta repeat={repeat} repeatTitle="Tekrarlı görev" reward={earnedText(run) ?? (t ? taskRewardText(t, status) : null)} status={status} edit={<EditIcon label="Görevi düzenle" />} arrow={arrow} />;
   };
-  const groupMeta = (g: TaskGroup, pr: { all: number }, status: string | null, open: boolean | null) => (
+  const groupMeta = (g: TaskGroup, pr: { all: number }, status: string | null, open: boolean | null, runs?: TaskRun[]) => {
+    // Onaylanan görevler varsa: onayda verilen sürelerin toplamı ("grubun tamamı" ödülünde koşul sağlanınca tamamı)
+    const approved = (runs ?? []).filter((r) => r.status === "approved");
+    const gr = runs?.length ? groupRuns.find((x) => x.group_id === g.id && x.child_id === runs[0].child_id && x.day === runs[0].day) : null;
+    const earned = approved.length
+      ? g.reward_mode === "all" && gr?.status === "met"
+        ? null
+        : approved.reduce((a, r) => a + Math.max(0, r.granted_minutes ?? taskById[r.task_id]?.reward_minutes ?? 0), 0)
+      : null;
+    return (
     <Meta
       repeat={g.recurrence !== "once"}
       repeatTitle={`Tekrarlı · ${repeatText(g)}`}
-      reward={`+${pr.all} dk`}
+      reward={earned != null ? (earned > 0 ? `+${earned} dk` : "0 dk") : `+${pr.all} dk`}
       status={status}
       edit={<EditIcon label={`${g.name} grubunu düzenle`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); select(g.id); }} />}
       arrow={open == null ? null : <span className={`collapse-arrow${open ? " open" : ""}`} aria-hidden="true" />}
     />
-  );
+    );
+  };
   const groupText = (g: TaskGroup, rs: TaskRun[], pr: { approved: number; need: number }) => {
     const mand = rs.filter((r) => taskById[r.task_id]?.mandatory).length;
     const parts = [`${pr.approved}/${rs.length} tamam`];
@@ -380,7 +393,7 @@ export default function Tasks() {
                                   </div>
                                 </div>
                                 {r.status !== "submitted" && proofBtn(r)}
-                                {taskMeta(t, r.status)}
+                                {taskMeta(t, r.status, null, r)}
                               </Link>
                               {openProof === r.id && <RunProofs run={r} task={t} />}
                             </div>
@@ -407,7 +420,7 @@ export default function Tasks() {
                                     {(() => { const t0 = taskById[rs[0].task_id]; return t0 ? spanText(taskSpan(t0, g)) : ""; })()} · {groupText(g, rs, pr)}
                                   </div>
                                 </div>
-                                {groupMeta(g, pr, groupStatus(pr, rs), open)}
+                                {groupMeta(g, pr, groupStatus(pr, rs), open, rs)}
                               </div>
                               {open && rs.map((r) => row(r, true))}
                             </div>
@@ -506,7 +519,7 @@ export default function Tasks() {
                             <div className="muted tiny">{childName(r.child_id)} · {t ? winText(taskWindow(t, null, r.day)) : dShort(r.day)}</div>
                           </div>
                           {proofBtn(r)}
-                          {taskMeta(t, r.status)}
+                          {taskMeta(t, r.status, null, r)}
                         </Link>
                         {openProof === r.id && <RunProofs run={r} task={t} />}
                       </div>
@@ -523,7 +536,7 @@ export default function Tasks() {
                           <b>{row.group.name}</b>
                           <div className="muted tiny">{childName(row.child)} · {(() => { const t0 = taskById[row.runs[0].task_id]; return t0 ? winText(taskWindow(t0, row.group, row.day)) : dShort(row.day); })()} · {groupText(row.group, row.allRuns ?? row.runs, pr)}{gr?.status === "met" ? " · koşul sağlandı" : gr?.status === "failed" ? " · koşul sağlanmadı" : ""}{row.ongoing ? " · grup devam ediyor" : ""}</div>
                         </div>
-                        {groupMeta(row.group, pr, groupStatus(gr ? { status: gr.status } : pr, row.allRuns ?? row.runs), open)}
+                        {groupMeta(row.group, pr, groupStatus(gr ? { status: gr.status } : pr, row.allRuns ?? row.runs), open, row.allRuns ?? row.runs)}
                       </div>
                       {open && row.runs.map((r) => {
                         const t = taskById[r.task_id];
@@ -535,7 +548,7 @@ export default function Tasks() {
                               <div className="muted tiny">{[t?.mandatory ? "Zorunlu" : "Seçmeli", proofText(t)].filter(Boolean).join(" · ")}{r.granted_minutes ? ` · ${r.granted_minutes} dk verildi` : ""}</div>
                             </div>
                             {proofBtn(r)}
-                            {taskMeta(t, r.status)}
+                            {taskMeta(t, r.status, null, r)}
                           </Link>
                           {openProof === r.id && <RunProofs run={r} task={t} />}
                           </div>

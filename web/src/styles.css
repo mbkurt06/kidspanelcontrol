@@ -2323,3 +2323,17 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .ps-perms { display: flex; flex-direction: column; gap: 6px; padding-top: 4px; }
 .stack-xs { display: flex; flex-direction: column; gap: 2px; }
 .chip-btn.minus { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
+
+/* Kayıt oynatıcı: sağ üstte videonun kendi süresi (molalar hariç) */
+.rec-elapsed {
+  position: absolute;
+  top: 8px;
+  right: 48px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  padding: 2px 8px;
+  border-radius: 8px;
+  pointer-events: none;
+}

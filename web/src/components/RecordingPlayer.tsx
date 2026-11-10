@@ -10,6 +10,13 @@ const SPEEDS = [5, 10, 20, 40];
 function clock(ms: number) {
   return new Date(ms).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: "Europe/Berlin" });
 }
+/** Süre: dk:sn (bir saati geçerse sa:dk:sn) */
+function dur(ms: number) {
+  const t = Math.floor(ms / 1000);
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return h ? `${h}:${p(m)}:${p(sec)}` : `${p(m)}:${p(sec)}`;
+}
 function mm(sec: number) {
   const m = Math.round(sec / 60);
   return m >= 60 ? `${Math.floor(m / 60)} sa ${m % 60} dk` : `${m} dk`;
@@ -80,6 +87,9 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
   // Video saniyesi başına gerçek saniye (2 kare/sn çekim, 40 kare/sn oynatma → 20)
   const ratio = (rec.video_fps || 40) / (rec.capture_fps || 2);
   const seg = segs[idx];
+  // Videonun kendi süresi: kayıt parçalarının toplamı (molalar hariç), sıfırdan
+  const totalMs = useMemo(() => segs.reduce((a, x) => a + Math.max(0, x.endMs - x.startMs), 0), [segs]);
+  const elapsedMs = segs.slice(0, idx).reduce((a, x) => a + Math.max(0, x.endMs - x.startMs), 0) + (seg && nowMs != null ? Math.max(0, Math.min(nowMs, seg.endMs) - seg.startMs) : 0);
 
   const span = useMemo(() => {
     const start = Date.parse(rec.started_at);
@@ -213,6 +223,7 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
                   );
                 })}
                 {nowMs != null && <span className="rec-clock">{clock(nowMs)}</span>}
+                {nowMs != null && <span className="rec-elapsed">{dur(elapsedMs)} / {dur(totalMs)}</span>}
                 <button className="rec-size" onClick={(e) => { e.stopPropagation(); setBig(!big); }} aria-label={big ? "Küçült" : "Büyüt"} title={big ? "Küçült" : "Büyüt"}>
                   {big ? "✕" : "⤢"}
                 </button>

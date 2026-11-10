@@ -2272,3 +2272,11 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .grant-minutes .give-box button { width: 36px; height: 36px; font-size: 20px; }
 .grant-minutes .give-box input { width: 52px; font-size: 17px; }
 .grant-minutes .give-unit { font-size: 12px; }
+
+/* Verilen süre satırı: üstte dakika (− / +) ve açıklama, altta düğmeler */
+.grant-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.grant-row:last-child { border-bottom: 0; }
+.grant-row > .grow { flex: 1 1 100%; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.grant-row > .icon-btn { margin-left: auto; }
+.grant-row > select { flex: 1 1 auto; min-width: 0; max-width: 260px; }
+.grant-minutes .row { flex-wrap: wrap; align-items: center; }

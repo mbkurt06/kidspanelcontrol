@@ -840,7 +840,7 @@ function TimeTab({ childId }: { childId: string }) {
 
   const usedOf = (g: TimeGrant) => fam.statuses[childId]?.grant_used?.[g.id] ?? 0;
   const grantRow = (g: TimeGrant, kind: "wallet" | "vault") => (
-    <div className="app-row wrap" key={g.id}>
+    <div className="grant-row" key={g.id}>
       <div className="grow">
         {g.minutes > 0 ? <GrantMinutes g={g} used={0} onChanged={() => { load(); fam.reload(); }} /> : <b>{minutesText(g.minutes)}</b>}
         <div className="muted tiny">
@@ -1071,7 +1071,7 @@ function TimeTab({ childId }: { childId: string }) {
         <summary className="section-collapse-head"><span>Planlanan süreler <Info>Bu liste kullanılmış süreler değil; cüzdandan veya görev ödülünden aktif plana ayrılmış, çocuğun kullanabileceği süreleri gösterir.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         {!live.length && <p className="muted small">Planlanmış ekstra süre yok.</p>}
         {live.map((g) => (
-          <div className="app-row wrap" key={g.id}>
+          <div className="grant-row" key={g.id}>
             <div className="grow">
               {g.minutes > 0 && !g.settled_at ? <GrantMinutes g={g} used={usedOf(g)} onChanged={() => { load(); fam.reload(); }} /> : <b>{minutesText(g.minutes)}</b>}
               <div className="muted tiny">
@@ -1157,8 +1157,9 @@ function GrantMinutes({ g, used, onChanged }: { g: TimeGrant; used: number; onCh
       <MinuteStepper value={v} onChange={change} min={used > 0 ? used : 0} max={1440} step={1} label="Dakika" />
       {dirty && (
         <div className="row gap-xs">
-          <button className="btn small primary" disabled={state === "saving"} onClick={save}>{state === "saving" ? "Kaydediliyor…" : `✓ Kaydet (${minutesText(g.minutes)} → ${minutesText(v)})`}</button>
+          <button className="btn small primary" disabled={state === "saving"} onClick={save}>{state === "saving" ? "Kaydediliyor…" : "✓ Kaydet"}</button>
           <button className="btn small ghost" onClick={() => { setV(g.minutes); setState(""); }}>Vazgeç</button>
+          <span className="muted tiny">{minutesText(g.minutes)} → {minutesText(v)}</span>
         </div>
       )}
       <span className="muted tiny">

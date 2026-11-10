@@ -306,7 +306,11 @@ fun TasksCard(tasks: List<TaskItem>) {
                 if (t.open) t.failMinutes?.let { Text("Yapmazsan −$it dk", color = C.bad, fontSize = 13.sp) }
                 if (t.open && t.vocabCards != null) {
                     val vctx = androidx.compose.ui.platform.LocalContext.current
-                    Text("📚 Bugün ${t.vocabDone} / ${t.vocabCards} kart · hedefe ulaşınca kendiliğinden tamamlanır", color = C.muted, fontSize = 13.sp)
+                    Text(
+                        "📚 Bugün ${t.vocabDone} / ${t.vocabCards} kart · " +
+                            if (t.needsProof || t.needsRecording || t.screenshotMin != null || t.screenRecMinutes != null) "hedefe ulaşınca kanıtını gönder" else "hedefe ulaşınca kendiliğinden tamamlanır",
+                        color = C.muted, fontSize = 13.sp,
+                    )
                     androidx.compose.material3.Button(
                         onClick = {
                             vctx.startActivity(android.content.Intent(vctx, MainActivity::class.java)

@@ -83,7 +83,14 @@ jobs:
           # APK artik panel sitesinde (Vercel) tutulmuyor: her yayinda 30 MB saklama kotasini dolduruyordu.
           # Telefonlar GitHub Releases'tan (panelden girilen anahtarla) iner; yedek: Supabase depolama.
           URL="https://pwxbrkbljcknstjbccwu.supabase.co/storage/v1/object/public/orbit-install/orbit.apk"
-          if [ -n "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+          APK_ON_VERCEL=0
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            # Gizli anahtar tanımlı değilse eski yol: APK panel sitesinde (geçici; Vercel kotası dolabilir)
+            echo "SUPABASE_SERVICE_ROLE_KEY yok: APK panel sitesine konuyor" >&2
+            cp "orbit-$ORBIT_VERSION_CODE.apk" ../web/public/kurulum/orbit.apk
+            URL="https://orbit-panel-nu.vercel.app/kurulum/orbit.apk"
+            APK_ON_VERCEL=1
+          else
             curl -sS -f -X POST "https://pwxbrkbljcknstjbccwu.supabase.co/storage/v1/object/orbit-install/orbit.apk" \
               -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
               -H "x-upsert: true" -H "Content-Type: application/vnd.android.package-archive" -H "Cache-Control: no-cache" \
@@ -100,6 +107,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add web/public/kurulum/version.json
+          if [ "$APK_ON_VERCEL" = 1 ]; then git add -f web/public/kurulum/orbit.apk; else git rm -q --cached --ignore-unmatch web/public/kurulum/orbit.apk; fi
           git diff --cached --quiet || git commit -m "chore(release): publish Orbit $ORBIT_VERSION_CODE installer"
           # Yeni kaynak commit'i derleme sürerken ana dala geldiyse release commit'ini onun üstüne al.
           for attempt in 1 2 3 4 5; do

@@ -13,9 +13,10 @@ import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
 import TimerTab from "./TimerTab";
+import PhoneSettingsTab from "./PhoneSettingsTab";
 import { currentSectionFor, hm, mins, suggestGroup, timedPossible } from "../lib/sections";
 
-type Tab = "apps" | "program" | "time" | "timer" | "alarms" | "report" | "device";
+type Tab = "apps" | "program" | "time" | "timer" | "alarms" | "report" | "phone" | "device";
 
 export default function ChildPage() {
   const { id } = useParams();
@@ -25,7 +26,7 @@ export default function ChildPage() {
   const [tab, setTab] = useState<Tab>(() => {
     let stored: string | null = null;
     try { stored = localStorage.getItem("orbit.childTab") ?? localStorage.getItem(`orbit.childTab.${id}`); } catch { /* yok */ }
-    return stored && ["apps", "program", "time", "timer", "alarms", "report", "device"].includes(stored) ? stored as Tab : "apps";
+    return stored && ["apps", "program", "time", "timer", "alarms", "report", "phone", "device"].includes(stored) ? stored as Tab : "apps";
   });
   // Çocuk değişince aynı sekme açık kalır
   useEffect(() => { try { localStorage.setItem("orbit.childTab", tab); } catch { /* yok */ } }, [tab]);
@@ -137,6 +138,7 @@ export default function ChildPage() {
             ["timer", "Sayaç"],
             ["alarms", "Hatırlatıcılar"],
             ["report", "Rapor"],
+            ["phone", "Telefon ayarları"],
             ["device", "Telefon"],
           ] as [Tab, string][]
         ).map(([k, l]) => (
@@ -153,6 +155,7 @@ export default function ChildPage() {
       {tab === "report" && <ReportTab childId={child.id} />}
       {tab === "timer" && <TimerTab childId={child.id} />}
       {tab === "alarms" && <TimerTab childId={child.id} only="alarms" />}
+      {tab === "phone" && <PhoneSettingsTab childId={child.id} />}
       {tab === "device" && <DeviceTab childId={child.id} />}
       </div>
     </div>

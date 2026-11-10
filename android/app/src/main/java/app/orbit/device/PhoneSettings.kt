@@ -158,7 +158,8 @@ object PhoneSettings {
         var changed = false
         for (k in keys) {
             if (!want.has(k)) continue
-            val v = want.get(k).toString()
+            // Panel aynı değeri tekrar seçerse de (çocuk arada değiştirdiyse) yeniden uygulansın diye değişim damgası
+            val v = want.get(k).toString() + "@" + (want.optJSONObject("_rev")?.optString(k) ?: "")
             if (done.optString(k, "\u0000") == v) continue
             val r = runCatching { applyValue(ctx, k, want) }
             err(k, r.exceptionOrNull())

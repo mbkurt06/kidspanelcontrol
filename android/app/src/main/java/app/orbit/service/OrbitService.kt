@@ -138,6 +138,13 @@ class OrbitService : Service() {
         return null
     }
 
+    private val dndReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) {
+            runCatching { app.orbit.device.PhoneSettings.enforceDnd(c) }
+            app.orbit.device.PhoneSettings.reportSoon()
+        }
+    }
+
     private val netCallback = object : android.net.ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: android.net.Network) {
             Live.syncRequested = true
@@ -176,6 +183,8 @@ class OrbitService : Service() {
         runCatching {
             getSystemService(android.net.ConnectivityManager::class.java).registerDefaultNetworkCallback(netCallback)
         }
+        // Rahatsız etme açılınca (panelde yasaksa) hemen geri al
+        runCatching { registerReceiver(dndReceiver, IntentFilter(android.app.NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED)) }
         registerReceiver(screenReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_SCREEN_ON); addAction(Intent.ACTION_USER_PRESENT)
         })
@@ -193,6 +202,7 @@ class OrbitService : Service() {
         mediaFocus?.let { runCatching { getSystemService(AudioManager::class.java).abandonAudioFocusRequest(it) } }
         if (lastMediaLocked == true) Policy.setLockedMediaControls(this, false)
         runCatching { getSystemService(android.net.ConnectivityManager::class.java).unregisterNetworkCallback(netCallback) }
+        runCatching { unregisterReceiver(dndReceiver) }
         runCatching { unregisterReceiver(screenReceiver) }
         runCatching { unregisterReceiver(packageReceiver) }
         app.orbit.data.Realtime.stop()

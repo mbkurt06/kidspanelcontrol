@@ -131,10 +131,45 @@ object PhoneSettings {
         runCatching { d.setKeyguardDisabledFeatures(a, if (maintenance) 0 else kg) }
         if (Build.VERSION.SDK_INT >= 30) runCatching { d.setAutoTimeEnabled(a, if (want.has("auto_time")) want.optBoolean("auto_time") else true) }
         applyApps(ctx, want)
+        enforceDnd(ctx, want)
         // Değer ayarları değiştiyse arka planda bir kez uygula
         if (busy.compareAndSet(false, true)) bg.execute {
             try { applyValues(ctx, want) } catch (e: Throwable) { Log.w(TAG, "ayarlar", e) } finally { busy.set(false) }
         }
+    }
+
+    /**
+     * Rahatsız etme kuralı (panel → Ses → "Rahatsız etme açılabilsin mi"):
+     *  off   = hiç açılamaz, açılırsa hemen kapatılır
+     *  calls = açılabilir ama aramalar (herkesten, tekrar arayanlar dahil) her zaman çalar
+     * Telefonda "Rahatsız etme erişimi" izni gerekir. Rahatsız etme değişince de hemen çağrılır (OrbitService).
+     */
+    fun enforceDnd(ctx: Context, want: JSONObject = desired()) {
+        val mode = want.optString("dnd_lock")
+        if (mode.isEmpty() || mode == "free") return
+        // Ebeveyn modunda serbest
+        if (app.orbit.service.Live.state.value.snapshot?.parentMode == true) return
+        val nm = ctx.getSystemService(NotificationManager::class.java)
+        if (!nm.isNotificationPolicyAccessGranted) { err("dnd_lock", IllegalStateException("Rahatsız etme erişimi yok")); return }
+        runCatching {
+            when (mode) {
+                "off" -> if (nm.currentInterruptionFilter != NotificationManager.INTERRUPTION_FILTER_ALL) {
+                    nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_ALL)
+                }
+                "calls" -> {
+                    val p = nm.notificationPolicy
+                    val cats = p.priorityCategories or NotificationManager.Policy.PRIORITY_CATEGORY_CALLS or NotificationManager.Policy.PRIORITY_CATEGORY_REPEAT_CALLERS
+                    if (cats != p.priorityCategories || p.priorityCallSenders != NotificationManager.Policy.PRIORITY_SENDERS_ANY) {
+                        nm.notificationPolicy = NotificationManager.Policy(cats, NotificationManager.Policy.PRIORITY_SENDERS_ANY, p.priorityMessageSenders, p.suppressedVisualEffects)
+                    }
+                    // "Tam sessizlik" ve "sadece alarmlar" aramaları da susturur: öncelikliye çek
+                    val f = nm.currentInterruptionFilter
+                    if (f == NotificationManager.INTERRUPTION_FILTER_NONE || f == NotificationManager.INTERRUPTION_FILTER_ALARMS) {
+                        nm.setInterruptionFilter(NotificationManager.INTERRUPTION_FILTER_PRIORITY)
+                    }
+                }
+            }
+        }.also { err("dnd_lock", it.exceptionOrNull()) }
     }
 
     /** Uygulama kurulumu öncesi (Orbit'in kendi güncellemesi): yükleme kısıtını geçici kaldır */

@@ -188,6 +188,15 @@ export default function PhoneSettingsTab({ childId }: { childId: string }) {
         <SegRow p={p} k="ringer" opts={[["normal", "Normal"], ["vibrate", "Titreşim"], ["silent", "Sessiz"]]} />
         <span className="small">Rahatsız etme</span>
         <SegRow p={p} k="dnd" opts={[["off", "Kapalı"], ["priority", "Sadece öncelikli"], ["alarms", "Sadece alarmlar"], ["total", "Tam sessizlik"]]} />
+        <span className="small">Çocuk rahatsız etmeyi açabilsin mi <Info>“Açılamasın”: çocuk açsa bile telefon hemen kapatır. “Aramalar yine gelsin”: açabilir ama telefon aramaları (herkesten, tekrar arayanlar dahil) her zaman çalar; tam sessizliği seçerse öncelikliye çekilir. WhatsApp gibi uygulama aramaları telefona göre değişebilir.</Info></span>
+        <div className="chips">
+          {([["free", "Serbest"], ["calls", "Açılabilir · aramalar yine gelsin"], ["off", "Açılamasın"]] as [string, string][]).map(([v, l]) => (
+            <button key={v} type="button" className={`chip-btn ${((p.d.dnd_lock as string | undefined) ?? "free") === v ? "on" : ""}`} onClick={() => p.setLock("dnd_lock", v as unknown as boolean)}>
+              {l}
+            </button>
+          ))}
+          <ErrText p={p} k="dnd_lock" />
+        </div>
         {r.dnd_access === false && (
           <div className="row gap-s wrap" style={{ alignItems: "center" }}>
             <span className="tiny warn-text grow">Telefonda “Rahatsız etme erişimi” izni yok; Orbit bunu değiştiremez.</span>

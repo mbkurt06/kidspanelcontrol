@@ -153,7 +153,10 @@ fun MusicScreen() {
 
     // Şimdi çalan
     Card {
-        Text(title ?: "Bir şarkı seç", color = C.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(title ?: "Bir şarkı seç", color = C.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            SleepChip()
+        }
         artist?.let { Muted(it, 13) }
         Slider(
             value = dragging ?: if (dur > 0) (pos.toFloat() / dur).coerceIn(0f, 1f) else 0f,
@@ -201,8 +204,6 @@ fun MusicScreen() {
             12,
         )
     }
-
-    SleepTimerCard()
 
     Card {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -448,13 +449,11 @@ private fun AddToPlaylistDialog(track: Track, playlists: List<app.orbit.data.Pla
 }
 
 
-/** Uyku zamanlayıcısı: sıfırdan başlar, + / − birer dakika (basılı tutunca hızlanır), sayıya dokununca klavye. */
+/** Uyku zamanlayıcısı: çalar kartının köşesinde küçük ⏱; çalışırken kalan süre çipi. Dokununca alttan pencere. */
 @Composable
-private fun SleepTimerCard() {
+private fun SleepChip() {
     val sleepAt by Music.sleepAt.collectAsState()
-    var minutes by remember { mutableIntStateOf(0) }
-    var typing by remember { mutableStateOf(false) }
-    var typed by remember { mutableStateOf("") }
+    var open by remember { mutableStateOf(false) }
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(sleepAt) {
         while (sleepAt != null) {
@@ -462,33 +461,62 @@ private fun SleepTimerCard() {
             delay(500)
         }
     }
+    val at = sleepAt
+    Text(
+        if (at != null) "⏱ ${mmss((at - now).coerceAtLeast(0))}" else "⏱",
+        color = if (at != null) C.text else C.muted,
+        fontSize = if (at != null) 14.sp else 20.sp,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(start = 8.dp).clip(RoundedCornerShape(50))
+            .background(if (at != null) C.accent.copy(alpha = 0.35f) else Color.Transparent)
+            .clickable { open = true }
+            .padding(horizontal = if (at != null) 10.dp else 6.dp, vertical = 4.dp),
+    )
+    if (open) SleepSheet(at, now) { open = false }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun SleepSheet(at: Long?, now: Long, onClose: () -> Unit) {
+    var minutes by remember { mutableIntStateOf(0) }
+    var typing by remember { mutableStateOf(false) }
+    var typed by remember { mutableStateOf("") }
     fun step(d: Int) { minutes = (minutes + d).coerceIn(0, 180) }
-    Card {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Title("⏱ Uyku zamanlayıcısı")
-        }
-        val at = sleepAt
-        if (at != null) {
-            val left = (at - now).coerceAtLeast(0)
-            Text("⏱ ${mmss(left)} kaldı", color = C.accent, fontSize = 28.sp, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            Muted("Süre dolunca müzik sesi kısarak durur.", 12)
-            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { Music.sleepAt.value = at + 5 * 60_000L }, modifier = Modifier.weight(1f)) { Text("+5 dk") }
-                Button(onClick = { Music.cancelSleep() }, modifier = Modifier.weight(1f)) { Text("İptal") }
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onClose, containerColor = C.surface) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+            Text("⏱ Uyku zamanlayıcısı", color = C.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+            if (at != null) {
+                Text("${mmss((at - now).coerceAtLeast(0))} kaldı", color = C.text, fontSize = 30.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Muted("Süre dolunca müzik sesi kısarak durur.", 12)
+                Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { Music.sleepAt.value = at + 5 * 60_000L }, modifier = Modifier.weight(1f)) { Text("+5 dk") }
+                    Button(onClick = { Music.cancelSleep(); onClose() }, modifier = Modifier.weight(1f)) { Text("İptal") }
+                }
+            } else {
+                Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                    HoldButton("−") { step(-1) }
+                    Text(
+                        "$minutes dk", color = C.text, fontSize = 28.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.width(120.dp).clickable { typed = if (minutes > 0) minutes.toString() else ""; typing = true },
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                    HoldButton("+") { step(1) }
+                }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(15, 30, 45, 60).forEach { m ->
+                        Text(
+                            "$m", color = if (minutes == m) C.text else C.muted, fontWeight = FontWeight.SemiBold,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.weight(1f).clip(RoundedCornerShape(50))
+                                .background(if (minutes == m) C.accent.copy(alpha = 0.35f) else C.surface2)
+                                .clickable { minutes = m }.padding(vertical = 8.dp),
+                        )
+                    }
+                }
+                Muted("Sayıya dokunarak klavyeyle yazabilirsin (en fazla 180 dk).", 12)
+                Button(onClick = { Music.startSleep(minutes); onClose() }, enabled = minutes > 0, modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) { Text("Başlat") }
             }
-        } else {
-            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
-                HoldButton("−") { step(-1) }
-                Text(
-                    "$minutes dk", color = C.text, fontSize = 28.sp, fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.width(120.dp).clickable { typed = if (minutes > 0) minutes.toString() else ""; typing = true },
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                )
-                HoldButton("+") { step(1) }
-            }
-            Muted("Sayıya dokunarak klavyeyle de yazabilirsin (en fazla 180 dk).", 12)
-            Button(onClick = { Music.startSleep(minutes); minutes = 0 }, enabled = minutes > 0, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Başlat") }
         }
     }
     if (typing) AlertDialog(

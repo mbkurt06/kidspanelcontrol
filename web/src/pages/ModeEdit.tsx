@@ -222,7 +222,7 @@ export default function ModeEdit() {
           <div className="field">
             <span>
               Bu profildeyken süre verirsem{" "}
-              <Info>Ana ekrandan ya da çocuk sayfasından “hemen” süre verdiğinde, telefon o an bu profildeyse süre buna göre işler. “Varsayılan” seçiliyse çocuğun Kurallar → Kapalıyken verilen süre ayarı geçerli olur.</Info>
+              <Info>Ana ekrandan ya da çocuk sayfasından “hemen” süre verdiğinde, telefon o an bu profildeyse süre buna göre işler. “Varsayılan” seçiliyse çocuğun Kurallar’daki ayarı geçerli olur. Bu profil Tam kilit ya da kilitli saatteyse süre her zaman saat gibi akar.</Info>
             </span>
             <div className="chips">
               <button type="button" className={`chip-btn ${!m.grant_mode ? "on" : ""}`} onClick={() => setM({ ...m, grant_mode: null })}>

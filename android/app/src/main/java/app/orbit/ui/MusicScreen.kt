@@ -201,6 +201,8 @@ fun MusicScreen() {
         )
     }
 
+    SleepTimerCard()
+
     Card {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Title("Çalma listeleri")
@@ -441,5 +443,93 @@ private fun AddToPlaylistDialog(track: Track, playlists: List<app.orbit.data.Pla
             }
         },
         confirmButton = { Button(onClick = onClose) { Text("Bitti") } },
+    )
+}
+
+
+/** Uyku zamanlayıcısı: sıfırdan başlar, + / − birer dakika (basılı tutunca hızlanır), sayıya dokununca klavye. */
+@Composable
+private fun SleepTimerCard() {
+    val sleepAt by Music.sleepAt.collectAsState()
+    var minutes by remember { mutableIntStateOf(0) }
+    var typing by remember { mutableStateOf(false) }
+    var typed by remember { mutableStateOf("") }
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(sleepAt) {
+        while (sleepAt != null) {
+            now = System.currentTimeMillis()
+            delay(500)
+        }
+    }
+    fun step(d: Int) { minutes = (minutes + d).coerceIn(0, 180) }
+    Card {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Title("⏱ Uyku zamanlayıcısı")
+        }
+        val at = sleepAt
+        if (at != null) {
+            val left = (at - now).coerceAtLeast(0)
+            Text("⏱ ${mmss(left)} kaldı", color = C.accent, fontSize = 28.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            Muted("Süre dolunca müzik sesi kısarak durur.", 12)
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { Music.sleepAt.value = at + 5 * 60_000L }, modifier = Modifier.weight(1f)) { Text("+5 dk") }
+                Button(onClick = { Music.cancelSleep() }, modifier = Modifier.weight(1f)) { Text("İptal") }
+            }
+        } else {
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                HoldButton("−") { step(-1) }
+                Text(
+                    "$minutes dk", color = C.text, fontSize = 28.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.width(120.dp).clickable { typed = if (minutes > 0) minutes.toString() else ""; typing = true },
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                HoldButton("+") { step(1) }
+            }
+            Muted("Sayıya dokunarak klavyeyle de yazabilirsin (en fazla 180 dk).", 12)
+            Button(onClick = { Music.startSleep(minutes); minutes = 0 }, enabled = minutes > 0, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) { Text("Başlat") }
+        }
+    }
+    if (typing) AlertDialog(
+        onDismissRequest = { typing = false },
+        title = { Text("Kaç dakika?") },
+        text = {
+            TextField(
+                value = typed,
+                onValueChange = { v -> typed = v.filter { it.isDigit() }.take(3) },
+                label = { Text("Dakika") },
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+            )
+        },
+        confirmButton = { Button(onClick = { minutes = (typed.toIntOrNull() ?: 0).coerceIn(0, 180); typing = false }) { Text("Tamam") } },
+        dismissButton = { Button(onClick = { typing = false }) { Text("İptal") } },
+    )
+}
+
+/** Dokununca bir kez, basılı tutunca giderek hızlanarak tekrarlar. */
+@Composable
+private fun HoldButton(label: String, onStep: () -> Unit) {
+    val scope = rememberCoroutineScope()
+    Text(
+        label, color = C.text, fontSize = 28.sp, fontWeight = FontWeight.SemiBold,
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+        modifier = Modifier.size(56.dp).clip(CircleShape).background(C.surface2).padding(top = 8.dp)
+            .pointerInput(Unit) {
+                androidx.compose.foundation.gestures.detectTapGestures(onPress = {
+                    onStep()
+                    val job = scope.launch {
+                        delay(450)
+                        var wait = 150L
+                        while (true) {
+                            onStep()
+                            delay(wait)
+                            wait = (wait - 10).coerceAtLeast(50)
+                        }
+                    }
+                    tryAwaitRelease()
+                    job.cancel()
+                })
+            },
     )
 }

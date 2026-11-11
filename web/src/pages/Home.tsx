@@ -8,7 +8,7 @@ import { kioskOf, lockNow, unlockNow, untilFrom } from "./Lock";
 import { currentSectionFor, hm, mins, nowBerlin, timedPossible } from "../lib/sections";
 import { TimeField } from "../components/DateTime";
 import { timerElapsed, timerRemaining } from "../lib/types";
-import { hhmm, minutesText } from "../lib/util";
+import { hhmm, minutesText, todayISO } from "../lib/util";
 import { Ring } from "../components/Ring";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
@@ -106,6 +106,24 @@ function ChildCard({ child }: { child: Child }) {
     const t = setInterval(loadPm, 30000);
     return () => clearInterval(t);
   }, [child.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Şu an süren saat aralıklı ekstra süre (kilit saatinde verilen süre dahil)
+  const [extras, setExtras] = useState<{ id: string; minutes: number; window_start: string; window_end: string; use_mode: string | null }[]>([]);
+  const loadExtras = async () => {
+    const { data } = await supabase
+      .from("time_grants")
+      .select("id,minutes,window_start,window_end,use_mode")
+      .eq("child_id", child.id)
+      .eq("valid_on", todayISO())
+      .eq("vault", false)
+      .gt("minutes", 0)
+      .not("window_start", "is", null);
+    setExtras((data ?? []) as typeof extras);
+  };
+  useEffect(() => {
+    loadExtras();
+    const t = setInterval(loadExtras, 30000);
+    return () => clearInterval(t);
+  }, [child.id, st?.updated_at]); // eslint-disable-line react-hooks/exhaustive-deps
   const [lockKind, setLockKind] = useState<LockKind>("kiosk");
   const [lockDur, setLockDur] = useState("none");
   const [lockUntil, setLockUntil] = useState("19:00");
@@ -254,9 +272,22 @@ function ChildCard({ child }: { child: Child }) {
     <span className="ring-state"><b>{minutesText(st.remaining_minutes)}</b><small>kaldı</small></span>
   );
 
+  const extraNow = (() => {
+    const { minute } = nowBerlin();
+    for (const g of extras) {
+      const a = mins(g.window_start), b = g.window_end.startsWith("23:59") ? 1440 : mins(g.window_end);
+      if (minute < a || minute >= b) continue;
+      const usedMin = Math.floor((st?.grant_used?.[g.id] ?? 0) / 60);
+      const left = g.use_mode === "clock" ? b - minute : Math.min(g.minutes - usedMin, b - minute);
+      if (left > 0) return { left, end: g.use_mode === "clock" ? hm(Math.min(b, 1439)) : null };
+    }
+    return null;
+  })();
   const stateLine = !st
     ? null
-    : kiosk
+    : extraNow && !waiting && !kiosk
+      ? { cls: "good", text: `🎁 Ekstra süre · ${minutesText(extraNow.left)} kaldı${extraNow.end ? ` · ${extraNow.end}'e kadar` : ""}` }
+      : kiosk
       ? { cls: "bad", text: waiting && !realKiosk ? "Kilitli · telefona iletiliyor…" : `Kilitli · ${(st.lock_reason ?? "").replace("🔒", "").trim() || "sen kaldırana kadar"}` }
       : limited
         ? { cls: "warn", text: waiting && !realLimited ? "Sınırlı · telefona iletiliyor…" : `Sınırlı · ${st.lock_reason ?? ""}`.replace(/ · $/, "") }

@@ -36,6 +36,10 @@ object Music {
 
     /** Şu an müzik çalamıyorsa nedeni (OrbitService her saniye günceller) */
     val blocked = MutableStateFlow<String?>(null)
+    /** Uyku zamanlayıcısı: müziğin duracağı an (epoch ms); null = kapalı. Müzik servisi takip eder. */
+    val sleepAt = MutableStateFlow<Long?>(null)
+    fun startSleep(minutes: Int) { sleepAt.value = if (minutes > 0) System.currentTimeMillis() + minutes * 60_000L else null }
+    fun cancelSleep() { sleepAt.value = null }
     val tracks = MutableStateFlow<List<Track>>(emptyList())
 
     fun scan(ctx: Context): List<Track> {

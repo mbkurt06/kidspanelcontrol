@@ -71,7 +71,7 @@ export default function Rules() {
       </details>
 
       <details className="card section-collapse-card">
-        <summary className="section-collapse-head"><span>⏳ Kapalıyken verilen süre · varsayılan <Info>Kapalı ya da sınırlı saatte süre verince telefonun nasıl açılacağı. Önce o anki kullanım profilinin “Bu profildeyken süre verirsem” ayarı geçerlidir; profilde “Varsayılan” seçiliyse buradaki çocuk ayarı kullanılır. Açık saatlerde verilen süre her zaman kalan süreye eklenir.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
+        <summary className="section-collapse-head"><span>⏳ Verilen süre nasıl kullanılsın · varsayılan <Info>Açık saatlerde “hemen” süre verince nasıl kullanılacağı (önce o anki kullanım profilinin “Bu profildeyken süre verirsem” ayarı geçerli). Kilit, Tam kilit ve kapalı saatlerde verilen süre bu ayardan bağımsız olarak her zaman saat gibi akar: verildiği andan itibaren o kadar dakika açık, bitince kilit geri gelir.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <div className="stack">
           {fam.children.map((c) => (
             <ClosedGrantSetting key={c.id} child={c} />

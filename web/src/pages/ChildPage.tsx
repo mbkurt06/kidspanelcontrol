@@ -5,7 +5,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
-import { closedModeFor, closedModeOf, fromPatch, giveNow, grantMinutes, insertGrant, nowPatch, sendCommand, type ClosedMode, type GrantPatch } from "../lib/actions";
+import { childLockState, closedModeFor, closedModeOf, fromPatch, lockStateAfter, lockStateLabel, type LockState, giveNow, grantMinutes, insertGrant, nowPatch, sendCommand, type ClosedMode, type GrantPatch } from "../lib/actions";
 import { ClosedModePicker, closedModeLabel, sameClosedMode } from "../components/ClosedModePicker";
 import { dateText, dateTimeText, hhmm, minutesText, relTime, todayISO } from "../lib/util";
 import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type DayOverride, type Device, type Section, type TimeGrant } from "../lib/types";
@@ -14,7 +14,7 @@ import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
 import TimerTab from "./TimerTab";
 import PhoneSettingsTab from "./PhoneSettingsTab";
-import { currentSectionFor, hm, mins, suggestGroup, timedPossible } from "../lib/sections";
+import { currentSectionFor, hm, mins, nowBerlin, suggestGroup, timedPossible } from "../lib/sections";
 
 type Tab = "apps" | "program" | "time" | "timer" | "alarms" | "report" | "phone" | "device";
 
@@ -712,6 +712,18 @@ function TimeTab({ childId }: { childId: string }) {
       on = false;
     };
   }, [childId, child.closed_grant_mode, child.closed_grant_within_minutes, child.closed_grant_within_factor, fam.modes, fam.sections]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Şu an kilit saati mi: o zaman "hemen" verilen süre her zaman saat gibi akar
+  const [lockSt, setLockSt] = useState<LockState>(null);
+  useEffect(() => {
+    let on = true;
+    const f = () => childLockState(childId).then((v) => on && setLockSt(v));
+    f();
+    const iv = window.setInterval(f, 60000);
+    return () => {
+      on = false;
+      window.clearInterval(iv);
+    };
+  }, [childId]);
   const [err, setErr] = useState("");
   const [msg, setMsg] = useState("");
   const [cur, setCur] = useState<Section | null>(null);
@@ -921,6 +933,13 @@ function TimeTab({ childId }: { childId: string }) {
               ))}
             </div>
           )}
+          {when === "now" && lockSt && (
+            <p className="muted tiny">
+              🔒 {lockStateLabel(lockSt)}: süre saat gibi akar
+              {Number(minutes) > 0 ? ` · ${hm((nowBerlin().minute + Number(minutes)) % 1440)}'e kadar açık` : ""}, bitince yine {lockStateAfter(lockSt)}.{" "}
+              <Info>Kilit, Tam kilit ve kapalı saatlerde verilen süre, aşağıdaki seçim ne olursa olsun verildiği andan itibaren akar. Çocuk kullanmasa da biter; telefon kapalı ya da internetsiz olsa da süre dolunca kilit geri gelir. Kalan kasaya gitmez.</Info>
+            </p>
+          )}
           {(when === "now" || when === "custom") && (
             <details className="sub-collapse">
               <summary className="sub-collapse-head">
@@ -934,7 +953,7 @@ function TimeTab({ childId }: { childId: string }) {
                 <ClosedModePicker value={cmode} onChange={setCmode} allowNone={cmode.mode === "none" || defMode.mode === "none"} />
                 <div className="row gap-s" style={{ alignItems: "center" }}>
                   <span className="muted tiny grow">
-                    Varsayılan: {closedModeLabel(defMode)}{def.from ? ` · ${def.from} profilinden` : ""} <Info>Seçtiğin ayar sadece bu veriş için geçerli. “Varsayılan yap” dersen Kurallar’daki ayar da değişir. Telefon açık saatteyse süre o anki bölüme eklenir; bu ayar kapalı ya da sınırlı saatlerde geçerlidir.</Info>
+                    Varsayılan: {closedModeLabel(defMode)}{def.from ? ` · ${def.from} profilinden` : ""} <Info>Seçtiğin ayar sadece bu veriş için geçerli. “Varsayılan yap” dersen Kurallar’daki ayar da değişir. Bu ayar açık saatlerde geçerli. Kilit, Tam kilit ve kapalı saatlerde verilen süre her zaman saat gibi akar.</Info>
                   </span>
                   {!sameClosedMode(cmode, defMode) && (def.from ? (
                     <button type="button" className="chip-btn" onClick={() => setCmode(defMode)}>Geri al</button>

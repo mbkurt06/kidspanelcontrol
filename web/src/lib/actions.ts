@@ -125,10 +125,13 @@ export async function giveNow(
     return `${res.from ?? "bu profil"} süre vermeye kapalı · kasaya eklendi`;
   }
   const within = cm.mode === "within" ? (cm.withinFactor ? minutes * cm.withinFactor : cm.withinMinutes ?? 120) : null;
+  const lockState = await childLockState(childId);
   const { error } = await supabase.rpc("parent_give_time", { p_child: childId, p_minutes: minutes, p_mode: cm.mode, p_within: within, p_note: opts.note ?? null });
   if (error) throw error;
   const { minute } = nowBerlin();
   const end = (m: number) => hm(Math.min(m, 1439));
+  // Kilit / Tam kilit / kapalı saatte süre her zaman saat gibi akar (sunucu böyle kaydeder)
+  if (lockState) return `${lockStateLabel(lockState)} · saat gibi akar · ${hm((minute + minutes) % 1440)}'e kadar açık, sonra yine ${lockStateAfter(lockState)}`;
   if (cm.mode === "clock") return `şu andan ${end(minute + minutes)}'e kadar açık · kullanılmayan kasaya`;
   if (cm.mode === "within") return `kullandıkça düşer · ${end(minute + (within ?? 120))}'e kadar kullanmalı`;
   if (cm.mode === "open") {
@@ -284,4 +287,18 @@ export async function stopParentMode(childId: string) {
     .is("cancelled_at", null);
   if (error) throw error;
   await sendCommand(childId, "resync", {});
+}
+
+/** Çocuk şu an kilit saatinde mi: kiosk (Tam kilit) · locked (Kilitli bölüm) · closed (açık saat dışı) · null (açık) */
+export type LockState = "kiosk" | "locked" | "closed" | null;
+export async function childLockState(childId: string): Promise<LockState> {
+  const { data, error } = await supabase.rpc("child_lock_state", { p_child: childId });
+  if (error) return null;
+  return (data as LockState) ?? null;
+}
+export function lockStateLabel(s: LockState) {
+  return s === "kiosk" ? "Tam kilit saati" : s === "locked" ? "Kilitli saat" : s === "closed" ? "Kapalı saat" : "Açık saat";
+}
+export function lockStateAfter(s: LockState) {
+  return s === "kiosk" ? "Tam kilit" : s === "locked" ? "kilitli" : "kapalı";
 }

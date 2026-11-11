@@ -104,6 +104,8 @@ data class TaskItem(
     val failTarget: String = "today",
     /** Bitene kadar telefon: none | limit | kiosk | mode */
     val restriction: String = "none",
+    /** Görevin günü (yyyy-MM-dd) */
+    val day: String? = null,
 ) {
     /** Kazanma koşulu metni: "Ders çalış, Ödev (hepsi)" */
     val earnText get() = if (earnTitles.isEmpty()) null else earnTitles.joinToString(", ") + when (earnMode) {
@@ -213,6 +215,7 @@ object Tasks {
             grantedMinutes = if (o.isNull("granted_minutes") || !o.has("granted_minutes")) null else o.optInt("granted_minutes"),
             failTarget = o.optString("fail_target", "today").ifBlank { "today" },
             restriction = o.optString("restriction", "none").ifBlank { "none" },
+            day = o.s("day")?.take(10),
         )
     }
 

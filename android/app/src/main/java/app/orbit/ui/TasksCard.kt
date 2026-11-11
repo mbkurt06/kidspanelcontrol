@@ -550,7 +550,8 @@ private fun summaryLine(t: TaskItem): String {
 @Composable
 private fun SummaryDialog(tasks: List<TaskItem>, onClose: () -> Unit) {
     val today = java.time.LocalDate.now().toString()
-    val list = tasks.filter { it.dueDate == null || it.dueDate >= today || it.status == "approved" }
+    // Sadece bugünün görevleri (önceki günlerin görevleri görünmez)
+    val list = tasks.filter { (it.day ?: it.dueDate) == today }
     val open = list.filter { it.status == "approved" && !it.held && it.rewardValidity != "wallet" && it.rewardValidity != "vault" }.sumOf { it.minutes }
     val wait = list.filter { it.held }.sumOf { it.minutes }
     val wallet = list.filter { it.status == "approved" && !it.held && it.rewardValidity == "wallet" }.sumOf { it.minutes }

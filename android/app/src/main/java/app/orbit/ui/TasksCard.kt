@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.withStyle
 import androidx.compose.foundation.verticalScroll
@@ -104,36 +105,37 @@ private fun lockText(t: TaskItem, all: List<TaskItem>): String {
     }
 }
 
-/** Grup başlığı: ilerleme ve bekleyen süre */
+/** Grup başlığı: dokununca görevler açılır / kapanır; kapalıyken de ilerleme ve sıradaki görev görünür */
 @Composable
-private fun GroupHeader(t: TaskItem) {
-    val left = (t.groupNeed - t.groupApproved).coerceAtLeast(0)
+private fun GroupHeader(t: TaskItem, members: List<TaskItem>, open: Boolean, onToggle: () -> Unit) {
+    val earned = members.filter { it.status == "approved" && !it.held }.sumOf { it.minutes }
+    val held = members.filter { it.held }.sumOf { it.minutes }
+    val next = members.firstOrNull { it.open && !it.locked && it.mandatory } ?: members.firstOrNull { it.open && !it.locked }
+    val approved = members.count { it.status == "approved" }
+    val total = members.count { it.status != "claimed" }
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.surface2).padding(14.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.surface2).clickable { onToggle() }.padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(t.groupName ?: "Görev grubu", color = C.text, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f))
-            Text("${t.groupApproved}/${t.groupNeed}", color = if (t.groupStatus == "met") C.good else C.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text("📁 " + (t.groupName ?: "Görev grubu"), color = C.text, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f))
+            Text("$approved/$total", color = if (total > 0 && approved == total) C.good else C.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            Text(if (open) "  ▴" else "  ▾", color = C.muted, fontSize = 16.sp)
         }
         androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(C.surface)) {
-            val frac = if (t.groupNeed > 0) (t.groupApproved.toFloat() / t.groupNeed).coerceIn(0f, 1f) else 0f
+            val frac = if (total > 0) (approved.toFloat() / total).coerceIn(0f, 1f) else 0f
             androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth(frac).height(6.dp).clip(RoundedCornerShape(3.dp)).background(C.good))
         }
-        Text(
-            when (t.groupStatus) {
-                "met" -> "Tamamladın! Süren açıldı."
-                "failed" -> "Bu sefer olmadı. Kazandığın süre kasaya gitti."
-                else -> when {
-                    t.groupMandatoryLeft > 0 && left > 0 -> "Zorunlu görevleri yap · $left görev daha${if (t.groupHeld > 0) " · ${t.groupHeld} dk seni bekliyor" else ""}"
-                    left > 0 -> "$left görev daha${if (t.groupHeld > 0) " → ${t.groupHeld} dk açılır" else ""}"
-                    t.groupMandatoryLeft > 0 -> "Zorunlu görev bekleniyor"
-                    else -> "Onay bekleniyor"
-                }
-            },
-            color = if (t.groupStatus == "met") C.good else C.muted, fontSize = 13.sp,
-        )
+        val parts = listOfNotNull(earned.takeIf { it > 0 }?.let { "✅ $it dk" }, held.takeIf { it > 0 }?.let { "⏳ $it dk bekliyor" })
+        if (parts.isNotEmpty()) Text(parts.joinToString(" · "), color = C.muted, fontSize = 13.sp)
+        if (next != null) Text("👉 Sıradaki: ${next.title}", color = C.text, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        else if (members.any { it.status == "submitted" }) Text("Onay bekleniyor", color = C.muted, fontSize = 13.sp)
     }
+}
+
+/** Grubun görevleri: soldaki çizgi grubun başlığına bağlar */
+private fun Modifier.groupLine(on: Boolean): Modifier = if (!on) this else this.padding(start = 12.dp).drawBehind {
+    drawRect(Color(0xFF7C5CFF), topLeft = androidx.compose.ui.geometry.Offset(-9.dp.toPx(), 0f), size = androidx.compose.ui.geometry.Size(3.dp.toPx(), size.height))
 }
 
 private val CIRCLED = listOf("①", "②", "③", "④", "⑤", "⑥", "⑦", "⑧", "⑨", "⑩")
@@ -280,6 +282,12 @@ fun TasksCard(tasks: List<TaskItem>) {
     val active = tasks.filter { it !in done }
     var showDone by remember { mutableStateOf(false) }
     var showSummary by remember { mutableStateOf(false) }
+    // Grup açık / kapalı (çocuğun seçimi hatırlanır; seçmediyse yapılacak görevi olan grup açık)
+    val groupOpen = remember {
+        androidx.compose.runtime.mutableStateMapOf<String, Boolean>().apply {
+            app.orbit.data.Store.prefs().all.forEach { (k, v) -> if (k.startsWith("grpOpen:") && v is Boolean) put(k.removePrefix("grpOpen:"), v) }
+        }
+    }
     if (showSummary) SummaryDialog(tasks) { showSummary = false }
     Card {
         Title("Görevlerim")
@@ -292,16 +300,38 @@ fun TasksCard(tasks: List<TaskItem>) {
         val focus = TaskFocus.taskId
         var lastGroup: String? = null
         var lastBundle: Int? = null
-        for (raw in active) {
+        // Grup içinde bitmiş görevler en altta; gruplar listedeki ilk yerinde kalır
+        val firstIdx = active.withIndex().groupBy { it.value.groupId ?: it.value.runId }.mapValues { e -> e.value.minOf { it.index } }
+        val ordered = active.withIndex().sortedWith(compareBy({ firstIdx[it.value.groupId ?: it.value.runId] ?: it.index }, { if (it.value.status == "approved") 1 else 0 }, { it.index })).map { it.value }
+        for (raw in ordered) {
             val t = if (raw.runId in optimisticSubmitted) raw.copy(status = "submitted") else raw
-            if (t.groupId != null && t.groupId != lastGroup) { GroupHeader(t); lastBundle = null }
-            lastGroup = t.groupId
+            val gid = t.groupId
+            if (gid != null && gid != lastGroup) {
+                val members = ordered.filter { it.groupId == gid }
+                val auto = members.any { it.open || it.status == "submitted" }
+                val open = groupOpen[gid] ?: auto
+                GroupHeader(t, members, open) {
+                    groupOpen[gid] = !open
+                    app.orbit.data.Store.prefs().edit().putBoolean("grpOpen:$gid", !open).apply()
+                }
+                lastBundle = null
+            }
+            lastGroup = gid
+            if (gid != null && !(groupOpen[gid] ?: ordered.any { it.groupId == gid && (it.open || it.status == "submitted") })) continue
+            if (gid != null && t.status == "approved") {
+                Text(
+                    "✅ ${t.title} · +${t.minutes} dk" + if (t.held) " · ⏳ bekliyor" else "",
+                    color = C.good, fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.groupLine(true).fillMaxWidth().padding(vertical = 4.dp),
+                )
+                continue
+            }
             if (t.bundlePos != null && t.bundlePos != lastBundle) BundleHeader(t)
             else if (t.bundlePos == null && lastBundle != null && t.groupId != null) Muted("Diğer görevler", 12)
             lastBundle = t.bundlePos
             if (t.locked && t.open) {
                 Row(
-                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).padding(12.dp),
+                    Modifier.groupLine(gid != null).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text("🔒", fontSize = 18.sp, modifier = Modifier.padding(end = 10.dp))
@@ -315,12 +345,12 @@ fun TasksCard(tasks: List<TaskItem>) {
             }
             val focused = focus != null && focus == t.taskId
             Column(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (focused) C.accent.copy(alpha = 0.18f) else C.surface2).padding(12.dp),
+                Modifier.groupLine(gid != null).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(if (focused) C.accent.copy(alpha = 0.18f) else C.surface2).padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(t.title, color = C.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.weight(1f))
-                    if (t.mandatory && t.groupId != null) Text("Zorunlu", color = C.bad, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    if (t.groupId != null) Text(if (t.mandatory) "❗ Zorunlu" else "☆ Seçmeli", color = if (t.mandatory) C.bad else C.muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                 }
                 if (t.agendaItemId != null) Muted("📋 Ajandandan", 12)
                 t.description?.let { Muted(it, 13) }

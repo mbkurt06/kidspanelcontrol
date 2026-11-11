@@ -280,13 +280,20 @@ export default function Tasks() {
     <Meta
       repeat={g.recurrence !== "once"}
       repeatTitle={`Tekrarlı · ${repeatText(g)}`}
-      reward={earned != null ? (earned > 0 ? `+${earned} dk` : "0 dk") : `+${pr.all} dk`}
+      reward={groupPlusMinus(earned != null ? earned : pr.all, groupMinus(g, runs))}
       status={status}
       edit={<EditIcon label={`${g.name} grubunu düzenle`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); select(g.id); }} />}
       arrow={open == null ? null : <span className={`collapse-arrow${open ? " open" : ""}`} aria-hidden="true" />}
     />
     );
   };
+  /** Gruptaki cezalar: onaylanmamış (bekleyen ya da yapılmamış) görevlerin cezası; onaylanınca düşer */
+  const groupMinus = (g: TaskGroup, runs?: TaskRun[]) => {
+    const list = tasks.filter((t) => t.group_id === g.id && t.active);
+    if (!runs?.length) return list.reduce((a, t) => a + (t.fail_minutes ?? 0), 0);
+    return runs.filter((r) => r.status !== "approved" && r.status !== "claimed").reduce((a, r) => a + (taskById[r.task_id]?.fail_minutes ?? 0), 0);
+  };
+  const groupPlusMinus = (plus: number, minus: number) => (minus ? `+${plus} / −${minus} dk` : plus > 0 ? `+${plus} dk` : "0 dk");
   const groupText = (g: TaskGroup, rs: TaskRun[], pr: { approved: number; need: number }) => {
     const mand = rs.filter((r) => taskById[r.task_id]?.mandatory).length;
     const parts = [`${pr.approved}/${rs.length} tamam`];
@@ -448,7 +455,7 @@ export default function Tasks() {
                         <b>{g.name}</b>
                         <div className="muted tiny">{tasks.filter((t) => t.group_id === g.id).length} görev · {repeatText(g)}{g.active ? "" : " · kapalı"}</div>
                       </div>
-                      <Meta repeat={g.recurrence !== "once"} repeatTitle={`Tekrarlı · ${repeatText(g)}`} reward={`+${tasks.filter((t) => t.group_id === g.id).reduce((a, t) => a + Math.max(0, t.reward_minutes ?? 0), 0)} dk`} status={null} edit={<EditIcon label="Grubu düzenle" />} />
+                      <Meta repeat={g.recurrence !== "once"} repeatTitle={`Tekrarlı · ${repeatText(g)}`} reward={groupPlusMinus(tasks.filter((t) => t.group_id === g.id).reduce((a, t) => a + Math.max(0, t.reward_minutes ?? 0), 0), groupMinus(g))} status={null} edit={<EditIcon label="Grubu düzenle" />} />
                     </button>
                   ))}
                   {othersOpen && otherSingles.map((t) => (

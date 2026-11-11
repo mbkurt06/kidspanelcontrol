@@ -18,6 +18,7 @@ import {
   type TaskTemplate,
 } from "../lib/types";
 import TaskGroupDetail from "../components/TaskGroupDetail";
+import { specText } from "../lib/taskWork";
 import { groupDay, groupProgress, newGroup, repeatText } from "../lib/groups";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
@@ -83,7 +84,7 @@ const proofText = (t?: Task) =>
   !t
     ? ""
     : [
-        t.proof === "none" ? null : t.before_after ? "önce + sonra fotoğraf" : "fotoğraf",
+        t.proof === "none" ? null : "fotoğraf",
         t.record_minutes != null ? "kamera kaydı" : null,
         t.screenshot_min != null ? "ekran görüntüsü" : null,
         t.screen_record_minutes != null ? "ekran kaydı" : null,
@@ -389,7 +390,7 @@ export default function Tasks() {
                                 <div className="grow">
                                   <b>{t?.title}</b>
                                   <div className="muted tiny">
-                                    {[t && !sub ? spanText(taskSpan(t, null)) : t?.mandatory ? "Zorunlu" : "Seçmeli", proofText(t)].filter(Boolean).join(" · ")}
+                                    {t ? [!sub ? spanText(taskSpan(t, null)) : null, specText(t, tasks, fam.modes)].filter(Boolean).join(" · ") : ""}
                                   </div>
                                 </div>
                                 {r.status !== "submitted" && proofBtn(r)}
@@ -545,7 +546,7 @@ export default function Tasks() {
                           <Link to={t ? `/tasks/${t.id}` : "/tasks"} className="app-row hist-sub">
                             <div className="grow">
                               <b>{t?.title ?? "Görev"}</b>
-                              <div className="muted tiny">{[t?.mandatory ? "Zorunlu" : "Seçmeli", proofText(t)].filter(Boolean).join(" · ")}{r.granted_minutes ? ` · ${r.granted_minutes} dk verildi` : ""}</div>
+                              <div className="muted tiny">{t ? specText(t, tasks, fam.modes) : ""}{r.granted_minutes ? ` · ${r.granted_minutes} dk verildi` : ""}</div>
                             </div>
                             {proofBtn(r)}
                             {taskMeta(t, r.status, null, r)}
@@ -570,7 +571,6 @@ export default function Tasks() {
                       <b>{t.title}</b>
                       <div className="muted tiny">
                         {PROOF_LABEL[t.proof]}
-                        {t.before_after ? " (öncesi/sonrası)" : ""}
                         {t.reward_minutes != null ? ` · ${t.reward_minutes > 0 ? "+" : ""}${minutesText(t.reward_minutes)}` : ""}
                         {t.reward_text ? ` · ${t.reward_text}` : ""}
                       </div>

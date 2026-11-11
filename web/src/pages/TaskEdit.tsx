@@ -689,11 +689,8 @@ export default function TaskEdit() {
           <button className={`chip small ${f.proof === "none" && !f.record_on && !f.shot_on && !f.srec_on ? "on" : ""}`} onClick={() => setF((x) => ({ ...x, proof: "none", before_after: false, record_on: false, shot_on: false, srec_on: false }))}>
             Kanıt yok
           </button>
-          <button className={`chip small ${f.proof === "photo" && !f.before_after ? "on" : ""}`} onClick={() => setF((x) => (x.proof === "photo" && !x.before_after ? { ...x, proof: "none" } : { ...x, proof: "photo", before_after: false }))}>
-            Tamamlanınca fotoğraf
-          </button>
-          <button className={`chip small ${f.proof === "photo" && f.before_after ? "on" : ""}`} onClick={() => setF((x) => (x.proof === "photo" && x.before_after ? { ...x, proof: "none", before_after: false } : { ...x, proof: "photo", before_after: true }))}>
-            Başlangıç + tamamlanınca fotoğraf
+          <button className={`chip small ${f.proof !== "none" ? "on" : ""}`} aria-pressed={f.proof !== "none"} onClick={() => setF((x) => (x.proof !== "none" ? { ...x, proof: "none", before_after: false } : { ...x, proof: "photo", before_after: true }))}>
+            {f.proof !== "none" ? "✓ " : ""}📷 Fotoğraf
           </button>
           <button className={`chip small ${f.record_on ? "on" : ""}`} aria-pressed={f.record_on} onClick={() => set("record_on", !f.record_on)}>
             {f.record_on ? "✓ " : ""}📹 Kamera kaydı

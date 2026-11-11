@@ -291,8 +291,12 @@ class RuleEngine(private val rules: Rules) {
     fun taskRestrictionNow(day: LocalDate, t: LocalTime): TaskRestriction? {
         // Görevden sonra ebeveynin elle verdiği ya da görevden kazanılan süre sürerken kısıtlama kalkar;
         // süre bitince (kullanıldı / saat doldu) sıradaki zorunlu görevin kısıtlaması geri gelir
-        val parent = activeWindows(day, t).filter { it.source == "manual" || it.source == "task" }
-        return taskRestrictionsNow(day, t).filter { r -> parent.none { it.createdAtMs > r.createdAtMs } }.maxByOrNull { it.rank }
+        val wins = activeWindows(day, t).filter { it.source == "manual" || it.source == "task" }
+        fun lifts(g: Grant, r: TaskRestriction) = g.createdAtMs > r.createdAtMs && (
+            g.source == "manual" ||
+                // Görevden kazanılan süre sadece aynı grubun kilidini kaldırır (tek görevin ya da başka grubun kilidi sürer)
+                (r.groupId != null && g.taskRunId != null && rules.taskRunGroups[g.taskRunId] == r.groupId))
+        return taskRestrictionsNow(day, t).filter { r -> wins.none { lifts(it, r) } }.maxByOrNull { it.rank }
     }
 
     /** Kısıtlıyken izinli uygulamalar: paket → günlük dakika sınırı */

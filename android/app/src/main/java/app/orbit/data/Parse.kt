@@ -65,6 +65,7 @@ object Parse {
                 dueDate = if (t.optString("recurrence") == "once") date(t.str("due_date")) else date(t.str("day")),
                 allowed = allowed,
                 createdAtMs = runCatching { java.time.OffsetDateTime.parse(t.getString("created_at")).toInstant().toEpochMilli() }.getOrDefault(0L),
+                groupId = t.str("group_id"),
             )
         }
     }
@@ -135,8 +136,15 @@ object Parse {
             o.optBoolean("vault"),
             runCatching { if (o.isNull("window_start") || !o.has("window_start")) null else TimeWindow(time(o.getString("window_start")), time(o.getString("window_end"))) }.getOrNull(),
             toVault = o.optBoolean("to_vault"), settled = !o.isNull("settled_at") && o.has("settled_at"), source = o.str("source"),
-            createdAtMs = runCatching { java.time.OffsetDateTime.parse(o.getString("created_at")).toInstant().toEpochMilli() }.getOrDefault(0L))
+            createdAtMs = runCatching { java.time.OffsetDateTime.parse(o.getString("created_at")).toInstant().toEpochMilli() }.getOrDefault(0L),
+            taskRunId = o.str("task_run_id"))
     }
+
+    private fun runGroups(tasks: JSONArray?): Map<String, String> = (0 until (tasks?.length() ?: 0)).mapNotNull { i ->
+        val t = tasks!!.getJSONObject(i)
+        val g = t.str("group_id") ?: return@mapNotNull null
+        t.optString("run_id").ifBlank { null }?.let { it to g }
+    }.toMap()
 
     fun commands(a: JSONArray): List<Command> = (0 until a.length()).mapNotNull {
         val o = a.getJSONObject(it)
@@ -229,6 +237,7 @@ object Parse {
         profileAvatar = b.optJSONObject("child")?.str("profile_avatar"),
         focus = Timers.activeFocus(b)?.let { app.orbit.engine.Focus(it.name, it.groups, it.packages) },
         taskRestrictions = taskRestrictions(b.optJSONArray("tasks"), b.optJSONArray("focus_profiles")),
+        taskRunGroups = runGroups(b.optJSONArray("tasks")),
         taskAllowedPackages = taskAllowed(b.optJSONArray("tasks")),
     )
 

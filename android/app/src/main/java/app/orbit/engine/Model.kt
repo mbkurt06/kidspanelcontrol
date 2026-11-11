@@ -93,6 +93,8 @@ data class Grant(
     /** manual = ebeveyn verdi; task = görev ödülü; leftover / daily_surplus … */
     val source: String? = null,
     val createdAtMs: Long = 0L,
+    /** Görev ödülüyse hangi görev koşusundan geldiği */
+    val taskRunId: String? = null,
 )
 
 /** Bölüm kuralı: açık (süre saymaz) / süreli / kapalı */
@@ -149,6 +151,8 @@ data class TaskRestriction(
     val allowed: Map<String, Int?> = emptyMap(),
     /** Görevin (koşunun) oluşturulma anı: ebeveyn bundan sonra süre verdiyse kısıtlama o süre boyunca kalkar */
     val createdAtMs: Long = 0L,
+    /** Görev grubu: aynı gruptan kazanılan süre bu kısıtlamayı kaldırır (başka görevlerinkini değil) */
+    val groupId: String? = null,
 ) {
     val active get() = status in setOf("open", "started", "submitted", "rejected")
     val rank get() = when (phoneMode) { "kiosk" -> 3; "limit" -> 2; "mode" -> 1; else -> 0 }
@@ -219,6 +223,8 @@ data class Rules(
     val focus: Focus? = null,
     /** Onay bekleyen görevlerin bağımsız kısıtları */
     val taskRestrictions: List<TaskRestriction> = emptyList(),
+    /** Görev koşusu → grubu (kazanılan sürenin hangi grubun kilidini kaldıracağı) */
+    val taskRunGroups: Map<String, String> = emptyMap(),
     /** Açık görevlerin izinli uygulamaları: görev sürerken her modda açık */
     val taskAllowedPackages: Set<String> = emptySet(),
     /** Çocuğun cüzdandan günde en fazla kullanabileceği dakika (null = sınır yok) */

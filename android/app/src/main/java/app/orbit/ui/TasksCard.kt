@@ -28,6 +28,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -85,6 +87,12 @@ object TaskFocus {
 }
 
 private fun lockText(t: TaskItem, all: List<TaskItem>): String {
+    if (t.startAfter.isNotEmpty()) {
+        val now0 = java.time.LocalTime.now().toString().take(5)
+        val waiting = all.filter { it.groupId == t.groupId && it.dueDate == t.dueDate && it.title in t.startAfter && it.status != "approved" && it.status != "claimed" }
+        if (waiting.isNotEmpty()) return "${waiting.joinToString(", ") { it.title }} bitince başlayabilirsin"
+        if (t.startTime != null && now0 < t.startTime) return "${t.startTime}'de açılır"
+    }
     val prev = all.filter { it.groupId == t.groupId && it.dueDate == t.dueDate }.takeWhile { it.runId != t.runId }.lastOrNull { it.status != "approved" && it.status != "claimed" }
     val now = java.time.LocalTime.now().toString().take(5)
     if (t.startTime != null && now < t.startTime) return "${t.startTime}'de açılır"
@@ -270,8 +278,15 @@ fun TasksCard(tasks: List<TaskItem>) {
     }
     val active = tasks.filter { it !in done }
     var showDone by remember { mutableStateOf(false) }
+    var showSummary by remember { mutableStateOf(false) }
+    if (showSummary) SummaryDialog(tasks) { showSummary = false }
     Card {
         Title("Görevlerim")
+        if (tasks.any { it.groupId != null || it.failMinutes != null }) Button(
+            onClick = { showSummary = true },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = C.accent),
+        ) { Text("📋 Neyi yaparsam ne olur?", fontWeight = FontWeight.SemiBold) }
         if (active.isEmpty()) Muted(if (done.isEmpty()) "Bugün görev yok." else "Şu an yapılacak görev yok 🎉")
         val focus = TaskFocus.taskId
         var lastGroup: String? = null
@@ -309,7 +324,9 @@ fun TasksCard(tasks: List<TaskItem>) {
                 if (t.agendaItemId != null) Muted("📋 Ajandandan", 12)
                 t.description?.let { Muted(it, 13) }
                 rewardText(t)?.let { Text("Ödül: $it", color = C.good, fontSize = 13.sp) }
-                if (t.open) t.failMinutes?.let { Text("Yapmazsan −$it dk", color = C.bad, fontSize = 13.sp) }
+                if (t.open && t.earnText != null) Muted("Süren ${t.earnText} bitince açılır", 12)
+                if (t.open) t.failMinutes?.let { PenaltyBox(t, it) }
+                if (t.held) HeldBox(t)
                 if (t.open && t.vocabCards != null) {
                     val vctx = androidx.compose.ui.platform.LocalContext.current
                     Text(
@@ -474,5 +491,132 @@ fun TasksCard(tasks: List<TaskItem>) {
             val mx = (t.screenshotMax ?: t.screenshotMin ?: 1) - t.screenshotCount
             ScreenshotPicker(max = mx.coerceAtLeast(1), onDismiss = { shotFor = null }) { uris -> shotFor = null; addShots(t, uris) }
         }
+    }
+}
+
+
+private fun failWhere(target: String?) = when (target) {
+    "vault" -> "kasadan düşülür"
+    "wallet" -> "cüzdanına borç yazılır"
+    else -> "bugünkü süreden düşülür"
+}
+
+/** Cezalı görev: çocuk özellikle bilsin */
+@Composable
+private fun PenaltyBox(t: TaskItem, minutes: Int) {
+    val left = t.dueTime?.let { runCatching { java.time.Duration.between(java.time.LocalTime.now(), java.time.LocalTime.parse(it)) }.getOrNull() }
+        ?.takeIf { !it.isNegative && (t.dueDate == null || t.dueDate == java.time.LocalDate.now().toString()) }
+    val leftText = left?.let { d -> " · " + (if (d.toHours() > 0) "${d.toHours()} sa ${d.toMinutes() % 60} dk" else "${d.toMinutes()} dk") + " kaldı" } ?: ""
+    Text(
+        "⚠️ Yapmazsan${t.dueTime?.let { " $it'de" } ?: ""} −$minutes dk ${failWhere(t.failTarget)}$leftText",
+        color = Color(0xFFF8B4B4), fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFF3D1C22)).padding(horizontal = 10.dp, vertical = 8.dp),
+    )
+}
+
+/** Onaylandı ama süresi bekliyor */
+@Composable
+private fun HeldBox(t: TaskItem) {
+    Text(
+        "⏳ ${t.minutes} dk bekliyor" + (t.earnText?.let { " · $it bitince açılır" } ?: "") + " · bugün açılmazsa kasaya gider",
+        color = Color(0xFFF3D48A), fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Color(0xFF3A2F12)).padding(horizontal = 10.dp, vertical = 8.dp),
+    )
+}
+
+private fun destText(t: TaskItem) = when (t.rewardValidity) {
+    "wallet" -> "cüzdanına gider, istediğin gün kullanırsın"
+    "vault" -> "kasaya gider"
+    else -> "hemen açılır" + when (t.useMode) { "clock" -> ", saat gibi akar"; "within" -> ", belirli süre içinde kullanmalısın"; else -> ", kullandıkça düşer" }
+}
+
+/** Çocuğun anlayacağı dille: bu görevi yaparsa / yapmazsa ne olur */
+private fun summaryLine(t: TaskItem): String {
+    val p = mutableListOf<String>()
+    if (t.mandatory && t.groupId != null) p += "Zorunlu."
+    if (t.restriction != "none" && t.open) p += "Bitirene kadar telefon kısıtlı."
+    if (t.startAfter.isNotEmpty() && t.open) p += "${t.startAfter.joinToString(", ")} bitince başlayabilirsin."
+    val m = t.minutes
+    if (m > 0) p += when {
+        t.status == "approved" && t.held -> "Yaptın, $m dk'n hazır. ${t.earnText ?: ""} bitince açılır; bugün bitmezse kasaya gider."
+        t.status == "approved" -> "Yaptın: +$m dk ${destText(t).substringBefore(",")}."
+        t.earnText != null -> "Yaparsan +$m dk kazanırsın; ${t.earnText} bitince ${destText(t)}."
+        else -> "Yaparsan +$m dk ${destText(t)}."
+    }
+    t.failMinutes?.let { f -> p += if (t.status == "approved") "Cezadan kurtuldun (−$f dk olacaktı)." else if (t.status == "expired") "Yapılmadı: −$f dk ${failWhere(t.failTarget)}." else "Yapmazsan${t.dueTime?.let { " $it'de" } ?: ""} −$f dk ${failWhere(t.failTarget)}." }
+    return p.joinToString(" ")
+}
+
+@Composable
+private fun SummaryDialog(tasks: List<TaskItem>, onClose: () -> Unit) {
+    val today = java.time.LocalDate.now().toString()
+    val list = tasks.filter { it.dueDate == null || it.dueDate >= today || it.status == "approved" }
+    val open = list.filter { it.status == "approved" && !it.held && it.rewardValidity != "wallet" && it.rewardValidity != "vault" }.sumOf { it.minutes }
+    val wait = list.filter { it.held }.sumOf { it.minutes }
+    val wallet = list.filter { it.status == "approved" && !it.held && it.rewardValidity == "wallet" }.sumOf { it.minutes }
+    val vault = list.filter { it.status == "approved" && !it.held && it.rewardValidity == "vault" }.sumOf { it.minutes }
+    val fines = list.filter { it.open && it.failMinutes != null }
+    androidx.compose.ui.window.Dialog(onDismissRequest = onClose, properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(
+            Modifier.fillMaxWidth().padding(12.dp).clip(RoundedCornerShape(20.dp)).background(C.bg).padding(16.dp)
+                .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Neyi yaparsam ne olur?", color = C.text, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                TextButton(onClick = onClose) { Text("Kapat") }
+            }
+            if (fines.isNotEmpty()) Text(
+                "⚠️ Cezalı görev: ${fines.size}\n" + fines.joinToString("\n") { "${it.title}: yapmazsan −${it.failMinutes} dk ${failWhere(it.failTarget)}" },
+                color = Color(0xFFF8B4B4), fontSize = 14.sp, fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF3D1C22)).padding(12.dp),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Tile("✅ Açık", open, Color(0xFF17331F), Modifier.weight(1f))
+                Tile("⏳ Bekleyen", wait, Color(0xFF3A2F12), Modifier.weight(1f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Tile("👛 Cüzdana", wallet, Color(0xFF1D2550), Modifier.weight(1f))
+                Tile("🏦 Kasaya", vault, Color(0xFF2A2145), Modifier.weight(1f))
+            }
+            for (t in list) {
+                val badge = when {
+                    t.status == "approved" && t.held -> "⏳ Bekliyor"
+                    t.status == "approved" -> "✅ Yaptın"
+                    t.status == "submitted" -> "Onayda"
+                    t.status == "expired" -> "Yapılmadı"
+                    t.locked && t.open -> "🔒 Sonra"
+                    t.failMinutes != null -> "⚠️ Cezalı"
+                    else -> "Sırada"
+                }
+                Column(
+                    Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.surface).padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(t.title, color = C.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                        Text(badge, color = C.muted, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    Text(summaryLine(t), color = C.text.copy(alpha = 0.85f), fontSize = 14.sp)
+                }
+            }
+            val end = buildList {
+                list.filter { it.held }.forEach { add("${it.title}'in bekleyen ${it.minutes} dk'sı kasaya gider") }
+                fines.forEach { add("${it.title} yapılmadıysa −${it.failMinutes} dk") }
+            }
+            Text(
+                "🌙 Bugün biterse: " + (end.joinToString("; ").ifBlank { "değişen bir şey yok" }) + ".",
+                color = C.text.copy(alpha = 0.85f), fontSize = 14.sp,
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(C.surface).padding(12.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun Tile(label: String, minutes: Int, bg: Color, modifier: Modifier) {
+    Column(modifier.clip(RoundedCornerShape(12.dp)).background(bg).padding(12.dp)) {
+        Text(label, color = C.text.copy(alpha = 0.85f), fontSize = 13.sp)
+        Text("$minutes dk", color = C.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
     }
 }

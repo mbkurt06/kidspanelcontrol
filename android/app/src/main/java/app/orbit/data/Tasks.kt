@@ -88,7 +88,30 @@ data class TaskItem(
     val agendaItemId: String? = null,
     /** Grubun başlangıç saati (HH:mm) */
     val startTime: String? = null,
+    /** Onaylandı ama süresi henüz açılmadı (bağlı görevler bekleniyor) */
+    val held: Boolean = false,
+    /** Süre şu görevler bitince açılır (boş = onaylanınca) */
+    val earnTitles: List<String> = emptyList(),
+    /** all | any | min */
+    val earnMode: String = "all",
+    val earnMin: Int = 1,
+    /** Göreve başlama: bu görevler bitince */
+    val startAfter: List<String> = emptyList(),
+    /** Hemen açılan sürenin kullanımı: usage | clock | within */
+    val useMode: String = "usage",
+    val grantedMinutes: Int? = null,
+    /** Ceza nereden: today | wallet | vault */
+    val failTarget: String = "today",
+    /** Bitene kadar telefon: none | limit | kiosk | mode */
+    val restriction: String = "none",
 ) {
+    /** Kazanma koşulu metni: "Ders çalış, Ödev (hepsi)" */
+    val earnText get() = if (earnTitles.isEmpty()) null else earnTitles.joinToString(", ") + when (earnMode) {
+        "any" -> " — herhangi biri"
+        "min" -> " — en az ${minOf(earnMin, earnTitles.size)} tanesi"
+        else -> if (earnTitles.size > 1) " — hepsi" else ""
+    }
+    val minutes get() = grantedMinutes ?: rewardMinutes ?: 0
     val hasBefore get() = beforeCount > 0
     val hasAfter get() = afterCount > 0
     val needsRecording get() = recordMinutes != null
@@ -181,6 +204,15 @@ object Tasks {
             groupStatus = o.optJSONObject("group")?.optString("status", "open") ?: "open",
             agendaItemId = o.s("agenda_item_id"),
             startTime = o.s("start_time")?.take(5),
+            held = o.optBoolean("held"),
+            earnTitles = o.optJSONObject("earn")?.optJSONArray("titles")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
+            earnMode = o.optJSONObject("earn")?.optString("mode", "all") ?: "all",
+            earnMin = o.optJSONObject("earn")?.optInt("min", 1) ?: 1,
+            startAfter = o.optJSONArray("start_after")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
+            useMode = o.optString("use_mode", "usage"),
+            grantedMinutes = if (o.isNull("granted_minutes") || !o.has("granted_minutes")) null else o.optInt("granted_minutes"),
+            failTarget = o.optString("fail_target", "today").ifBlank { "today" },
+            restriction = o.optString("restriction", "none").ifBlank { "none" },
         )
     }
 

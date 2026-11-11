@@ -289,8 +289,9 @@ class RuleEngine(private val rules: Rules) {
 
     /** En sıkı kısıtlama: Kilitle > Sınırla > durum */
     fun taskRestrictionNow(day: LocalDate, t: LocalTime): TaskRestriction? {
-        // Görevden sonra ebeveynin elle verdiği süre sürerken o görevin kısıtlaması kalkar
-        val parent = activeWindows(day, t).filter { it.source == "manual" }
+        // Görevden sonra ebeveynin elle verdiği ya da görevden kazanılan süre sürerken kısıtlama kalkar;
+        // süre bitince (kullanıldı / saat doldu) sıradaki zorunlu görevin kısıtlaması geri gelir
+        val parent = activeWindows(day, t).filter { it.source == "manual" || it.source == "task" }
         return taskRestrictionsNow(day, t).filter { r -> parent.none { it.createdAtMs > r.createdAtMs } }.maxByOrNull { it.rank }
     }
 

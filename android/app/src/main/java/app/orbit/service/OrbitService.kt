@@ -128,10 +128,13 @@ class OrbitService : Service() {
      * Orbit ekranı (ör. "music") şu an kısıtlı mı? Ana ekrandaki menü ile aynı kurallar:
      * tam kilit ekranları, odak profili, görev kısıtlaması ekranları, etkin kullanım profilinin Orbit ekranları.
      */
-    private fun orbitScreenBlocked(key: String, kiosk: app.orbit.engine.KioskNow?, snap: app.orbit.engine.Snapshot, rules: app.orbit.engine.Rules): String? {
+    private fun orbitScreenBlocked(key: String, kiosk: app.orbit.engine.KioskNow?, snap: app.orbit.engine.Snapshot, rules: app.orbit.engine.Rules, engine: app.orbit.engine.RuleEngine? = null): String? {
         if (kiosk != null) return if (key in kiosk.screens) null else "${kiosk.name}: kapalı"
         app.orbit.data.Timers.activeFocus()?.takeIf { it.screens.isNotEmpty() && key !in it.screens }?.let { return "${it.name}: kapalı" }
-        val taskSets = rules.taskRestrictions.filter { it.active && it.screens.isNotEmpty() }.map { it.screens }
+        // Kazanılan / elle verilen süre sürerken görev kısıtlaması kalkar (taskRestrictionNow ile aynı kural)
+        val now = java.time.ZonedDateTime.now(engine?.zone() ?: java.time.ZoneId.systemDefault())
+        val live = engine?.taskRestrictionNow(now.toLocalDate(), now.toLocalTime())
+        val taskSets = rules.taskRestrictions.filter { it.active && it.screens.isNotEmpty() && (engine == null || live != null) }.map { it.screens }
         if (taskSets.isNotEmpty() && key !in taskSets.reduce { a, b -> a intersect b }) return "Önce görev: kapalı"
         val m = snap.activeMode ?: snap.section?.section?.modeId?.let { rules.modes[it] }
         if (m != null && m.kioskScreens.isNotEmpty() && key !in m.kioskScreens) return "${m.name}: kapalı"
@@ -397,7 +400,7 @@ class OrbitService : Service() {
         // Müzik: kurallar kapattıysa durdur
         // Orbit menüsünden "Müzik" kaldırıldıysa (tam kilit / kullanım profili / görev / odak ekranları) müzik de durur:
         // ekran gizlenince arka planda ve kilit ekranında çalmaya devam etmesin
-        val musicScreenOff = if (snap.parentMode) null else runCatching { orbitScreenBlocked("music", kiosk, snap, rules) }.getOrNull()
+        val musicScreenOff = if (snap.parentMode) null else runCatching { orbitScreenBlocked("music", kiosk, snap, rules, engine) }.getOrNull()
         app.orbit.data.Music.blocked.value = musicScreenOff ?: runCatching { app.orbit.engine.Extras.musicBlocked(rules, engine, now) }.getOrNull()
         app.orbit.data.Music.enforce()
 

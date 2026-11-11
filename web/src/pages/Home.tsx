@@ -107,11 +107,11 @@ function ChildCard({ child }: { child: Child }) {
     return () => clearInterval(t);
   }, [child.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Şu an süren saat aralıklı ekstra süre (kilit saatinde verilen süre dahil)
-  const [extras, setExtras] = useState<{ id: string; minutes: number; window_start: string; window_end: string; use_mode: string | null }[]>([]);
+  const [extras, setExtras] = useState<{ id: string; minutes: number; window_start: string; window_end: string; use_mode: string | null; source: string | null }[]>([]);
   const loadExtras = async () => {
     const { data } = await supabase
       .from("time_grants")
-      .select("id,minutes,window_start,window_end,use_mode")
+      .select("id,minutes,window_start,window_end,use_mode,source")
       .eq("child_id", child.id)
       .eq("valid_on", todayISO())
       .eq("vault", false)
@@ -259,11 +259,33 @@ function ChildCard({ child }: { child: Child }) {
   }
 
   // Halka içi
-  const ringColor = kiosk ? "var(--bad)" : limited || closed ? "var(--warn)" : child.color;
+  const extraNow = (() => {
+    const { minute } = nowBerlin();
+    let total = 0;
+    let end: string | null = null;
+    let task = true;
+    for (const g of extras) {
+      const a = mins(g.window_start), b = g.window_end.startsWith("23:59") ? 1440 : mins(g.window_end);
+      if (minute < a || minute >= b) continue;
+      const usedMin = Math.floor((st?.grant_used?.[g.id] ?? 0) / 60);
+      const left = g.use_mode === "clock" ? b - minute : Math.min(g.minutes - usedMin, b - minute);
+      if (left <= 0) continue;
+      total += left;
+      end = end ?? (g.use_mode === "clock" ? hm(Math.min(b, 1439)) : null);
+      task = task && g.source === "task";
+    }
+    return total > 0 ? { left: total, end, task } : null;
+  })();
+  /** Ekstra / görev süresi sürerken halkada günlük kalan + bu süre görünür (telefon günlük kalanı ayrı bildirir) */
+  const extraLive = !!extraNow && !kiosk && !waiting;
+  const shownLeft = (st?.remaining_minutes ?? 0) >= 1440 ? st!.remaining_minutes : (st?.remaining_minutes ?? 0) + (extraLive ? extraNow!.left : 0);
+  const ringColor = kiosk ? "var(--bad)" : extraLive ? child.color : limited || closed ? "var(--warn)" : child.color;
   const ringInner = !st ? (
     <b>—</b>
   ) : kiosk ? (
     <span className="ring-state bad"><Icon name="lock" size={22} /><small>Kilitli</small></span>
+  ) : extraLive ? (
+    <span className="ring-state"><b>{minutesText(shownLeft)}</b><small>kaldı</small></span>
   ) : limited || closed ? (
     <span className="ring-state warn"><span aria-hidden="true">☾</span><small>{limited ? "Sınırlı" : "Kapalı"}</small></span>
   ) : unlimited ? (
@@ -272,21 +294,10 @@ function ChildCard({ child }: { child: Child }) {
     <span className="ring-state"><b>{minutesText(st.remaining_minutes)}</b><small>kaldı</small></span>
   );
 
-  const extraNow = (() => {
-    const { minute } = nowBerlin();
-    for (const g of extras) {
-      const a = mins(g.window_start), b = g.window_end.startsWith("23:59") ? 1440 : mins(g.window_end);
-      if (minute < a || minute >= b) continue;
-      const usedMin = Math.floor((st?.grant_used?.[g.id] ?? 0) / 60);
-      const left = g.use_mode === "clock" ? b - minute : Math.min(g.minutes - usedMin, b - minute);
-      if (left > 0) return { left, end: g.use_mode === "clock" ? hm(Math.min(b, 1439)) : null };
-    }
-    return null;
-  })();
   const stateLine = !st
     ? null
     : extraNow && !waiting && !kiosk
-      ? { cls: "good", text: `🎁 Ekstra süre · ${minutesText(extraNow.left)} kaldı${extraNow.end ? ` · ${extraNow.end}'e kadar` : ""}` }
+      ? { cls: "good", text: `${extraNow.task ? "⭐ Görev süresi" : "🎁 Ekstra süre"} · ${minutesText(extraNow.left)} kaldı${extraNow.end ? ` · ${extraNow.end}'e kadar` : ""}` }
       : kiosk
       ? { cls: "bad", text: waiting && !realKiosk ? "Kilitli · telefona iletiliyor…" : `Kilitli · ${(st.lock_reason ?? "").replace("🔒", "").trim() || "sen kaldırana kadar"}` }
       : limited
@@ -306,7 +317,7 @@ function ChildCard({ child }: { child: Child }) {
           aria-label="Süreyi çarkla ayarla"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (st) { setDial(0); setDialOpen(true); } }}
         >
-          <Ring value={open && !unlimited ? st!.remaining_minutes : kiosk || limited || closed ? 1 : 0} max={open && !unlimited ? Math.max(st!.allowance_minutes, st!.remaining_minutes + st!.used_minutes, 1) : 1} color={ringColor} size={66}>
+          <Ring value={extraLive ? shownLeft : open && !unlimited ? st!.remaining_minutes : kiosk || limited || closed ? 1 : 0} max={extraLive ? Math.max(shownLeft + st!.used_minutes, 1) : open && !unlimited ? Math.max(st!.allowance_minutes, st!.remaining_minutes + st!.used_minutes, 1) : 1} color={ringColor} size={66}>
             {ringInner}
           </Ring>
         </span>

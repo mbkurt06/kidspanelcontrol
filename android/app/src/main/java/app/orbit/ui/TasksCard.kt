@@ -551,7 +551,7 @@ private fun summaryLine(t: TaskItem): String {
 private fun SummaryDialog(tasks: List<TaskItem>, onClose: () -> Unit) {
     val today = java.time.LocalDate.now().toString()
     // Sadece bugünün görevleri (önceki günlerin görevleri görünmez)
-    val list = tasks.filter { (it.day ?: it.dueDate) == today }
+    val list = tasks.filter { (it.day ?: it.dueDate) == today || (it.open && it.groupId == null && (it.dueDate == null || it.dueDate >= today)) }
     val open = list.filter { it.status == "approved" && !it.held && it.rewardValidity != "wallet" && it.rewardValidity != "vault" }.sumOf { it.minutes }
     val wait = list.filter { it.held }.sumOf { it.minutes }
     val wallet = list.filter { it.status == "approved" && !it.held && it.rewardValidity == "wallet" }.sumOf { it.minutes }

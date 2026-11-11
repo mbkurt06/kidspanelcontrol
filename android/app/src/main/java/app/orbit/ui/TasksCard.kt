@@ -85,7 +85,7 @@ object TaskFocus {
 }
 
 private fun lockText(t: TaskItem, all: List<TaskItem>): String {
-    val prev = all.filter { it.groupId == t.groupId }.takeWhile { it.runId != t.runId }.lastOrNull { it.status != "approved" && it.status != "claimed" }
+    val prev = all.filter { it.groupId == t.groupId && it.dueDate == t.dueDate }.takeWhile { it.runId != t.runId }.lastOrNull { it.status != "approved" && it.status != "claimed" }
     val now = java.time.LocalTime.now().toString().take(5)
     if (t.startTime != null && now < t.startTime) return "${t.startTime}'de açılır"
     return when {
@@ -261,7 +261,13 @@ fun TasksCard(tasks: List<TaskItem>) {
 
     // Biten görevler (onaylanan, süresi dolan, kardeşin yaptığı) ayrı "Geçmiş" bölümünde; grup tamamen bitince grup da oraya geçer
     val finalSet = setOf("approved", "expired", "claimed")
-    val done = tasks.filter { t -> t.runId !in optimisticSubmitted && t.status in finalSet && (t.groupId == null || tasks.filter { it.groupId == t.groupId }.all { it.status in finalSet }) }
+    // Grup bütünlüğü gün gün: dünkü bitmiş görevler bugünkü grup bitmedi diye listede kalmasın
+    val today = java.time.LocalDate.now().toString()
+    val done = tasks.filter { t ->
+        t.runId !in optimisticSubmitted && t.status in finalSet &&
+            (t.groupId == null || (t.dueDate != null && t.dueDate < today) ||
+                tasks.filter { it.groupId == t.groupId && it.dueDate == t.dueDate }.all { it.status in finalSet })
+    }
     val active = tasks.filter { it !in done }
     var showDone by remember { mutableStateOf(false) }
     Card {

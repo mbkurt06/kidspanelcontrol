@@ -80,7 +80,7 @@ export type Section = {
   music?: boolean;
 };
 
-export type KioskScreen = "tasks" | "agenda" | "vocab" | "messages" | "music" | "timer" | "alarms" | "day" | "wallet" | "ask" | "vault";
+export type KioskScreen = "tasks" | "agenda" | "vocab" | "messages" | "music" | "timer" | "alarms" | "day" | "wallet" | "ask" | "vault" | "wifi" | "profile" | "about";
 export const KIOSK_SCREENS: [KioskScreen, string][] = [
   ["tasks", "✅ Görevler"],
   ["agenda", "🗓 Ajanda"],
@@ -92,6 +92,9 @@ export const KIOSK_SCREENS: [KioskScreen, string][] = [
   ["wallet", "⏳ Süre cüzdanı"],
   ["ask", "🙋 Ebeveynden iste"],
   ["vault", "🔑 Şifreler"],
+  ["wifi", "📶 Wi-Fi"],
+  ["profile", "👤 Profil"],
+  ["about", "ℹ️ Hakkında"],
 ];
 export type KioskSettings = { message: string | null; screens: KioskScreen[]; calls: "emergency" | "all" };
 

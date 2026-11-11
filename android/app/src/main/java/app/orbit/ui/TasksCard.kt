@@ -539,22 +539,35 @@ private fun earnLeft(t: TaskItem, list: List<TaskItem>): List<String> =
 
 private fun hm(v: String?) = v?.take(5)
 
-/** Görev çipleri: varsayılanlar gösterilmez, sadece farklı olanlar */
+/** Görev çipleri: panelle aynı simgeler, aynı sıra */
 private fun chips(t: TaskItem, list: List<TaskItem>): List<Pair<String, Color?>> {
     val c = mutableListOf<Pair<String, Color?>>()
-    t.minutes.takeIf { it > 0 }?.let { c += "⭐ +$it" to Color(0xFF7EE2A8) }
-    t.failMinutes?.let { f -> c += ("⚠️ −$f" + when (t.failTarget) { "wallet" -> " 👛"; "vault" -> " 🏦"; else -> "" }) to Color(0xFFF8B4B4) }
-    when (t.restriction) { "kiosk" -> c += "🔒 Tam kilit" to null; "limit" -> c += "🔒 Kısıtlı" to null; "mode" -> c += "🔒 Profil" to null }
-    if (t.groupId != null && !t.mandatory) c += "Seçmeli" to null
-    earnLeft(t, list).takeIf { it.isNotEmpty() && t.status != "approved" }?.let { c += "⏳ ${it.joinToString(", ")} bitince" to null }
-    when (t.rewardValidity) { "wallet" -> c += "👛 Cüzdana" to null; "vault" -> c += "🏦 Kasaya" to null }
-    if (t.startAfter.isNotEmpty() && t.open) c += "🔒 ${t.startAfter.joinToString(", ")}'dan sonra" to null
-    if (t.needsProof) c += "📷 Fotoğraf" to null
-    t.recordMinutes?.let { c += "🎥 Kamera $it dk" to null }
-    t.screenshotMin?.let { c += "🖼 Ekran görüntüsü" to null }
-    t.screenRecMinutes?.let { c += "🖥 Ekran kaydı $it dk" to null }
+    c += "⭐ +${t.minutes.coerceAtLeast(0)}" to Color(0xFF7EE2A8)
+    t.failMinutes?.let { f -> c += ("⚠️ −$f " + when (t.failTarget) { "wallet" -> "👛"; "vault" -> "🏦"; else -> "⏱" }) to Color(0xFFF8B4B4) }
+    if (t.groupId != null) c += (if (t.mandatory) "❗ Zorunlu" else "☆ Seçmeli") to null
+    c += when (t.restriction) { "kiosk" -> "🔒 Tam kilit"; "limit" -> "🔐 Kilitli"; "mode" -> "🎯 Profil"; else -> "🟢 Serbest" } to null
+    val left = earnLeft(t, list)
+    c += (if (left.isEmpty() || t.status == "approved") "✅ Onaylanınca" else when (t.earnMode) {
+        "any" -> "🔗 ${left.joinToString(" ya da ")} bitince"
+        "min" -> "🔗 ${left.joinToString(", ")}'den en az ${minOf(t.earnMin, left.size)} tanesi bitince"
+        else -> "🔗 ${left.joinToString(" + ")} bitince"
+    }) to null
+    c += when (t.rewardValidity) {
+        "wallet" -> "👛 Cüzdana"
+        "vault" -> "🏦 Kasaya"
+        else -> "⚡ Şimdi · " + when (t.useMode) { "clock" -> "saat gibi"; "within" -> "süre içinde"; else -> "kullandıkça" }
+    } to null
+    val after = t.startAfter.filter { n -> list.none { it.title == n && it.status == "approved" } }
+    c += (if (after.isNotEmpty() && t.open) "⏸ ${after.joinToString(", ")}'dan sonra" else "▶️ Şimdi yapabilir") to null
+    val proofs = buildList {
+        if (t.needsProof) add("📷 Fotoğraf")
+        t.recordMinutes?.let { add("🎥 Kamera $it dk") }
+        t.screenshotMin?.let { add("🖼 Ekran görüntüsü") }
+        t.screenRecMinutes?.let { add("🖥 Ekran kaydı $it dk") }
+    }
+    if (proofs.isEmpty()) c += "🚫 Kanıt yok" to null else proofs.forEach { c += it to null }
     val a = hm(t.windowStart); val b = hm(t.windowEnd ?: t.dueTime)
-    if (b != null) c += (if (a != null && t.open) "🕗 $a–$b" else "🕗 $b'e kadar") to null
+    if (b != null) c += (if (a != null) "🕗 $a–$b" else "🕗 $b'e kadar") to null
     return c
 }
 

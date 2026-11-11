@@ -119,6 +119,7 @@ function GroupToday(p: Props & { list: Task[]; onSettings: () => void }) {
   if (!child) return null;
   const runOf = (t: Task) => p.runs.find((r) => r.task_id === t.id && r.child_id === child.id && r.day === day);
   const pr = groupProgress(g, p.tasks, p.runs, p.groupRuns, child.id);
+  const doneIds = new Set(p.runs.filter((r) => r.child_id === child.id && r.day === day && (r.status === "approved" || r.status === "claimed")).map((r) => r.task_id));
   const tot = { now: 0, wait: 0, wallet: 0, vault: 0 };
   const end: string[] = [];
   for (const t of p.list) {
@@ -167,7 +168,7 @@ function GroupToday(p: Props & { list: Task[]; onSettings: () => void }) {
             <div key={t.id} className="today-row">
               <div className="grow">
                 <Link to={`/tasks/${t.id}`}><b>{t.title}</b></Link>
-                <div className="muted tiny">{specText(t, p.list, fam.modes)}</div>
+                <div className="muted tiny">{specText(t, p.list, fam.modes, doneIds)}</div>
               </div>
               <span className={`today-badge ${TONE[b.tone]}`}>{b.text}</span>
               {r?.status === "submitted" && <a className="pill-btn primary" href="#onay">Onayla ›</a>}

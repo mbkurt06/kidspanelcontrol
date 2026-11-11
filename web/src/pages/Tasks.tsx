@@ -287,6 +287,8 @@ export default function Tasks() {
     />
     );
   };
+  /** Aynı çocuğun aynı gün onaylanmış görevleri (özet satırında 🔗 kalanlar) */
+  const doneOf = (r: TaskRun) => new Set(runs.filter((x) => x.child_id === r.child_id && x.day === r.day && (x.status === "approved" || x.status === "claimed")).map((x) => x.task_id));
   /** Gruptaki cezalar: onaylanmamış (bekleyen ya da yapılmamış) görevlerin cezası; onaylanınca düşer */
   const groupMinus = (g: TaskGroup, runs?: TaskRun[]) => {
     const list = tasks.filter((t) => t.group_id === g.id && t.active);
@@ -397,7 +399,7 @@ export default function Tasks() {
                                 <div className="grow">
                                   <b>{t?.title}</b>
                                   <div className="muted tiny">
-                                    {t ? [!sub ? spanText(taskSpan(t, null)) : null, specText(t, tasks, fam.modes)].filter(Boolean).join(" · ") : ""}
+                                    {t ? [!sub ? spanText(taskSpan(t, null)) : null, specText(t, tasks, fam.modes, doneOf(r))].filter(Boolean).join(" · ") : ""}
                                   </div>
                                 </div>
                                 {r.status !== "submitted" && proofBtn(r)}
@@ -553,7 +555,7 @@ export default function Tasks() {
                           <Link to={t ? `/tasks/${t.id}` : "/tasks"} className="app-row hist-sub">
                             <div className="grow">
                               <b>{t?.title ?? "Görev"}</b>
-                              <div className="muted tiny">{t ? specText(t, tasks, fam.modes) : ""}{r.granted_minutes ? ` · ${r.granted_minutes} dk verildi` : ""}</div>
+                              <div className="muted tiny">{t ? specText(t, tasks, fam.modes, doneOf(r)) : ""}{r.granted_minutes ? ` · ${r.granted_minutes} dk verildi` : ""}</div>
                             </div>
                             {proofBtn(r)}
                             {taskMeta(t, r.status, null, r)}

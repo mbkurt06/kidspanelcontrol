@@ -119,26 +119,50 @@ export function destText(t: Partial<Task>): string {
   return `Hemen/${USE[t.use_mode ?? "usage"] ?? "kullandıkça"}`;
 }
 
-/** Özet satırı (simgeli, varsayılanlar gizli): ⭐ +45 · ⚠️ −15 👛 · Zorunlu · 🔒 Tam kilit · 📷 Fotoğraf · 🕗 08:00–20:00 */
-export function specText(t: Task, all: Task[], modes: Mode[]): string {
+/**
+ * Özet satırı (panel ve telefon aynı simgeler):
+ * ⭐ +45 · ⚠️ −15 👛 · ❗ Zorunlu · 🔒 Tam kilit · ✅ Onaylanınca · ⚡ Şimdi · kullandıkça · ▶️ Şimdi yapabilir · 📷 Fotoğraf · 🕗 08:00–20:00
+ * doneIds: bugün onaylanmış görevler (🔗 kısmında sadece kalanlar yazar)
+ */
+export function specText(t: Task, all: Task[], modes: Mode[], doneIds?: Set<string>): string {
   const keys = proofKeys(t);
-  const links = (t.earn_links ?? []).filter((id) => id !== t.id).map((id) => all.find((x) => x.id === id)?.title).filter(Boolean) as string[];
-  const after = (t.start_after ?? []).map((id) => all.find((x) => x.id === id)?.title).filter(Boolean) as string[];
-  const how = t.earn_mode === "any" ? " (biri)" : t.earn_mode === "min" ? ` (en az ${Math.min(t.earn_min ?? 1, links.length)})` : "";
+  const name = (id: string) => all.find((x) => x.id === id)?.title;
+  const links = (t.earn_links ?? []).filter((id) => id !== t.id && !doneIds?.has(id)).map(name).filter(Boolean) as string[];
+  const linked = (t.earn_links ?? []).filter((id) => id !== t.id).length > 0;
+  const after = (t.start_after ?? []).filter((id) => !doneIds?.has(id)).map(name).filter(Boolean) as string[];
   const lock = t.phone_restriction ?? "none";
-  return [
-    (t.reward_minutes ?? 0) > 0 ? `⭐ +${t.reward_minutes}` : null,
-    t.fail_minutes ? `⚠️ −${t.fail_minutes}${t.fail_target === "wallet" ? " 👛" : t.fail_target === "vault" ? " 🏦" : ""}` : null,
-    t.group_id ? (t.mandatory ? "Zorunlu" : "Seçmeli") : null,
-    lock !== "none" ? `🔒 ${lockLabel(t, modes)}` : null,
-    links.length ? `⏳ ${links.join(", ")} bitince${how}` : null,
-    t.reward_validity === "wallet" ? "👛 Cüzdana" : t.reward_validity === "vault" ? "🏦 Kasaya" : t.use_mode === "clock" ? "⏱ Saat gibi akar" : t.use_mode === "within" ? "⏱ Süre içinde" : null,
-    after.length ? `🔒 ${after.join(", ")}'dan sonra` : null,
+  const mode = modes.find((m) => m.id === t.restriction_mode_id);
+  const lockText =
+    lock === "kiosk" ? "🔒 Tam kilit"
+    : lock === "limit" ? `🔐 ${modes.find((m) => m.builtin === "blocked")?.name ?? "Kilitli"}`
+    : lock === "mode" ? `${mode?.icon ? (mode.icon.length <= 3 ? mode.icon : "🎯") : "🎯"} ${mode?.name ?? "Kullanım profili"}`
+    : "🟢 Serbest";
+  const earn = !linked || !links.length
+    ? "✅ Onaylanınca"
+    : t.earn_mode === "any" ? `🔗 ${links.join(" ya da ")} bitince`
+    : t.earn_mode === "min" ? `🔗 ${links.join(", ")}'den en az ${Math.min(t.earn_min ?? 1, links.length)} tanesi bitince`
+    : `🔗 ${links.join(" + ")} bitince`;
+  const within = t.use_within_minutes ? `${Math.round(t.use_within_minutes / 60)} saat içinde` : "süre içinde";
+  const dest = t.reward_validity === "wallet" ? "👛 Cüzdana" : t.reward_validity === "vault" ? "🏦 Kasaya"
+    : `⚡ Şimdi · ${t.use_mode === "clock" ? "saat gibi" : t.use_mode === "within" ? within : "kullandıkça"}`;
+  const proofs = [
     keys.includes("photo") ? "📷 Fotoğraf" : null,
     keys.includes("camera") ? `🎥 Kamera ${t.record_minutes} dk` : null,
     keys.includes("screenshot") ? "🖼 Ekran görüntüsü" : null,
     keys.includes("screenrec") ? `🖥 Ekran kaydı ${t.screen_record_minutes} dk` : null,
-    hm(t.start_time) || hm(t.due_time) ? `🕗 ${hm(t.start_time) ? `${hm(t.start_time)}–` : ""}${hm(t.due_time) ?? ""}` : null,
+  ].filter(Boolean) as string[];
+  const a = hm(t.start_time);
+  const b = hm(t.due_time);
+  return [
+    `⭐ +${Math.max(0, t.reward_minutes ?? 0)}`,
+    t.fail_minutes ? `⚠️ −${t.fail_minutes} ${t.fail_target === "wallet" ? "👛" : t.fail_target === "vault" ? "🏦" : "⏱"}` : null,
+    t.group_id ? (t.mandatory ? "❗ Zorunlu" : "☆ Seçmeli") : null,
+    lockText,
+    earn,
+    dest,
+    after.length ? `⏸ ${after.join(", ")}'dan sonra` : "▶️ Şimdi yapabilir",
+    proofs.length ? proofs.join(" · ") : "🚫 Kanıt yok",
+    a && b ? `🕗 ${a}–${b}` : b ? `🕗 ${b}'e kadar` : null,
   ]
     .filter(Boolean)
     .join(" · ");

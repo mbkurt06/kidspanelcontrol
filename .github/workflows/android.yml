@@ -66,7 +66,7 @@ jobs:
           echo "imza=var" >> "$GITHUB_OUTPUT"
 
       - name: GitHub surumu (Release)
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.imza.outputs.imza == 'var'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && steps.imza.outputs.imza == 'var'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -74,7 +74,7 @@ jobs:
           gh release create "orbit-v$C" "orbit-$C.apk" --title "Orbit $C" --notes "Otomatik derleme ${GITHUB_SHA::7}" --latest
 
       - name: Kurulum dosyasini Supabase'e yukle, surum dosyasini guncelle
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.imza.outputs.imza == 'var'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && steps.imza.outputs.imza == 'var'
         shell: bash
         env:
           ORBIT_VERSION_CODE: ${{ steps.surum.outputs.code }}
@@ -117,7 +117,7 @@ jobs:
           exit 1
 
       - name: Telefonlara guncelleme komutu gonder
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.imza.outputs.imza == 'var'
+        if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && steps.imza.outputs.imza == 'var'
         shell: bash
         env:
           ORBIT_VERSION_CODE: ${{ steps.surum.outputs.code }}

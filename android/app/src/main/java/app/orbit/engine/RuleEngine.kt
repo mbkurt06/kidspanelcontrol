@@ -287,6 +287,18 @@ class RuleEngine(private val rules: Rules) {
         it.active && it.phoneMode != "none" && (it.window?.contains(t) ?: true) && (it.dueDate == null || !day.isAfter(it.dueDate))
     }
 
+    /** Şu an kalkmamış bütün görev kısıtlamaları ("Açmak için" listesi) */
+    fun liveTaskRestrictions(day: LocalDate, t: LocalTime): List<TaskRestriction> {
+        val wins = activeWindows(day, t).filter { it.source == "manual" || it.source == "task" }
+        fun lifts(g: Grant, r: TaskRestriction) = g.createdAtMs > r.createdAtMs && (
+            g.source == "manual" || (r.groupId != null && g.taskRunId != null && rules.taskRunGroups[g.taskRunId] == r.groupId))
+        return taskRestrictionsNow(day, t).filter { r -> wins.none { lifts(it, r) } }
+    }
+
+    /** Hazır süre: şu an geçerli, kullanılmamış ekstra / görev süreleri (dakika) */
+    fun readyMinutes(usage: DayUsage, day: LocalDate, t: LocalTime): Int =
+        activeWindows(day, t).sumOf { g -> ((g.minutes * 60L - windowUsedSeconds(usage, g, day)).coerceAtLeast(0) / 60).toInt() }
+
     /** En sıkı kısıtlama: Kilitle > Sınırla > durum */
     fun taskRestrictionNow(day: LocalDate, t: LocalTime): TaskRestriction? {
         // Görevden sonra ebeveynin elle verdiği ya da görevden kazanılan süre sürerken kısıtlama kalkar;

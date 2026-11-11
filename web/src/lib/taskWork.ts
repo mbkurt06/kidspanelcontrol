@@ -119,18 +119,26 @@ export function destText(t: Partial<Task>): string {
   return `Hemen/${USE[t.use_mode ?? "usage"] ?? "kullandıkça"}`;
 }
 
-/** Özet satırı: +45/−30 · Zorunlu · Tam kilit · Onaylanınca · Hemen/kullandıkça · Hemen başlar · Kamera kaydı 30 dk · 08:00–20:00 */
+/** Özet satırı (simgeli, varsayılanlar gizli): ⭐ +45 · ⚠️ −15 👛 · Zorunlu · 🔒 Tam kilit · 📷 Fotoğraf · 🕗 08:00–20:00 */
 export function specText(t: Task, all: Task[], modes: Mode[]): string {
-  const rec = proofKeys(t).some((k) => k === "camera" || k === "screenrec");
+  const keys = proofKeys(t);
+  const links = (t.earn_links ?? []).filter((id) => id !== t.id).map((id) => all.find((x) => x.id === id)?.title).filter(Boolean) as string[];
+  const after = (t.start_after ?? []).map((id) => all.find((x) => x.id === id)?.title).filter(Boolean) as string[];
+  const how = t.earn_mode === "any" ? " (biri)" : t.earn_mode === "min" ? ` (en az ${Math.min(t.earn_min ?? 1, links.length)})` : "";
+  const lock = t.phone_restriction ?? "none";
   return [
-    `+${Math.max(0, t.reward_minutes ?? 0)}${t.fail_minutes ? `/−${t.fail_minutes}` : ""}`,
-    t.mandatory ? "Zorunlu" : "Seçmeli",
-    lockLabel(t, modes),
-    earnText(t, all),
-    destText(t),
-    startText(t, all),
-    proofText(t) + (rec ? ` ${taskDuration(t)} dk` : ""),
-    hm(t.start_time) || hm(t.due_time) ? `${hm(t.start_time) ?? "—"}–${hm(t.due_time) ?? "—"}` : null,
+    (t.reward_minutes ?? 0) > 0 ? `⭐ +${t.reward_minutes}` : null,
+    t.fail_minutes ? `⚠️ −${t.fail_minutes}${t.fail_target === "wallet" ? " 👛" : t.fail_target === "vault" ? " 🏦" : ""}` : null,
+    t.group_id ? (t.mandatory ? "Zorunlu" : "Seçmeli") : null,
+    lock !== "none" ? `🔒 ${lockLabel(t, modes)}` : null,
+    links.length ? `⏳ ${links.join(", ")} bitince${how}` : null,
+    t.reward_validity === "wallet" ? "👛 Cüzdana" : t.reward_validity === "vault" ? "🏦 Kasaya" : t.use_mode === "clock" ? "⏱ Saat gibi akar" : t.use_mode === "within" ? "⏱ Süre içinde" : null,
+    after.length ? `🔒 ${after.join(", ")}'dan sonra` : null,
+    keys.includes("photo") ? "📷 Fotoğraf" : null,
+    keys.includes("camera") ? `🎥 Kamera ${t.record_minutes} dk` : null,
+    keys.includes("screenshot") ? "🖼 Ekran görüntüsü" : null,
+    keys.includes("screenrec") ? `🖥 Ekran kaydı ${t.screen_record_minutes} dk` : null,
+    hm(t.start_time) || hm(t.due_time) ? `🕗 ${hm(t.start_time) ? `${hm(t.start_time)}–` : ""}${hm(t.due_time) ?? ""}` : null,
   ]
     .filter(Boolean)
     .join(" · ");

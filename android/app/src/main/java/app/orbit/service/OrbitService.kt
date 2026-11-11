@@ -61,6 +61,10 @@ data class LiveState(
     val pinUntil: Long? = null,
     /** Ekran yakalama sürerken kilit yumuşar: ekran sabitleme kalkar, yalnızca Orbit + görevin izinli uygulamaları açık */
     val kioskSoft: Boolean = false,
+    /** Kalkmamış görev kilitleri: (görev adı, grup) */
+    val taskLocks: List<Pair<String, String?>> = emptyList(),
+    /** Hazır (verilmiş, kullanılmamış) süre, dk */
+    val readyMinutes: Int = 0,
 )
 
 object Live {
@@ -493,7 +497,10 @@ class OrbitService : Service() {
         // 7) Kapalı uygulamaya dokununca çıkan sistem penceresinin ("Blocked by work policy") altındaki açıklama
         Policy.setBlockedMessage(this, blockedMessage(snap, rules.mandatoryOpen))
 
-        Live.set(LiveState(snap, usage, allowed, lockReason, online, Store.lastSync, kiosk, pinUntil, kiosk != null && captureOn))
+        val nowZ = java.time.ZonedDateTime.now(engine.zone())
+        val locks = runCatching { engine.liveTaskRestrictions(nowZ.toLocalDate(), nowZ.toLocalTime()).map { it.title to it.groupId } }.getOrDefault(emptyList())
+        val ready = runCatching { engine.readyMinutes(usage, nowZ.toLocalDate(), nowZ.toLocalTime()) }.getOrDefault(0)
+        Live.set(LiveState(snap, usage, allowed, lockReason, online, Store.lastSync, kiosk, pinUntil, kiosk != null && captureOn, locks, ready))
         updateNotification(snap)
 
         // 7) Durum gönder

@@ -6,6 +6,7 @@ import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -516,7 +517,7 @@ private fun HoldButton(label: String, onStep: () -> Unit) {
         textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         modifier = Modifier.size(56.dp).clip(CircleShape).background(C.surface2).padding(top = 8.dp)
             .pointerInput(Unit) {
-                androidx.compose.foundation.gestures.detectTapGestures(onPress = {
+                detectTapGestures(onPress = {
                     onStep()
                     val job = scope.launch {
                         delay(450)

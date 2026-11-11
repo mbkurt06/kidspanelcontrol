@@ -4,46 +4,84 @@ import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import org.json.JSONArray
 import org.json.JSONObject
-import java.time.Instant
 import java.util.concurrent.atomic.AtomicBoolean
 
-/** Çocuk ↔ ebeveyn mesajları (sadece yazı). */
+/**
+ * Sohbetler (sadece yazı): anneyle / babayla birebir, ebeveynin kurduğu gruplar.
+ * Ebeveyn sohbeti durdurabilir (çocuk okur ama yazamaz). Alıntılı yanıt; çocuk kendi mesajını 10 dk içinde silebilir.
+ */
 object Messages {
     private const val TAG = "OrbitMessages"
     private const val NOTE_ID = 7001
 
-    data class Msg(val id: String, val fromParent: Boolean, val sender: String?, val body: String, val at: Long, val read: Boolean)
+    data class Chat(
+        val id: String, val kind: String, val title: String, val canWrite: Boolean,
+        /** frozen = ebeveyn durdurdu · parents_only = grupta sadece ebeveynler yazar */
+        val readonly: String?, val frozenUntil: Long?, val readAt: Long,
+    ) {
+        val group get() = kind == "group"
+    }
 
+    data class Msg(
+        val id: String, val chatId: String, val fromParent: Boolean, val childId: String?, val sender: String?,
+        val body: String, val at: Long, val read: Boolean, val replyTo: String?, val deleted: Boolean,
+    )
+
+    private val _chats = MutableStateFlow<List<Chat>>(emptyList())
+    val chats: StateFlow<List<Chat>> = _chats.asStateFlow()
     private val _list = MutableStateFlow<List<Msg>>(emptyList())
+    /** Bütün sohbetlerin mesajları (eskiden yeniye) */
     val list: StateFlow<List<Msg>> = _list.asStateFlow()
-    /** Çocuk Mesajlar ekranındayken yeni mesaj bildirimi gösterme, okundu say */
+    /** Çocuk bir sohbet ekranındayken o sohbetin bildirimini gösterme, okundu say */
+    @Volatile var openChat: String? = null
     @Volatile var screenOpen = false
     private val busy = AtomicBoolean(false)
 
-    val unread get() = _list.value.count { it.fromParent && !it.read }
+    fun mine(m: Msg) = !m.fromParent && m.childId == Store.creds?.childId
+
+    /** Sohbetteki okunmamışlar (başkalarının, son okumadan sonraki) */
+    fun unread(chat: Chat, all: List<Msg> = _list.value) = all.count { it.chatId == chat.id && !mine(it) && !it.deleted && it.at > chat.readAt }
+    val unread get() = _chats.value.sumOf { unread(it) }
 
     fun refresh() {
-        val c = Store.creds ?: return
+        Store.creds ?: return
         if (!busy.compareAndSet(false, true)) return
         try {
-            val a = Api.get("messages?child_id=eq.${c.childId}&select=id,from_parent,sender_name,body,created_at,read_at&order=created_at.desc&limit=100")
+            val cs = runCatching { JSONArray(Api.rpc("device_chats", JSONObject())) }.getOrElse { JSONArray() }
+            val chats = (0 until cs.length()).map { cs.getJSONObject(it) }.map {
+                Chat(
+                    it.getString("id"), it.optString("kind"), it.optString("title", "Sohbet"), it.optBoolean("can_write", true),
+                    if (it.isNull("readonly")) null else it.optString("readonly"),
+                    if (it.isNull("frozen_until")) null else Parse.ts(it.optString("frozen_until")),
+                    if (it.isNull("read_at")) 0L else Parse.ts(it.optString("read_at")) ?: 0L,
+                )
+            }
+            val a = Api.get("messages?select=id,chat_id,from_parent,child_id,sender_name,body,created_at,read_at,reply_to,deleted_at&order=created_at.desc&limit=400")
             val items = (0 until a.length()).map { a.getJSONObject(it) }.map {
                 Msg(
-                    it.getString("id"), it.optBoolean("from_parent"),
+                    it.getString("id"), it.optString("chat_id"), it.optBoolean("from_parent"),
+                    if (it.isNull("child_id")) null else it.optString("child_id"),
                     if (it.isNull("sender_name")) null else it.optString("sender_name"),
                     it.optString("body"), Parse.ts(it.optString("created_at")) ?: 0L, !it.isNull("read_at"),
+                    if (it.isNull("reply_to")) null else it.optString("reply_to"), !it.isNull("deleted_at"),
                 )
             }.reversed()
+            _chats.value = chats
             _list.value = items
             val lastSeen = Store.prefs().getLong("msgNotified", 0)
-            val fresh = items.filter { it.fromParent && !it.read && it.at > lastSeen }
+            val fresh = items.filter { !mine(it) && !it.deleted && it.at > lastSeen && chats.firstOrNull { ch -> ch.id == it.chatId }?.let { ch -> it.at > ch.readAt } == true }
             if (fresh.isNotEmpty()) {
                 Store.prefs().edit().putLong("msgNotified", fresh.maxOf { it.at }).apply()
-                if (screenOpen) markRead()
-                else {
-                    val last = fresh.last()
-                    Notifier.show(Notifier.CH_MSG, NOTE_ID, last.sender ?: "Ebeveynin", if (fresh.size > 1) "${fresh.size} yeni mesaj · ${last.body}" else last.body, "MESSAGES")
+                val open = openChat
+                val notify = fresh.filter { it.chatId != open }
+                if (open != null && fresh.any { it.chatId == open }) markRead(open)
+                if (notify.isNotEmpty()) {
+                    val last = notify.last()
+                    val chat = chats.firstOrNull { it.id == last.chatId }
+                    val who = if (chat?.group == true) "${chat.title} · ${last.sender ?: ""}" else last.sender ?: chat?.title ?: "Mesaj"
+                    Notifier.show(Notifier.CH_MSG, NOTE_ID, who, if (notify.size > 1) "${notify.size} yeni mesaj · ${last.body}" else last.body, "MESSAGES")
                 }
             }
         } catch (e: Exception) {
@@ -53,24 +91,48 @@ object Messages {
         }
     }
 
-    fun send(body: String): Boolean {
-        val c = Store.creds ?: return false
+    /** Gönder; hata olursa sebebi (durduruldu / sadece ebeveyn / internet) */
+    fun send(chatId: String, body: String, replyTo: String?): String? {
+        val c = Store.creds ?: return "Kayıt yok"
         val text = body.trim().take(1000)
-        if (text.isEmpty()) return false
+        if (text.isEmpty()) return "Boş mesaj"
         return runCatching {
-            Api.post("messages", JSONObject().put("family_id", c.familyId).put("child_id", c.childId).put("from_parent", false).put("body", text))
+            Api.post(
+                "messages",
+                JSONObject().put("family_id", c.familyId).put("child_id", c.childId).put("chat_id", chatId)
+                    .put("from_parent", false).put("body", text).put("reply_to", replyTo ?: JSONObject.NULL),
+            )
             refresh()
-            true
-        }.getOrElse { Log.w(TAG, "gönderilemedi", it); false }
+            null
+        }.getOrElse {
+            Log.w(TAG, "gönderilemedi", it)
+            val m = it.message ?: ""
+            refresh()
+            when {
+                "chat_frozen" in m -> "Bu sohbet durduruldu, mesaj yazamazsın"
+                "chat_readonly" in m -> "Bu grupta sadece ebeveynler yazabiliyor"
+                else -> "Gönderilemedi, internet bağlantısını kontrol et"
+            }
+        }
     }
 
-    fun markRead() {
-        val c = Store.creds ?: return
-        if (_list.value.none { it.fromParent && !it.read }) return
+    /** Kendi mesajını sil (gönderdikten sonra 10 dk içinde) */
+    fun delete(id: String): Boolean = runCatching {
+        Api.rpc("message_delete", JSONObject().put("p_id", id))
+        refresh()
+        true
+    }.getOrElse { Log.w(TAG, "silinemedi", it); false }
+
+    fun canDelete(m: Msg) = mine(m) && !m.deleted && System.currentTimeMillis() - m.at < 10 * 60_000L
+
+    fun markRead(chatId: String) {
+        val chat = _chats.value.firstOrNull { it.id == chatId } ?: return
+        if (unread(chat) == 0) return
         runCatching {
-            Api.patch("messages?child_id=eq.${c.childId}&from_parent=eq.true&read_at=is.null", JSONObject().put("read_at", Instant.now().toString()))
-            _list.value = _list.value.map { if (it.fromParent) it.copy(read = true) else it }
-            Notifier.cancel(NOTE_ID)
+            Api.rpc("chat_mark_read", JSONObject().put("p_chat", chatId))
+            val now = System.currentTimeMillis()
+            _chats.value = _chats.value.map { if (it.id == chatId) it.copy(readAt = now) else it }
+            if (unread == 0) Notifier.cancel(NOTE_ID)
         }
     }
 }

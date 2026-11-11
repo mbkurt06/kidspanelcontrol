@@ -93,7 +93,8 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
     var screen by rememberSaveable { mutableStateOf(Screen.TODAY) }
     LaunchedEffect(request) { request?.let { screen = it.first } }
     val messages by app.orbit.data.Messages.list.collectAsState()
-    val unreadMsgs = messages.count { it.fromParent && !it.read }
+    val msgChats by app.orbit.data.Messages.chats.collectAsState()
+    val unreadMsgs = msgChats.sumOf { app.orbit.data.Messages.unread(it, messages) }
     val live by Live.state.collectAsState()
     val profileRules = remember(live.lastSync) { Store.rules() }
     val openTasks = remember(live.lastSync, live.snapshot?.now?.minute) { Tasks.current().count { it.open && it.inWindow() } }

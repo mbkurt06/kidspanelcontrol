@@ -65,6 +65,12 @@ type Form = {
   orbit_focus_profile_id: string;
   group_id: string;
   mandatory: boolean;
+  /** Grup görevi: süre ne zaman kazanılır / göreve başlama / yapılma saati */
+  earn_links: string[];
+  earn_mode: "all" | "any" | "min";
+  earn_min: number;
+  start_after: string[];
+  start_time: string;
 };
 
 /** Varsayılana giren alanlar: ad, açıklama, tarih ve saat hariç */
@@ -161,14 +167,14 @@ const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; 
   start_date: todayISO(),
   end_date: "",
   due_date: todayISO(),
-  due_time: "",
-  proof: "photo",
-  before_after: true,
+  due_time: "20:00",
+  proof: "none",
+  before_after: false,
   proof_before_min: String(defaults?.task_before_photo_min ?? 1),
   proof_before_max: String(defaults?.task_before_photo_max ?? 4),
   proof_after_min: String(defaults?.task_after_photo_min ?? 1),
   proof_after_max: String(defaults?.task_after_photo_max ?? 4),
-  reward_minutes: "15",
+  reward_minutes: "30",
   reward_on: true,
   fail_on: false,
   fail_minutes: "15",
@@ -181,8 +187,8 @@ const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; 
   reward_expires_days: "",
   reward_section_id: "",
   active: true,
-  record_on: false,
-  record_minutes: "60",
+  record_on: true,
+  record_minutes: "30",
   record_min_minutes: "",
   shot_on: false,
   shot_min: "1",
@@ -196,13 +202,18 @@ const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; 
   restricted_allowed: [],
   use_mode: "usage",
   use_within_minutes: "120",
-  record_camera: "back",
+  record_camera: "choose",
   record_pause: "child",
   record_pause_max: "10",
   phone_restriction: "none",
   orbit_focus_profile_id: "",
   group_id: "",
   mandatory: false,
+  earn_links: [],
+  earn_mode: "all",
+  earn_min: 1,
+  start_after: [],
+  start_time: "08:00",
 });
 
 type RecFields = { screen_record_minutes?: number | null; screen_record_min_minutes?: number | null; allowed_packages?: string[] | null; allowed_mode?: "keep" | "focus" | null; restriction_mode_id?: string | null; restricted_allowed?: RestrictedApp[] | null; use_mode?: UseMode | null; use_within_minutes?: number | null; screenshot_min?: number | null; screenshot_max?: number | null; record_minutes?: number | null; record_min_minutes?: number | null; record_camera?: Form["record_camera"]; record_pause?: Form["record_pause"]; record_pause_max?: number | null };
@@ -251,6 +262,14 @@ export default function TaskEdit() {
   const [defAsk, setDefAsk] = useState(false);
   const defaultsApplied = useRef(false);
   const group = groups.find((g) => g.id === f.group_id) ?? null;
+  // Gruptaki diğer görevler: "Süre ne zaman kazanılır" ve "Göreve başlama" seçimleri için
+  const [groupTaskList, setGroupTaskList] = useState<Array<{ id: string; title: string; mandatory: boolean }>>([]);
+  useEffect(() => {
+    if (!f.group_id) return setGroupTaskList([]);
+    supabase.from("tasks").select("id,title,mandatory,group_order,created_at").eq("group_id", f.group_id).eq("active", true).order("group_order").order("created_at")
+      .then(({ data }) => setGroupTaskList(((data ?? []) as Array<{ id: string; title: string; mandatory: boolean }>).filter((t) => t.id !== id)));
+  }, [f.group_id, id]);
+  const toggleIn = (k: "earn_links" | "start_after", v: string) => setF((x) => ({ ...x, [k]: x[k].includes(v) ? x[k].filter((y) => y !== v) : [...x[k], v] }));
   const activeDefaults = (group?.defaults ?? fam.family?.task_defaults) || null;
 
   useEffect(() => {
@@ -297,6 +316,7 @@ export default function TaskEdit() {
       proof_before_max: String(fam.family!.task_before_photo_max ?? 4),
       proof_after_min: String(fam.family!.task_after_photo_min ?? 1),
       proof_after_max: String(fam.family!.task_after_photo_max ?? 4),
+      record_camera: fam.family!.task_record_camera ?? "choose",
     }));
   }, [fam.family, isNew, params]);
 
@@ -341,6 +361,11 @@ export default function TaskEdit() {
             orbit_focus_profile_id: t.orbit_focus_profile_id ?? "",
             group_id: t.group_id ?? "",
             mandatory: t.mandatory ?? false,
+            earn_links: t.earn_links ?? [],
+            earn_mode: t.earn_mode ?? "all",
+            earn_min: t.earn_min ?? 1,
+            start_after: t.start_after ?? [],
+            start_time: t.start_time?.slice(0, 5) ?? "",
           });
       } else {
         const tid = params.get("template");
@@ -452,6 +477,11 @@ export default function TaskEdit() {
       record_pause_max: f.record_pause === "limit" ? Math.max(1, Number(f.record_pause_max) || 10) : null,
       phone_restriction: f.phone_restriction,
       orbit_focus_profile_id: f.orbit_focus_profile_id || null,
+      earn_links: f.group_id ? f.earn_links.filter((x) => groupTaskList.some((t) => t.id === x) || x === id) : [],
+      earn_mode: f.earn_mode,
+      earn_min: Math.max(1, f.earn_min),
+      start_after: f.group_id ? f.start_after.filter((x) => groupTaskList.some((t) => t.id === x)) : [],
+      start_time: f.start_time || null,
     };
     const prev = isNew ? null : (await supabase.from("tasks").select("group_id, group_order").eq("id", id).maybeSingle()).data as { group_id: string | null; group_order: number } | null;
     let groupOrder = prev?.group_order ?? 0;
@@ -647,10 +677,10 @@ export default function TaskEdit() {
           <input type="checkbox" checked={f.vocab_on} onChange={(e) => setF((x) => ({ ...x, vocab_on: e.target.checked }))} />
           Kelime kartı hedefi
         </label>
-        {f.vocab_on && <label className="field">
+        {f.vocab_on && <div className="field">
           <span>Bugün kaç kart çalışsın</span>
-          <input type="number" min={1} max={500} step={5} value={f.vocab_cards} onChange={(e) => set("vocab_cards", e.target.value)} />
-        </label>}
+          <MinuteStepper value={Number(f.vocab_cards) || 1} onChange={(v) => set("vocab_cards", String(v))} min={1} max={500} step={5} unit="kart" label="Kart sayısı" />
+        </div>}
       </div>
 
       {<div className="card">
@@ -749,7 +779,7 @@ export default function TaskEdit() {
             {f.record_pause === "limit" && (
               <div className="row gap-s" style={{ alignItems: "center" }}>
                 <span className="small">Toplam en fazla</span>
-                <input className="mini" type="number" min={1} value={f.record_pause_max} onChange={(e) => set("record_pause_max", e.target.value)} aria-label="Mola dakika" />
+                <MinuteStepper value={Number(f.record_pause_max) || 1} onChange={(v) => set("record_pause_max", String(v))} min={1} max={120} label="Mola dakika" />
                 <span className="small">dk (dolunca kayıt kendiliğinden devam eder)</span>
               </div>
             )}
@@ -822,6 +852,61 @@ export default function TaskEdit() {
         />
       </div>
 
+      {group && (
+        <div className="card">
+          <h2>Çalışma şekli <Info>Grup ayarları tablosundaki satırın aynısı. Bitene kadar telefon için yukarıdaki “Kısıtlamalar”a bak.</Info></h2>
+          <div className="grid2">
+            <label className="field">
+              <span>Süre ne zaman kazanılır</span>
+              <select value={f.earn_links.length ? "linked" : "self"} onChange={(e) => set("earn_links", e.target.value === "linked" ? (id && !isNew ? [id] : groupTaskList.slice(0, 1).map((t) => t.id)) : [])}>
+                <option value="self">Bu görev onaylanınca</option>
+                <option value="linked" disabled={!groupTaskList.length && isNew}>Seçtiğim görevler bitince</option>
+              </select>
+            </label>
+            <label className="field">
+              <span>Göreve başlama</span>
+              <select value={f.start_after.length ? "after" : "now"} onChange={(e) => set("start_after", e.target.value === "after" ? groupTaskList.slice(0, 1).map((t) => t.id) : [])}>
+                <option value="now">Hemen başlayabilir</option>
+                <option value="after" disabled={!groupTaskList.length}>Şu görevler bitince başlayabilir</option>
+              </select>
+            </label>
+          </div>
+          {f.earn_links.length > 0 && (
+            <div className="gt-box">
+              {!isNew && id && (
+                <label className="check"><input type="checkbox" checked={f.earn_links.includes(id)} onChange={() => toggleIn("earn_links", id)} /> {f.title || "Bu görev"} (kendisi)</label>
+              )}
+              {groupTaskList.map((t) => (
+                <label key={t.id} className="check"><input type="checkbox" checked={f.earn_links.includes(t.id)} onChange={() => toggleIn("earn_links", t.id)} /> {t.title}{t.mandatory ? " · zorunlu" : ""}</label>
+              ))}
+              <div className="row gap-s wrap" style={{ alignItems: "center" }}>
+                <select value={f.earn_mode} onChange={(e) => set("earn_mode", e.target.value as Form["earn_mode"])} aria-label="Kaç tanesi" style={{ width: "auto" }}>
+                  <option value="all">Hepsi bitince</option>
+                  <option value="any">Herhangi biri bitince</option>
+                  <option value="min">En az … tanesi</option>
+                </select>
+                {f.earn_mode === "min" && <MinuteStepper value={f.earn_min} onChange={(v) => set("earn_min", v)} min={1} max={Math.max(1, f.earn_links.length)} unit="görev" label="En az kaç görev" />}
+              </div>
+            </div>
+          )}
+          {f.start_after.length > 0 && (
+            <div className="gt-box">
+              {groupTaskList.map((t) => (
+                <label key={t.id} className="check"><input type="checkbox" checked={f.start_after.includes(t.id)} onChange={() => toggleIn("start_after", t.id)} /> {t.title}</label>
+              ))}
+            </div>
+          )}
+          <div className="field">
+            <span>Yapılma saati</span>
+            <div className="row gap-xs" style={{ alignItems: "center" }}>
+              <TimeField value={f.start_time} onChange={(v) => set("start_time", v)} label="Başlangıç" />
+              <span className="muted">–</span>
+              <TimeField value={f.due_time} onChange={(v) => set("due_time", v)} label="Bitiş" />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <h2>Ödül ve ceza <Info>İkisi birbirinden bağımsız: yalnız ödül, yalnız ceza ya da ikisi birden seçilebilir. Ceza, görev son saatine (ya da son gününe) kadar onaylanmazsa uygulanır.</Info></h2>
         <label className="check">
@@ -829,10 +914,10 @@ export default function TaskEdit() {
           ✅ Yaparsa süre kazansın
         </label>
         {f.reward_on && <div className="grid2">
-          <label className="field">
-            <span>Kazanacağı süre (dk)</span>
-            <input type="number" min={1} max={1440} step={1} value={f.reward_minutes} onChange={(e) => set("reward_minutes", e.target.value)} />
-          </label>
+          <div className="field">
+            <span>Kazanacağı süre</span>
+            <MinuteStepper value={Number(f.reward_minutes) || 0} onChange={(v) => set("reward_minutes", String(v))} min={1} max={1440} step={5} label="Kazanacağı süre" />
+          </div>
           <label className="field">
             <span>Nereye</span>
             <select value={f.reward_validity} onChange={(e) => set("reward_validity", e.target.value as RewardValidity)}>
@@ -846,10 +931,10 @@ export default function TaskEdit() {
           ❌ Yapmazsa süre düşülsün
         </label>
         {f.fail_on && <div className="grid2">
-          <label className="field">
-            <span>Düşülecek süre (dk)</span>
-            <input type="number" min={1} max={1440} step={1} value={f.fail_minutes} onChange={(e) => set("fail_minutes", e.target.value)} />
-          </label>
+          <div className="field">
+            <span>Düşülecek süre</span>
+            <MinuteStepper value={Number(f.fail_minutes) || 0} onChange={(v) => set("fail_minutes", String(v))} min={1} max={1440} step={5} label="Düşülecek süre" />
+          </div>
           <label className="field">
             <span>Nereden</span>
             <select value={f.fail_target} onChange={(e) => set("fail_target", e.target.value as Form["fail_target"])}>
@@ -883,12 +968,11 @@ export default function TaskEdit() {
         {f.reward_on && f.reward_validity === "today" && Number(f.reward_minutes) > 0 && !f.group_id && (
           <UseModePicker mode={f.use_mode} within={f.use_within_minutes} onMode={(m) => set("use_mode", m)} onWithin={(v) => set("use_within_minutes", v)} />
         )}
-        {f.reward_on && f.group_id && Number(f.reward_minutes) > 0 && <p className="muted tiny">Gruptaki görevin süresi grubun ayarlarına göre (ne zaman açılacağı ve nasıl kullanılacağı) verilir.</p>}
         {f.reward_on && f.reward_validity === "wallet" && (
-          <label className="field">
-            <span>Kaç gün içinde kullanılmalı (boş = süresiz)</span>
-            <input type="number" min={1} value={f.reward_expires_days} onChange={(e) => set("reward_expires_days", e.target.value)} />
-          </label>
+          <div className="field">
+            <span>Kaç gün içinde kullanılmalı (0 = süresiz)</span>
+            <MinuteStepper value={Number(f.reward_expires_days) || 0} onChange={(v) => set("reward_expires_days", v ? String(v) : "")} min={0} max={365} unit="gün" label="Kullanma günü" />
+          </div>
         )}
         <label className="field">
           <span>Başka ödül (isteğe bağlı)</span>
@@ -945,8 +1029,8 @@ function PhotoCountFields({ title, min, max, onMin, onMax }: { title: string; mi
     <div className="card soft">
       <b>{title}</b>
       <div className="grid2">
-        <label className="field"><span>En az</span><input type="number" min={1} max={4} value={min} onChange={(e) => onMin(e.target.value)} /></label>
-        <label className="field"><span>En fazla</span><input type="number" min={1} max={4} value={max} onChange={(e) => onMax(e.target.value)} /></label>
+        <div className="field"><span>En az</span><MinuteStepper value={Number(min) || 1} onChange={(v) => onMin(String(v))} min={1} max={4} unit="foto" label="En az" /></div>
+        <div className="field"><span>En fazla</span><MinuteStepper value={Number(max) || 1} onChange={(v) => onMax(String(v))} min={1} max={4} unit="foto" label="En fazla" /></div>
       </div>
     </div>
   );

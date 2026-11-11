@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 import { useFamily } from "../lib/family";
 import { supabase } from "../lib/supabase";
+import { MinuteStepper } from "./MinuteStepper";
+import { Info } from "./Info";
 
+/** Kanıt varsayılanları: fotoğraf (öncesi + sonrası) adedi, kamera kaydında hangi kamera */
 export default function TaskSettingsCard({ embedded = false }: { embedded?: boolean }) {
   const fam = useFamily();
   const [open, setOpen] = useState(false);
@@ -12,36 +15,52 @@ export default function TaskSettingsCard({ embedded = false }: { embedded?: bool
     afterMax: fam.family?.task_after_photo_max ?? 4,
   };
   const [v, setV] = useState(defaults);
-  useEffect(() => setV(defaults), [fam.family]);
+  const [saved, setSaved] = useState(false);
+  useEffect(() => setV(defaults), [fam.family]); // eslint-disable-line react-hooks/exhaustive-deps
   async function save() {
-    const next = {
-      beforeMin: Math.min(4, Math.max(1, Math.min(v.beforeMin || 1, v.beforeMax || 4))),
-      beforeMax: Math.min(4, Math.max(1, v.beforeMax || 4)),
-      afterMin: Math.min(4, Math.max(1, Math.min(v.afterMin || 1, v.afterMax || 4))),
-      afterMax: Math.min(4, Math.max(1, v.afterMax || 4)),
-    };
-    next.beforeMax = Math.max(next.beforeMax, next.beforeMin);
-    next.afterMax = Math.max(next.afterMax, next.afterMin);
+    const next = { ...v, beforeMax: Math.max(v.beforeMax, v.beforeMin), afterMax: Math.max(v.afterMax, v.afterMin) };
     setV(next);
     await supabase.from("families").update({ task_before_photo_min: next.beforeMin, task_before_photo_max: next.beforeMax, task_after_photo_min: next.afterMin, task_after_photo_max: next.afterMax }).eq("id", fam.familyId);
     await fam.reload();
+    setSaved(true);
   }
-  const content = <div className="stack">
-        <div>
-          <h3>Görev kanıtları</h3>
-          <select value={fam.family?.proof_retention_days ?? 0} onChange={(e) => supabase.from("families").update({ proof_retention_days: Number(e.target.value) }).eq("id", fam.familyId).then(() => fam.reload())}>
-            <option value={0}>Fotoğraflar hemen silinsin</option><option value={7}>7 gün saklansın</option><option value={30}>30 gün saklansın</option>
-          </select>
+  const cam = fam.family?.task_record_camera ?? "choose";
+  const setCam = (c: "back" | "front" | "choose") => supabase.from("families").update({ task_record_camera: c }).eq("id", fam.familyId).then(() => fam.reload());
+  const row = (label: string, value: number, k: keyof typeof v) => (
+    <div className="gt-stepper">
+      <span className="small">{label}</span>
+      <MinuteStepper value={value} onChange={(n) => { setSaved(false); setV({ ...v, [k]: n }); }} min={1} max={4} unit="foto" label={label} />
+    </div>
+  );
+  const content = (
+    <div className="stack">
+      <div>
+        <h3>Görev kanıtları</h3>
+        <select value={fam.family?.proof_retention_days ?? 0} onChange={(e) => supabase.from("families").update({ proof_retention_days: Number(e.target.value) }).eq("id", fam.familyId).then(() => fam.reload())}>
+          <option value={0}>Fotoğraflar hemen silinsin</option><option value={7}>7 gün saklansın</option><option value={30}>30 gün saklansın</option>
+        </select>
+      </div>
+      <div className="stack-s">
+        <h3>📷 Fotoğraf (öncesi + sonrası) <Info>Görevde “Fotoğraf” seçilince çocuk başlamadan önce ve bitirince bu kadar fotoğraf çeker.</Info></h3>
+        {row("Öncesi en az", v.beforeMin, "beforeMin")}
+        {row("Öncesi en fazla", v.beforeMax, "beforeMax")}
+        {row("Sonrası en az", v.afterMin, "afterMin")}
+        {row("Sonrası en fazla", v.afterMax, "afterMax")}
+        <div className="row gap-s" style={{ alignItems: "center" }}>
+          <button className="btn small" onClick={save}>Kaydet</button>
+          {saved && <span className="good-text small">Kaydedildi</span>}
         </div>
-        <div>
-          <h3>Görev fotoğraf varsayılanları</h3>
-          <div className="grid2">
-            <label className="field"><span>Başlangıç: en az / en fazla</span><div className="row gap-xs"><input type="number" min={1} max={4} value={v.beforeMin} onChange={(e) => setV({ ...v, beforeMin: Number(e.target.value) })} /><input type="number" min={1} max={4} value={v.beforeMax} onChange={(e) => setV({ ...v, beforeMax: Number(e.target.value) })} /></div></label>
-            <label className="field"><span>Tamamlanma: en az / en fazla</span><div className="row gap-xs"><input type="number" min={1} max={4} value={v.afterMin} onChange={(e) => setV({ ...v, afterMin: Number(e.target.value) })} /><input type="number" min={1} max={4} value={v.afterMax} onChange={(e) => setV({ ...v, afterMax: Number(e.target.value) })} /></div></label>
-          </div>
-          <button className="btn small" onClick={save}>Varsayılanı kaydet</button>
+      </div>
+      <div className="stack-s">
+        <h3>🎥 Kamera kaydı <Info>Çocuk seçsin: kayda başlarken ön ya da arka kamerayı çocuk seçer. Yeni görevler bu ayarla gelir; görevin kendisinde değiştirilebilir.</Info></h3>
+        <div className="chips">
+          {([["choose", "Çocuk seçsin"], ["back", "Arka"], ["front", "Ön"]] as const).map(([k, l]) => (
+            <button key={k} type="button" className={`chip-btn ${cam === k ? "on" : ""}`} onClick={() => setCam(k)}>{l}</button>
+          ))}
         </div>
-      </div>;
+      </div>
+    </div>
+  );
   if (embedded) return content;
   return (
     <section className="card">

@@ -105,6 +105,7 @@ export type FamilySettings = {
   pin_unlock_minutes: number;
   parent_pin_hash: string | null;
   task_before_photo_min: number;
+  task_record_camera?: "back" | "front" | "choose";
   task_before_photo_max: number;
   task_after_photo_min: number;
   task_after_photo_max: number;
@@ -181,6 +182,8 @@ export type TaskGroup = {
   defaults: TaskDefaults | null;
   sort: number;
   created_at: string;
+  /** Ayarlar görev başına (grup ayarları tablosu) */
+  per_task?: boolean;
 };
 
 export type TaskGroupRun = { group_id: string; child_id: string; day: string; status: "open" | "met" | "failed"; grant_id: string | null; settled_at: string | null };
@@ -445,6 +448,14 @@ export type Task = TaskTemplate & {
   orbit_focus_profile_id: string | null;
   group_id: string | null;
   group_order: number;
+  /** Süre ne zaman kazanılır: boş = görev onaylanınca; dolu = bu görevler bitince (hepsi / herhangi biri / en az N) */
+  earn_links?: string[];
+  earn_mode?: "all" | "any" | "min";
+  earn_min?: number;
+  /** Göreve başlama: bu görevler onaylanınca başlayabilir */
+  start_after?: string[];
+  /** Yapılma saati başlangıcı (bitiş due_time) */
+  start_time?: string | null;
 };
 
 export type RunStatus = "open" | "started" | "submitted" | "approved" | "rejected" | "claimed" | "expired";

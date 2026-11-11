@@ -220,6 +220,7 @@ function TaskTable({ group, groups, list, allTasks, onChange, onEdit }: { group:
     const title = prompt(mandatory ? "Zorunlu görevin adı" : "Seçmeli görevin adı")?.trim();
     if (!title) return;
     setErr("");
+    if (!fam.familyId) return;
     const order = Math.max(0, ...list.map((t) => t.group_order)) + 1;
     const row = newGroupTask(group, fam.family, fam.familyId, title, mandatory, order);
     if (ordered && list.length) row.start_after = [list[list.length - 1].id];

@@ -210,6 +210,11 @@ function ChildCard({ child }: { child: Child }) {
     return `${minutesText(minutes)} geçici açıldı · sonra yine ${reason}`;
   }
   async function resumeLock() {
+    if (pmActive && !tempOpen) {
+      await stopParentMode(child.id);
+      setPmUntil(null);
+      return "Ebeveyn modu kapandı · kilit kaldığı yerden sürüyor";
+    }
     if (!tempOpen) return "";
     const { error } = await supabase.from("time_grants").update({ minutes: 0, settled_at: new Date().toISOString() }).eq("id", tempOpen.id);
     if (error) throw error;
@@ -313,6 +318,7 @@ function ChildCard({ child }: { child: Child }) {
     }
     return null;
   })();
+  const pmActive = !!pmUntil && pmUntil.getTime() > Date.now();
   /** Ekstra / görev süresi sürerken halkada günlük kalan + bu süre görünür (telefon günlük kalanı ayrı bildirir) */
   const extraLive = !!extraNow && !kiosk && !waiting;
   const shownLeft = (st?.remaining_minutes ?? 0) >= 1440 ? st!.remaining_minutes : (st?.remaining_minutes ?? 0) + (extraLive ? extraNow!.left : 0);
@@ -424,7 +430,7 @@ function ChildCard({ child }: { child: Child }) {
                 setLockOpen(false);
                 setUnlockOpen(true);
               } else {
-                if (!lockOpen && tempOpen) setLockKind("resume");
+                if (!lockOpen && (tempOpen || pmActive)) setLockKind("resume");
                 else if (!lockOpen && lockKind === "resume") setLockKind("kiosk");
                 setLockOpen(!lockOpen);
               }
@@ -499,7 +505,7 @@ function ChildCard({ child }: { child: Child }) {
                 <span className="pop-label">NE OLSUN</span>
                 <div className="chips">
                   {[
-                    ...(tempOpen ? [{ id: "resume", name: `🔁 Kaldığı yerden devam et: ${tempOpen.reason}` }] : []),
+                    ...(tempOpen ? [{ id: "resume", name: `🔁 Kaldığı yerden devam et: ${tempOpen.reason}` }] : pmActive ? [{ id: "resume", name: "🔁 Kaldığı yerden devam et (ebeveyn modunu kapat)" }] : []),
                     { id: "kiosk", name: "Kilitle" },
                     { id: "limit", name: "Sınırla" },
                     ...fam.modes.filter((m) => !m.builtin).map((m) => ({ id: m.id, name: m.name.replace(/ zamanı$/i, "") })),

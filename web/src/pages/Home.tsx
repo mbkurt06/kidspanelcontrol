@@ -319,9 +319,9 @@ function ChildCard({ child }: { child: Child }) {
     return null;
   })();
   const pmActive = !!pmUntil && pmUntil.getTime() > Date.now();
-  /** Ekstra / görev süresi sürerken halkada günlük kalan + bu süre görünür (telefon günlük kalanı ayrı bildirir) */
+  /** Telefonun bildirdiği kalan, verilen süreyi zaten içerir; kilitliyken (kalan 0) halkada verilen süre görünür */
   const extraLive = !!extraNow && !kiosk && !waiting;
-  const shownLeft = (st?.remaining_minutes ?? 0) >= 1440 ? st!.remaining_minutes : (st?.remaining_minutes ?? 0) + (extraLive ? extraNow!.left : 0);
+  const shownLeft = (st?.remaining_minutes ?? 0) >= 1440 ? st!.remaining_minutes : Math.max(st?.remaining_minutes ?? 0, extraLive ? extraNow!.left : 0);
   const ringColor = kiosk ? "var(--bad)" : extraLive ? child.color : limited || closed ? "var(--warn)" : child.color;
   const ringInner = !st ? (
     <b>—</b>

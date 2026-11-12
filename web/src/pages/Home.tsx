@@ -319,9 +319,9 @@ function ChildCard({ child }: { child: Child }) {
     return null;
   })();
   const pmActive = !!pmUntil && pmUntil.getTime() > Date.now();
-  /** Telefonun bildirdiği kalan, verilen süreyi zaten içerir; kilitliyken (kalan 0) halkada verilen süre görünür */
+  /** Halkada tek sayı: telefonun bildirdiği, o an kullanabileceği toplam süre (görev/ekstra süreler dahil) */
   const extraLive = !!extraNow && !kiosk && !waiting;
-  const shownLeft = (st?.remaining_minutes ?? 0) >= 1440 ? st!.remaining_minutes : Math.max(st?.remaining_minutes ?? 0, extraLive ? extraNow!.left : 0);
+  const shownLeft = st?.remaining_minutes ?? 0;
   const ringColor = kiosk ? "var(--bad)" : extraLive ? child.color : limited || closed ? "var(--warn)" : child.color;
   const ringInner = !st ? (
     <b>—</b>
@@ -339,10 +339,8 @@ function ChildCard({ child }: { child: Child }) {
 
   const stateLine = !st
     ? null
-    : extraNow && !waiting && !kiosk
-      ? tempOpen
-        ? { cls: "good", text: `🔓 Geçici açık · ${minutesText(tempOpen.left)} kaldı · sonra: 🔒 ${tempOpen.reason}` }
-        : { cls: "good", text: `${extraNow.task ? "⭐ Görev süresi" : "🎁 Ekstra süre"} · ${minutesText(extraNow.left)} kaldı${extraNow.end ? ` · ${extraNow.end}'e kadar` : ""}` }
+    : tempOpen && !waiting && !kiosk
+      ? { cls: "good", text: `🔓 Geçici açık · ${minutesText(tempOpen.left)} kaldı · sonra: 🔒 ${tempOpen.reason}` }
       : kiosk
       ? { cls: "bad", text: waiting && !realKiosk ? "Kilitli · telefona iletiliyor…" : `Kilitli · ${(st.lock_reason ?? "").replace("🔒", "").trim() || "sen kaldırana kadar"}` }
       : limited

@@ -65,6 +65,9 @@ data class LiveState(
     val taskLocks: List<Pair<String, String?>> = emptyList(),
     /** Hazır (verilmiş, kullanılmamış) süre, dk */
     val readyMinutes: Int = 0,
+    /** Süre cüzdanı (çocuk kullanır) ve süre kasası (ebeveyn açar) bakiyesi, dk */
+    val walletMinutes: Int = 0,
+    val vaultMinutes: Int = 0,
 )
 
 object Live {
@@ -500,7 +503,10 @@ class OrbitService : Service() {
         val nowZ = java.time.ZonedDateTime.now(engine.zone())
         val locks = runCatching { engine.liveTaskRestrictions(nowZ.toLocalDate(), nowZ.toLocalTime()).map { it.title to it.groupId } }.getOrDefault(emptyList())
         val ready = runCatching { engine.readyMinutes(usage, nowZ.toLocalDate(), nowZ.toLocalTime()) }.getOrDefault(0)
-        Live.set(LiveState(snap, usage, allowed, lockReason, online, Store.lastSync, kiosk, pinUntil, kiosk != null && captureOn, locks, ready))
+        val today = nowZ.toLocalDate()
+        val walletBal = rules.grants.filter { !it.vault && it.validOn == null && it.activatedOn == null && it.window == null && (it.expiresOn == null || !it.expiresOn.isBefore(today)) }.sumOf { it.minutes }
+        val vaultBal = rules.grants.filter { it.vault }.sumOf { it.minutes }
+        Live.set(LiveState(snap, usage, allowed, lockReason, online, Store.lastSync, kiosk, pinUntil, kiosk != null && captureOn, locks, ready, walletBal.coerceAtLeast(0), vaultBal.coerceAtLeast(0)))
         updateNotification(snap)
 
         // 7) Durum gönder

@@ -660,8 +660,8 @@ private fun SummaryDialog(tasks: List<TaskItem>, onClose: () -> Unit) {
                 Tile("⏳ Bekleyen", wait, Color(0xFF3A2F12), Modifier.weight(1f))
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Tile("👛 Cüzdan", wallet, Color(0xFF1D2550), Modifier.weight(1f))
-                Tile("🏦 Kasa", vault, Color(0xFF2A2145), Modifier.weight(1f))
+                Tile("👛 Cüzdanım", live.walletMinutes, Color(0xFF1D2550), Modifier.weight(1f), if (wallet > 0) "bugün +$wallet" else null)
+                Tile("🏦 Süre kasası", live.vaultMinutes, Color(0xFF2A2145), Modifier.weight(1f), if (vault > 0) "bugün +$vault" else null)
             }
             for (t in order) {
                 val isUnlocker = t.title in unlockers && t.open
@@ -742,9 +742,10 @@ private fun md(s: String) = androidx.compose.ui.text.buildAnnotatedString {
 }
 
 @Composable
-private fun Tile(label: String, minutes: Int, bg: Color, modifier: Modifier) {
+private fun Tile(label: String, minutes: Int, bg: Color, modifier: Modifier, sub: String? = null) {
     Column(modifier.clip(RoundedCornerShape(12.dp)).background(bg).padding(12.dp)) {
         Text(label, color = C.text.copy(alpha = 0.85f), fontSize = 13.sp)
         Text("$minutes dk", color = C.text, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        sub?.let { Text(it, color = C.text.copy(alpha = 0.7f), fontSize = 12.sp) }
     }
 }

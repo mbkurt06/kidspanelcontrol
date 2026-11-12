@@ -299,7 +299,7 @@ function ChildCard({ child }: { child: Child }) {
     for (const g of extras) {
       const a = mins(g.window_start), b = g.window_end.startsWith("23:59") ? 1440 : mins(g.window_end);
       if (minute < a || minute >= b) continue;
-      const usedMin = Math.floor((st?.grant_used?.[g.id] ?? 0) / 60);
+      const usedMin = st?.grant_used?.[g.id] ?? 0; // telefon dakika olarak bildirir
       const left = g.use_mode === "clock" ? b - minute : Math.min(g.minutes - usedMin, b - minute);
       if (left <= 0) continue;
       total += left;

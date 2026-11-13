@@ -280,7 +280,7 @@ export default function Tasks() {
     <Meta
       repeat={g.recurrence !== "once"}
       repeatTitle={`Tekrarlı · ${repeatText(g)}`}
-      reward={groupPlusMinus(earned != null ? earned : pr.all, groupMinus(g, runs))}
+      reward={earned != null && earned < pr.all ? `+${earned}/${pr.all}${groupMinus(g, runs) ? ` · −${groupMinus(g, runs)}` : ""} dk` : groupPlusMinus(earned ?? pr.all, groupMinus(g, runs))}
       status={status}
       edit={<EditIcon label={`${g.name} grubunu düzenle`} onClick={(e) => { e.preventDefault(); e.stopPropagation(); select(g.id); }} />}
       arrow={open == null ? null : <span className={`collapse-arrow${open ? " open" : ""}`} aria-hidden="true" />}

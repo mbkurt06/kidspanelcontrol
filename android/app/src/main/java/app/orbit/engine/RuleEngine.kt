@@ -351,6 +351,9 @@ class RuleEngine(private val rules: Rules) {
         rules.sections.filter { it.profileId == profileFor(day).id }.sortedWith(compareBy({ it.start }, { it.order }))
 
     /** Bugün için saat aralıklı ekstra süreler. */
+    /** Panelden "Geçici aç": kilidi aralık boyunca kaldırır, süre olarak eklenmez */
+    fun isTempOpen(g: Grant) = g.source == "manual" && g.note?.startsWith("Geçici açma") == true
+
     fun dayWindows(day: LocalDate): List<Grant> = rules.grants.filter { !it.vault && it.validOn == day && it.window != null }
 
     fun currentSection(day: LocalDate, t: LocalTime): SectionNow? = windowSection(day, t) ?: regularSection(day, t)
@@ -391,15 +394,20 @@ class RuleEngine(private val rules: Rules) {
         val poolMin = dayGrants.filter { it.activatedOn == day || it.sectionId == null || it.sectionId !in todayIds }.sumOf { it.minutes } + walletDebt + adjust
         // Saat aralıklı süreler: açık bölümdeyken o anki kalana eklenir; aralık bitince kullanılmayan kısım düşer
         val virtualWin = cur?.section?.id?.startsWith("grant:") == true
-        val overlay = if (virtualWin || cur == null || !timedPossible(cur.section)) emptyList() else activeWindows(day, t)
+        val overlay = if (virtualWin || cur == null || !timedPossible(cur.section)) emptyList() else activeWindows(day, t).filter { !isTempOpen(it) }
         var winCredit = 0L
-        for (g in dayWindows(day)) {
+        for (g in dayWindows(day).filter { !isTempOpen(it) }) {
             val sv = bucket(usage, "s:grant:${g.id}@$day")
             val w = bucket(usage, "w:${g.id}")
             val avail = (g.minutes * 60L - sv).coerceAtLeast(0)
             winCredit += if (g in overlay) avail else minOf(w, avail)
         }
-        val allExtra = dayGrants.sumOf { it.minutes } + walletDebt + adjust + dayWindows(day).sumOf { it.minutes }
+        val allExtra = dayGrants.sumOf { it.minutes } + walletDebt + adjust + dayWindows(day).filter { !isTempOpen(it) }.sumOf { it.minutes }
+        // Geçici açma: süre eklemez; çocuğun kendi süresi bitse bile aralık sonuna kadar açık tutar
+        val tempLeft = activeWindows(day, t).filter { isTempOpen(it) }.maxOfOrNull { w ->
+            val end = if (w.window!!.end == LocalTime.MIDNIGHT || w.window.end <= w.window.start) 86_400L else w.window.end.toSecondOfDay().toLong()
+            (end - t.toSecondOfDay()).coerceAtLeast(0)
+        } ?: 0L
 
         // Bölüm zinciri: sırayla etkin süre, devreden, havuzdan taşan
         var carry = 0L
@@ -421,7 +429,7 @@ class RuleEngine(private val rules: Rules) {
         }
         if (virtualWin) {
             // Kapalı saatte verilen süreler üst üste eklenir: o an geçerli bütün aralıkların toplamı
-            val wins = activeWindows(day, t)
+            val wins = activeWindows(day, t).filter { !isTempOpen(it) }
             curEff = wins.sumOf { it.minutes } * 60L
             curLeft = (curEff - wins.sumOf { bucket(usage, "s:grant:${it.id}@$day") + bucket(usage, "w:${it.id}") }).coerceAtLeast(0)
         } else if (cur != null && cur.section.id !in todayIds && cur.section.budgetMinutes != null) {
@@ -444,6 +452,7 @@ class RuleEngine(private val rules: Rules) {
         val sectionPart = if (!timedPossible) 0L else (curLeft ?: UNLIMITED_SECONDS)
         var remaining = if (openSection) UNLIMITED_SECONDS else if (!timedPossible) 0L else (sectionPart + poolLeft).coerceAtMost(UNLIMITED_SECONDS)
         if (capLeft != null) remaining = minOf(remaining, capLeft)
+        if (tempLeft > 0 && remaining < tempLeft) remaining = tempLeft
 
         val allowance = when {
             cur != null && curLeft != null -> ((curEff / 60) + poolMin).toInt()

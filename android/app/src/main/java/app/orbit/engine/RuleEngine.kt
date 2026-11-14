@@ -432,7 +432,7 @@ class RuleEngine(private val rules: Rules) {
             val wins = activeWindows(day, t).filter { !isTempOpen(it) }
             curEff = wins.sumOf { it.minutes } * 60L
             curLeft = (curEff - wins.sumOf { bucket(usage, "s:grant:${it.id}@$day") + bucket(usage, "w:${it.id}") }).coerceAtLeast(0)
-        } else if (cur != null && cur.section.id !in todayIds && cur.section.budgetMinutes != null) {
+        } else if (cur != null && (cur.section.id !in todayIds || cur.startDay != day) && cur.section.budgetMinutes != null) {
             // Dünden taşan gece bölümü: kendi süresi (devretme yok)
             val eff = cur.section.budgetMinutes * 60L
             val used = bucket(usage, "s:${cur.key}")

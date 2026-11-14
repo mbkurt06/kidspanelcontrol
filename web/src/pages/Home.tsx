@@ -98,6 +98,8 @@ function ChildCard({ child }: { child: Child }) {
   // Kilidi aç: geçici aç (ebeveyn modu, dakika seçilir) ya da tamamen kaldır (görev kilidi değilse)
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [parentMin, setParentMin] = useState(5);
+  const [extOpen, setExtOpen] = useState(false);
+  const [extMin, setExtMin] = useState(30);
   // Açık ebeveyn modu (geçici açma): bitiş saati ve erken kapatma
   const [pmUntil, setPmUntil] = useState<Date | null>(null);
   const loadPm = async () => setPmUntil(await parentModeUntil(child.id));
@@ -209,6 +211,16 @@ function ChildCard({ child }: { child: Child }) {
     await loadExtras();
     return `${minutesText(minutes)} geçici açıldı · sonra yine ${reason}`;
   }
+  /** Süren geçici açmanın bitişini ileri alır (yeni açma eklemez) */
+  async function extendTemp(add: number) {
+    if (!tempOpen) return "Geçici açma bitmiş";
+    const end = Math.min(tempOpen.end + add, 1439);
+    const { error } = await supabase.from("time_grants").update({ window_end: hm(end), minutes: Math.max(1, end - tempOpen.start) }).eq("id", tempOpen.id);
+    if (error) throw error;
+    await sendCommand(child.id, "resync", {});
+    await loadExtras();
+    return `Geçici açma ${hm(end)}'e kadar uzatıldı`;
+  }
   async function resumeLock() {
     if (pmActive && !tempOpen) {
       await stopParentMode(child.id);
@@ -312,12 +324,13 @@ function ChildCard({ child }: { child: Child }) {
   /** Geçici açma sürüyor mu: kalan dakika ve kilidin sebebi */
   const tempOpen = (() => {
     const { minute } = nowBerlin();
+    let best: { id: string; left: number; reason: string; start: number; end: number } | null = null;
     for (const g of extras) {
       if (g.source !== "manual" || !g.note?.startsWith("Geçici açma")) continue;
       const a = mins(g.window_start), b = g.window_end.startsWith("23:59") ? 1440 : mins(g.window_end);
-      if (minute >= a && minute < b) return { id: g.id, left: b - minute, reason: g.note.replace(/^Geçici açma · /, "") };
+      if (minute >= a && minute < b && (!best || b > best.end)) best = { id: g.id, left: b - minute, reason: g.note.replace(/^Geçici açma · /, ""), start: a, end: b };
     }
-    return null;
+    return best;
   })();
   const pmActive = !!pmUntil && pmUntil.getTime() > Date.now();
   /** Halkada tek sayı: telefonun bildirdiği, o an kullanabileceği toplam süre (görev/ekstra süreler dahil) */
@@ -389,6 +402,10 @@ function ChildCard({ child }: { child: Child }) {
                 <span className={`state-line ${stateLine.cls}`}>
                   <span className="state-ico" aria-hidden>🕘</span>
                   {stateLine.text}
+                  {tempOpen && !kiosk && (
+                    <button type="button" className="pill-btn small" style={{ marginLeft: 6 }} disabled={!!busy}
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setExtMin(30); setExtOpen(true); }}>＋ Uzat</button>
+                  )}
                 </span>
               )}
               {kiosk && st.remaining_minutes > 0 && st.remaining_minutes < 1440 && <span className="muted small">Kalan süresi {minutesText(st.remaining_minutes)} · kilit kalkınca kullanır</span>}
@@ -446,6 +463,11 @@ function ChildCard({ child }: { child: Child }) {
                 <p className="small" style={{ margin: 0 }}>
                   🔒 <b>Neden kilitli:</b> {taskLock ? `Görev: ${taskLock}` : (st?.lock_reason ?? "").replace("🔒", "").trim() || "Telefon kilitli"}
                 </p>
+                {tempOpen && (
+                  <button className="pill-btn" onClick={() => { setUnlockOpen(false); setExtMin(30); setExtOpen(true); }}>
+                    🔓 Geçici açık · {hm(Math.min(tempOpen.end, 1439))}'e kadar · ＋ Uzat
+                  </button>
+                )}
                 <span className="pop-label">⏱ GEÇİCİ AÇ <Info>Telefon bu süre boyunca normal açık saat gibi çalışır. Süre dolunca (telefon kapalı ya da internetsiz olsa da) aynı sebepten yine kilitlenir. Beklemeden kilitlemek için “Kilitle → Kaldığı yerden devam et”.</Info></span>
                 <div className="row gap-s" style={{ alignItems: "center" }}>
                   <MinuteStepper value={parentMin} onChange={setParentMin} min={1} max={240} step={1} label="Geçici açma süresi" />
@@ -491,6 +513,29 @@ function ChildCard({ child }: { child: Child }) {
                       Kilidi kaldır
                     </button>
                   )}
+                </div>
+              </div>
+            </>,
+            document.body
+          )}
+          {extOpen && tempOpen && createPortal(
+            <>
+              <div className="pop-backdrop sheet-like" onClick={() => setExtOpen(false)} />
+              <div className="lock-pop sheet-pop" role="dialog" aria-label="Geçici açmayı uzat">
+                <b className="sheet-pop-title">{child.name} · Geçici açmayı uzat</b>
+                <p className="small" style={{ margin: 0 }}>Şu an: {hm(Math.min(tempOpen.end, 1439))}'e kadar</p>
+                <div className="chips">
+                  {[15, 30, 60, 120].map((d) => (
+                    <button key={d} className={`chip-btn ${extMin === d ? "on" : ""}`} onClick={() => setExtMin(d)}>+{d >= 60 ? `${d / 60} sa` : d}</button>
+                  ))}
+                </div>
+                <MinuteStepper value={extMin} onChange={setExtMin} min={1} max={600} step={1} label="Uzatma" />
+                <p className="muted small" style={{ margin: 0 }}>
+                  → Yeni bitiş: {hm(Math.min(tempOpen.end + extMin, 1439))}{tempOpen.end + extMin > 1439 ? " (gün sonu)" : ""} · sonra yine 🔒 {tempOpen.reason}
+                </p>
+                <div className="pop-actions">
+                  <button className="pill-btn ghost" onClick={() => setExtOpen(false)}>Vazgeç</button>
+                  <button className="pill-btn primary" disabled={!!busy} onClick={() => { setExtOpen(false); run("unlock", () => extendTemp(extMin), (r) => String(r)); }}>Uzat</button>
                 </div>
               </div>
             </>,

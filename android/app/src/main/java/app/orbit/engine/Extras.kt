@@ -44,7 +44,10 @@ object Extras {
         val last = rules.commands
             .filter { !it.cancelled && (it.type == CommandType.KIOSK_START || it.type == CommandType.KIOSK_END) }
             .maxByOrNull { it.createdAt }
-        if (last?.type == CommandType.KIOSK_START && (last.untilAt == null || last.untilAt > nowMs)) {
+        // Ebeveynin kilitten SONRA verdiği süre / "Geçici aç" o aralık boyunca elle kilidi kaldırır; aralık bitince kilit kaldığı yerden sürer
+        val openedAfter = last?.type == CommandType.KIOSK_START &&
+            engine.activeWindows(day, t).any { it.source == "manual" && it.createdAtMs > last.createdAt }
+        if (last?.type == CommandType.KIOSK_START && (last.untilAt == null || last.untilAt > nowMs) && !openedAfter) {
             return KioskNow("manual", "Tam kilit", last.message ?: def.message, last.screens ?: def.screens, last.untilAt)
         }
         // Görevin Tam kilidi: görev ödülü / eski süreler kaldırmaz; sadece görevden sonra ebeveynin verdiği süre (taskRestrictionNow)

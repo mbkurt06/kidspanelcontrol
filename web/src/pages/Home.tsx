@@ -216,7 +216,8 @@ function ChildCard({ child }: { child: Child }) {
       return "Ebeveyn modu kapandı · kilit kaldığı yerden sürüyor";
     }
     if (!tempOpen) return "";
-    const { error } = await supabase.from("time_grants").update({ minutes: 0, settled_at: new Date().toISOString() }).eq("id", tempOpen.id);
+    const { error } = await supabase.from("time_grants").update({ minutes: 0, settled_at: new Date().toISOString() })
+      .eq("child_id", child.id).eq("source", "manual").eq("valid_on", todayISO()).like("note", "Geçici açma%").is("settled_at", null);
     if (error) throw error;
     await sendCommand(child.id, "resync", {});
     await loadExtras();

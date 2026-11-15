@@ -185,10 +185,10 @@ class RuleEngineTest {
     }
 
     @Test
-    fun negativeWalletDebtReducesAllowanceWithoutBecomingSpendable() {
+    fun walletDebtOnlyAffectsWalletNotDailyTime() {
         val e = RuleEngine(rules(grants = listOf(Grant("debt", -15, null, null, null, "görev cezası"))))
         val s = e.snapshot(at(15), DayUsage(day))
-        assertEquals(75, s.allowanceMinutes)
+        assertEquals(90, s.allowanceMinutes)
         assertTrue(s.walletGrants.isEmpty())
     }
 

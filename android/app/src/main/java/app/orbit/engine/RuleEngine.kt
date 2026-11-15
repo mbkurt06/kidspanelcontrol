@@ -354,6 +354,13 @@ class RuleEngine(private val rules: Rules) {
         rules.sections.filter { it.profileId == profileFor(day).id }.sortedWith(compareBy({ it.start }, { it.order }))
 
     /** Bugün için saat aralıklı ekstra süreler. */
+    /** Aralığın bitişine kalan saniye */
+    private fun secsToEnd(g: Grant, t: LocalTime): Long {
+        val w = g.window ?: return UNLIMITED_SECONDS
+        val end = if (w.end == LocalTime.of(23, 59) || w.end <= w.start) 86_400L else w.end.toSecondOfDay().toLong()
+        return (end - t.toSecondOfDay()).coerceAtLeast(0)
+    }
+
     /** Panelden "Geçici aç": kilidi aralık boyunca kaldırır, süre olarak eklenmez */
     fun isTempOpen(g: Grant) = g.source == "manual" && g.note?.startsWith("Geçici açma") == true
 
@@ -404,7 +411,7 @@ class RuleEngine(private val rules: Rules) {
             val sv = bucket(usage, "s:grant:${g.id}@$day")
             val w = bucket(usage, "w:${g.id}")
             val avail = (g.minutes * 60L - sv).coerceAtLeast(0)
-            winCredit += if (g in overlay) avail else minOf(w, avail)
+            winCredit += if (g in overlay) minOf(avail, secsToEnd(g, t) + w) else minOf(w, avail)
         }
         val allExtra = dayGrants.sumOf { it.minutes } + walletDebt + adjust + dayWindows(day).filter { !isTempOpen(it) }.sumOf { it.minutes }
         // Geçici açma: süre eklemez; çocuğun kendi süresi bitse bile aralık sonuna kadar açık tutar
@@ -435,7 +442,8 @@ class RuleEngine(private val rules: Rules) {
             // Kapalı saatte verilen süreler üst üste eklenir: o an geçerli bütün aralıkların toplamı
             val wins = activeWindows(day, t).filter { !isTempOpen(it) }
             curEff = wins.sumOf { it.minutes } * 60L
-            curLeft = (curEff - wins.sumOf { bucket(usage, "s:grant:${it.id}@$day") + bucket(usage, "w:${it.id}") }).coerceAtLeast(0)
+            // Her aralık en fazla bitiş saatine kadar kullanılabilir (saat gibi akan süre kullanılmasa da biter)
+            curLeft = wins.sumOf { g -> minOf((g.minutes * 60L - bucket(usage, "s:grant:${g.id}@$day") - bucket(usage, "w:${g.id}")).coerceAtLeast(0), secsToEnd(g, t)) }
         } else if (cur != null && (cur.section.id !in todayIds || cur.startDay != day) && cur.section.budgetMinutes != null) {
             // Dünden taşan gece bölümü: kendi süresi (devretme yok)
             val eff = cur.section.budgetMinutes * 60L

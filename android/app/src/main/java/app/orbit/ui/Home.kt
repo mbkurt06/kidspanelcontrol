@@ -526,7 +526,9 @@ private fun WalletScreen() {
     val vaultMin = rules.grants.filter { it.vault }.sumOf { it.minutes }
     val today = rules.grants.filter { !it.vault && (it.validOn == s.day || it.activatedOn == s.day) }
 
-    val walletTotal = s.walletGrants.sumOf { it.minutes }
+    // Cezadan gelen cüzdan borcu bakiyeden düşer (kullanırken önce borç ödenir)
+    val walletDebt = -rules.grants.filter { !it.vault && it.minutes < 0 && it.validOn == null && it.activatedOn == null }.sumOf { it.minutes }
+    val walletTotal = (s.walletGrants.sumOf { it.minutes } - walletDebt).coerceAtLeast(0)
     val usedToday = rules.grants.filter { it.activatedOn == s.day }.sumOf { it.minutes }
     val limitLeft = rules.walletDailyMax?.let { (it - usedToday).coerceAtLeast(0) }
     val maxUse = minOf(walletTotal, limitLeft ?: walletTotal)
@@ -543,6 +545,7 @@ private fun WalletScreen() {
             Muted("Cüzdanında süre yok. Görevlerini yaparak süre kazanabilirsin.")
         } else {
             Text(minutesText(walletTotal.toLong()), color = C.text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+            if (walletDebt > 0) Muted("Ceza borcu ${minutesText(walletDebt.toLong())} düşüldü")
             for (g in s.walletGrants) {
                 Muted("${minutesText(g.minutes.toLong())}" + listOfNotNull(g.note, g.expiresOn?.let { "son gün $it" }).joinToString(" · ", prefix = " · ").removeSuffix(" · "), 12)
             }

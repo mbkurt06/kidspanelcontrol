@@ -163,7 +163,8 @@ class RuleEngine(private val rules: Rules) {
 
     fun extraMinutes(day: LocalDate, dayStartMs: Long, dayEndMs: Long): Int {
         val grants = rules.grants.filter { !it.vault && it.window == null && (it.validOn == day || it.activatedOn == day) }.sumOf { it.minutes }
-        val walletDebt = rules.grants.filter { !it.vault && it.minutes < 0 && it.validOn == null && it.activatedOn == null && (it.expiresOn == null || !it.expiresOn.isBefore(day)) }.sumOf { it.minutes }
+        // Cüzdana yazılan ceza (borç) sadece cüzdan bakiyesinden düşer; günlük / verilen süreye dokunmaz
+        val walletDebt = 0
         val adjust = rules.commands
             .filter { !it.cancelled && it.type == CommandType.ADJUST && it.createdAt in dayStartMs until dayEndMs }
             .sumOf { it.minutes ?: 0 }
@@ -391,7 +392,8 @@ class RuleEngine(private val rules: Rules) {
         val adjust = rules.commands
             .filter { !it.cancelled && it.type == CommandType.ADJUST && it.createdAt in dayStart until dayEnd }
             .sumOf { it.minutes ?: 0 }
-        val walletDebt = rules.grants.filter { !it.vault && it.minutes < 0 && it.validOn == null && it.activatedOn == null && (it.expiresOn == null || !it.expiresOn.isBefore(day)) }.sumOf { it.minutes }
+        // Cüzdana yazılan ceza (borç) sadece cüzdan bakiyesinden düşer; günlük / verilen süreye dokunmaz
+        val walletDebt = 0
         // Havuz: bölümü olmayan (ya da bugün olmayan bir bölüme verilmiş) süreler + cüzdandan bugün kullanılanlar + düzeltmeler
         val poolMin = dayGrants.filter { it.activatedOn == day || it.sectionId == null || it.sectionId !in todayIds }.sumOf { it.minutes } + walletDebt + adjust
         // Saat aralıklı süreler: açık bölümdeyken o anki kalana eklenir; aralık bitince kullanılmayan kısım düşer

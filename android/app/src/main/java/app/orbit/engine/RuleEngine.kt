@@ -202,7 +202,9 @@ class RuleEngine(private val rules: Rules) {
         val (lockedCmd, free0, lockUntil0) = lockState(nowMs)
         // Ebeveynin şu an için verdiği saat aralıklı süre "Sınırla"yı (elle ya da programdan) o süre boyunca açar
         val windowNow = activeWindows(day, t).isNotEmpty()
-        val locked0 = lockedCmd && !windowNow
+        // Elle kilit her zaman kilitler; sadece kilitten SONRA elle verilen süre / geçici açma o aralıkta kaldırır
+        val lockAt = rules.commands.filter { !it.cancelled && it.type == CommandType.LOCK }.maxOfOrNull { it.createdAt } ?: 0L
+        val locked0 = lockedCmd && activeWindows(day, t).none { it.source == "manual" && it.createdAtMs > lockAt }
         // Görevin kısıtlaması: sadece ebeveynin elle verdiği süre sürerken kalkar
         // (görev ödülü ya da cüzdandan açılan süre kısıtlamayı kaldırmaz)
         val taskR = taskRestrictionNow(day, t)

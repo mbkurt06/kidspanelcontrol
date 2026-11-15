@@ -763,7 +763,19 @@ function TimeTab({ childId }: { childId: string }) {
     if (!m) return;
     try {
       const detail = when === "custom" ? customWhen : null;
-      if (when === "now") {
+      const rg = cmode.mode === "within" ? cmode.range : null;
+      if (rg && (when === "now" || when === "custom")) {
+        if (mins(rg.end) <= mins(rg.start)) throw new Error("Bitiş saati başlangıçtan sonra olmalı (gece yarısını geçemez).");
+        const day = when === "now" ? today : detail === "from" ? (fromDay === "today" ? today : todayISO("Europe/Berlin", 1)) : detail === "today" ? today : detail === "tomorrow" ? todayISO("Europe/Berlin", 1) : date;
+        if (day === today && mins(rg.end) <= nowBerlin().minute) throw new Error("Bu aralık bugün için geçmiş.");
+        const { data: u } = await supabase.auth.getUser();
+        const { error } = await supabase.from("time_grants").insert({
+          child_id: childId, minutes: m, valid_on: day, section_id: null, vault: false, source: "manual", note: note || null, created_by: u.user?.id,
+          window_start: rg.start, window_end: rg.end, use_mode: "range", to_vault: true,
+        });
+        if (error) throw error;
+        setMsg(`${minutesText(m)} verildi · ${day === today ? "bugün" : dateText(day)} ${rg.start}–${rg.end} arası`);
+      } else if (when === "now") {
         const text = await giveNow(childId, m, fam, fam.statuses[childId], { override: cmode, note: note || undefined });
         setMsg(`${minutesText(m)} verildi · ${text}`);
       } else if (cmode.mode === "none" && when === "custom") {
@@ -847,8 +859,10 @@ function TimeTab({ childId }: { childId: string }) {
         : cmode.mode === "within"
           ? `Telefon şimdi açılır; ${mText} dk kullandıkça düşer, ${cmode.withinFactor ? `${cmode.withinFactor} katı süre` : `${(cmode.withinMinutes ?? 120) / 60} saat`} içinde kullanmalı.`
           : `Telefon şimdi açılır; ${mText} dk kullandıkça düşer, bitince kapanır.`;
-  const whenHint =
-    when === "now"
+  const rng = cmode.mode === "within" ? cmode.range : null;
+  const whenHint = rng && (when === "now" || when === "custom")
+    ? `${rng.start}–${rng.end} arasında ${mText} dk kullanabilir; kullandıkça düşer. Kapalı / kilitli saatlere taşan kısımda da telefon açık olur. ${rng.end}'de kalan kasaya gider.`
+    : when === "now"
       ? nowHint
       : when === "vault"
         ? "Kasada bekler; istediğinde buradan “Şimdi ver” ile açarsın."
@@ -933,11 +947,11 @@ function TimeTab({ childId }: { childId: string }) {
               ))}
             </div>
           )}
-          {when === "now" && lockSt && (
+          {when === "now" && lockSt && !rng && (
             <p className="muted tiny">
               🔒 {lockStateLabel(lockSt)}: süre saat gibi akar
               {Number(minutes) > 0 ? ` · ${hm((nowBerlin().minute + Number(minutes)) % 1440)}'e kadar açık` : ""}, bitince yine {lockStateAfter(lockSt)}.{" "}
-              <Info>Kilit, Tam kilit ve kapalı saatlerde verilen süre, aşağıdaki seçim ne olursa olsun verildiği andan itibaren akar. Çocuk kullanmasa da biter; telefon kapalı ya da internetsiz olsa da süre dolunca kilit geri gelir. Kalan kasaya gitmez.</Info>
+              <Info>Kilit, Tam kilit ve kapalı saatlerde verilen süre (Saat aralığı seçilmediyse) verildiği andan itibaren akar. Çocuk kullanmasa da biter; telefon kapalı ya da internetsiz olsa da süre dolunca kilit geri gelir. Kalan kasaya gitmez.</Info>
             </p>
           )}
           {(when === "now" || when === "custom") && (
@@ -950,7 +964,7 @@ function TimeTab({ childId }: { childId: string }) {
                 <span className="collapse-arrow" aria-hidden="true" />
               </summary>
               <div className="stack-s">
-                <ClosedModePicker value={cmode} onChange={setCmode} allowNone={cmode.mode === "none" || defMode.mode === "none"} />
+                <ClosedModePicker allowRange value={cmode} onChange={setCmode} allowNone={cmode.mode === "none" || defMode.mode === "none"} />
                 <div className="row gap-s" style={{ alignItems: "center" }}>
                   <span className="muted tiny grow">
                     Varsayılan: {closedModeLabel(defMode)}{def.from ? ` · ${def.from} profilinden` : ""} <Info>Seçtiğin ayar sadece bu veriş için geçerli. “Varsayılan yap” dersen Kurallar’daki ayar da değişir. Bu ayar açık saatlerde geçerli. Kilit, Tam kilit ve kapalı saatlerde verilen süre her zaman saat gibi akar.</Info>
@@ -960,7 +974,7 @@ function TimeTab({ childId }: { childId: string }) {
                   ) : (
                     <>
                       <button type="button" className="chip-btn" onClick={() => setCmode(defMode)}>Geri al</button>
-                      <button type="button" className="chip-btn" onClick={saveDefaultMode}>Varsayılan yap</button>
+                      {!cmode.range && <button type="button" className="chip-btn" onClick={saveDefaultMode}>Varsayılan yap</button>}
                     </>
                   ))}
                 </div>

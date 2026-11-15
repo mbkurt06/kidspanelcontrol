@@ -46,7 +46,7 @@ export async function grantMinutes(
 
 type FamLike = { sections: Section[]; sectionRules: SectionRule[]; children?: Child[]; modes?: Mode[] };
 /** Kapalı / sınırlı saatte verilen sürenin davranışı (Kurallar → Kapalıyken verilen süre). */
-export type ClosedMode = { mode: "none" | "clock" | "usage" | "within" | "open"; withinMinutes: number | null; withinFactor: number | null };
+export type ClosedMode = { mode: "none" | "clock" | "usage" | "within" | "open"; withinMinutes: number | null; withinFactor: number | null; range?: { start: string; end: string } | null };
 export function closedModeOf(child?: Child): ClosedMode {
   return {
     mode: child?.closed_grant_mode ?? "usage",

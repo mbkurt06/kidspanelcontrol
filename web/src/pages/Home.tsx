@@ -212,6 +212,11 @@ function ChildCard({ child }: { child: Child }) {
     const m = st0.find((v) => v > minute) ?? st0[0];
     return m == null ? null : hm(m);
   })();
+  const secNameAt = (startHm: string | null, closedKind: boolean) => {
+    if (!startHm) return null;
+    const x = fam.sections.find((y) => y.profile_id === sec?.profile_id && mins(y.start_time) === mins(startHm) && (closedKind ? (y.default_rule === "blocked" || !timedPossible(y, fam.sectionRules)) : timedPossible(y, fam.sectionRules)));
+    return x?.name ?? null;
+  };
   const nextClosedStart = (() => {
     const { minute } = nowBerlin();
     const st0 = fam.sections.filter((x) => x.profile_id === sec?.profile_id && (x.default_rule === "blocked" || !timedPossible(x, fam.sectionRules))).map((x) => mins(x.start_time)).sort((a, b) => a - b);
@@ -280,6 +285,7 @@ function ChildCard({ child }: { child: Child }) {
     }
   }
   const extended = extras.filter((g) => g.orig_window_end);
+  const openSecToday = fam.sections.filter((x) => x.profile_id === sec?.profile_id && timedPossible(x, fam.sectionRules) && mins(x.end_time) > mins(x.start_time)).sort((a, b) => mins(b.end_time) - mins(a.end_time))[0] ?? null;
   // Bugünkü açık saatlerin (süreli bölümlerin) programdaki bitişi
   const openEndToday = (() => {
     const e = fam.sections.filter((x) => x.profile_id === sec?.profile_id && timedPossible(x, fam.sectionRules) && mins(x.end_time) > mins(x.start_time)).map((x) => mins(x.end_time));
@@ -558,14 +564,13 @@ function ChildCard({ child }: { child: Child }) {
     if (!tempOpen) return "";
     const endAbs = tempOpen.end >= 1439 && tempNext ? 1440 + mins(tempNext) : tempOpen.end;
     const endMs = Date.now() + (endAbs - nowBerlin().minute) * 60000;
-    if (manualLock && !manualLock.from && (!manualLock.until || new Date(manualLock.until).getTime() > endMs)) return "🔒 Tam kilit";
+    if (manualLock && !manualLock.from && (!manualLock.until || new Date(manualLock.until).getTime() > endMs)) return "🔒 Tam kilit (elle)";
     const m = endAbs % 1440;
     const inSec = (x: Section) => { const a = mins(x.start_time), b = mins(x.end_time); return a < b ? m >= a && m < b : m >= a || m < b; };
     const at = fam.sections.find((x) => x.profile_id === sec?.profile_id && inSec(x));
     if (!at) return "program neyse o";
-    if (timedPossible(at, fam.sectionRules)) return "🟢 Açık saatler";
-    if (at.default_rule === "open") return "🟢 Serbest";
-    return "🔒 Kapalı saat";
+    const icon = timedPossible(at, fam.sectionRules) || at.default_rule === "open" ? "🟢" : "🔒";
+    return `${icon} ${at.name} (${hhmm(at.end_time)}'e kadar)`;
   })();
   const stateLine = !st
     ? null
@@ -578,9 +583,9 @@ function ChildCard({ child }: { child: Child }) {
       : limited
         ? { cls: "warn", text: waiting && !realLimited ? "Sınırlı · telefona iletiliyor…" : `Sınırlı · ${st.lock_reason ?? ""}`.replace(/ · $/, "") }
         : closed
-          ? { cls: "warn", text: [st.current_mode_name ?? "Kapalı saatler", nextOpen].filter(Boolean).join(" · ") }
+          ? { cls: "warn", text: [`🔒 ${sec && !timedPossible(sec, fam.sectionRules) ? sec.name : st.current_mode_name ?? "Kapalı saatler"}`, sec && !timedPossible(sec, fam.sectionRules) ? `${hhmm(sec.end_time)}'e kadar` : nextOpen].filter(Boolean).join(" · ") }
           : finished
-            ? { cls: "warn", text: [st.current_mode_name ?? "Bugün", sec ? `${hhmm(sec.end_time)}'e kadar` : null].filter(Boolean).join(" · ") }
+            ? { cls: "warn", text: [sec && !timedPossible(sec, fam.sectionRules) ? `🔒 ${sec.name}` : st.current_mode_name ?? "Bugün", sec ? `${hhmm(sec.end_time)}'e kadar` : null].filter(Boolean).join(" · ") }
             : { cls: "good", text: [st.current_mode_name ?? "Açık", extWin || extended.length ? `${hm(Math.min(baseEnd, 1439))}'e kadar (bugün uzatıldı)` : shortenAt != null ? `${hm(shortenAt)}'e kadar (bugün kısaltıldı)` : sec && open ? `${hhmm(sec.end_time)}'e kadar` : null].filter(Boolean).join(" · ") };
 
   return (
@@ -699,7 +704,7 @@ function ChildCard({ child }: { child: Child }) {
                     <div className="stack-s">
                       <span className="small muted">Hazır</span>
                       <div className="chips">
-                        {!closed && nextClosedStart && chip("closed", `Açık saatler bitene kadar · ${nextClosedStart}`)}
+                        {!closed && nextClosedStart && chip("closed", `${sec && timedPossible(sec, fam.sectionRules) ? sec.name : "Açık saatler"} bitene kadar · ${nextClosedStart}`)}
                         {chip("midnight", "Gece yarısına kadar")}
                         {chip("morning", "Yarın sabaha kadar · 07:00")}
                       </div>
@@ -804,8 +809,8 @@ function ChildCard({ child }: { child: Child }) {
                     <div className="stack-s">
                       <span className="small muted">Hazır</span>
                       <div className="chips">
-                        {chip("open", `Açık saatler başlayana kadar${nextOpenStart ? ` · ${nextOpenStart}` : ""}`)}
-                        {nextClosedStart && sec && timedPossible(sec, fam.sectionRules) && chip("closed", `Kapalı saatler başlayana kadar · ${nextClosedStart}`)}
+                        {chip("open", `${secNameAt(nextOpenStart, false) ?? "Açık saatler"} başlayana kadar${nextOpenStart ? ` · ${nextOpenStart}` : ""}`)}
+                        {nextClosedStart && sec && timedPossible(sec, fam.sectionRules) && chip("closed", `${secNameAt(nextClosedStart, true) ?? "Kapalı saatler"} başlayana kadar · ${nextClosedStart}`)}
                         {chip("midnight", "Gece yarısına kadar")}
                         {chip("morning", "Yarın sabaha kadar · 07:00")}
                       </div>
@@ -875,7 +880,7 @@ function ChildCard({ child }: { child: Child }) {
         <>
           <div className="pop-backdrop sheet-like" onClick={() => { setXOpen(false); setPendingGive(0); }} />
           <div className="lock-pop sheet-pop" role="dialog" aria-label="Açık saatleri uzat">
-            <b className="sheet-pop-title">{child.name} · {xMode === "lock" ? "Kilidin süresini uzat / kısalt" : xMode === "temp" ? "Geçici açmayı uzat / kısalt" : "Açık saatleri uzat / kısalt (sadece bugün)"}</b>
+            <b className="sheet-pop-title">{child.name} · {xMode === "lock" ? "Kilidin süresini uzat / kısalt" : xMode === "temp" ? "Geçici açmayı uzat / kısalt" : `${openSecToday?.name ?? "Açık saatler"}${openSecToday ? ` (${hhmm(openSecToday.start_time)}–${hhmm(openSecToday.end_time)})` : ""} · uzat / kısalt (sadece bugün)`}</b>
             {pendingGive !== 0 && <p className={`small ${pendingGive > 0 ? "good-text" : "bad-text"}`} style={{ margin: 0 }}>⏱ Uygulayınca {pendingGive > 0 ? `+${minutesText(pendingGive)} süre de verilecek` : `${minutesText(-pendingGive)} süre de düşülecek`}</p>}
             <p className="small" style={{ margin: 0 }}>
               {xMode === "lock"

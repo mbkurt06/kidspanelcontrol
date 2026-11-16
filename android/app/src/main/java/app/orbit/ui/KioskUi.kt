@@ -57,6 +57,7 @@ fun KioskToday(k: KioskNow, open: (Screen) -> Unit) {
                 ?: "Ebeveynin kaldırana kadar",
             14,
         )
+        live.snapshot?.let { TwoRings(it, k) }
     }
     val tasks = remember(live.lastSync) { Tasks.current().count { it.open && it.inWindow() } }
     val tiles = Screen.entries.filter { it != Screen.TODAY && (it == Screen.ABOUT || it == Screen.WIFI || it.kioskKey() in k.screens) }

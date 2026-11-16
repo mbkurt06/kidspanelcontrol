@@ -679,7 +679,7 @@ export default function TaskEdit() {
         </label>
         {f.vocab_on && <div className="field">
           <span>Bugün kaç kart çalışsın</span>
-          <MinuteStepper value={Number(f.vocab_cards) || 1} onChange={(v) => set("vocab_cards", String(v))} min={1} max={500} step={5} unit="kart" label="Kart sayısı" />
+          <MinuteStepper value={Number(f.vocab_cards) || 1} onChange={(v) => set("vocab_cards", String(v))} min={1} max={500} unit="kart" label="Kart sayısı" />
         </div>}
       </div>
 
@@ -913,7 +913,7 @@ export default function TaskEdit() {
         {f.reward_on && <div className="grid2">
           <div className="field">
             <span>Kazanacağı süre</span>
-            <MinuteStepper value={Number(f.reward_minutes) || 0} onChange={(v) => set("reward_minutes", String(v))} min={1} max={1440} step={5} label="Kazanacağı süre" />
+            <MinuteStepper value={Number(f.reward_minutes) || 0} onChange={(v) => set("reward_minutes", String(v))} min={1} max={1440} label="Kazanacağı süre" />
           </div>
           <label className="field">
             <span>Nereye</span>
@@ -930,7 +930,7 @@ export default function TaskEdit() {
         {f.fail_on && <div className="grid2">
           <div className="field">
             <span>Düşülecek süre</span>
-            <MinuteStepper value={Number(f.fail_minutes) || 0} onChange={(v) => set("fail_minutes", String(v))} min={1} max={1440} step={5} label="Düşülecek süre" />
+            <MinuteStepper value={Number(f.fail_minutes) || 0} onChange={(v) => set("fail_minutes", String(v))} min={1} max={1440} label="Düşülecek süre" />
           </div>
           <label className="field">
             <span>Nereden</span>

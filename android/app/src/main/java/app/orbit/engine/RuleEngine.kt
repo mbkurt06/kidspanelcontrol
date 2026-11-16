@@ -425,8 +425,8 @@ class RuleEngine(private val rules: Rules) {
             val sv = bucket(usage, "s:grant:${g.id}@$day")
             val w = bucket(usage, "w:${g.id}")
             val left = (g.minutes * 60L - sv - w).coerceAtLeast(0)
-            // Havuza katkı: bu aralıktan harcanan (w) + açıksa kalan kısmı (en fazla bitişine kadar)
-            winCredit += minOf(w, (g.minutes * 60L - sv).coerceAtLeast(0)) + if (g in overlay) minOf(left, secsToEnd(g, t)) else 0L
+            // Havuza katkı: bu aralıktan harcanan (w) + açıksa kalan kısmın tamamı (saatle düşmez)
+            winCredit += minOf(w, (g.minutes * 60L - sv).coerceAtLeast(0)) + if (g in overlay) left else 0L
         }
         val allExtra = dayGrants.sumOf { it.minutes } + walletDebt + adjust + dayWindows(day).filter { !isTempOpen(it) }.sumOf { it.minutes }
 
@@ -454,9 +454,8 @@ class RuleEngine(private val rules: Rules) {
             val inTime = dayWindows(day).filter { !isTempOpen(it) && it.window!!.contains(t) && it.minutes > 0 }
             curEff = inTime.sumOf { it.minutes } * 60L
             val used = inTime.sumOf { bucket(usage, "w:${it.id}") + bucket(usage, "s:grant:${it.id}@$day") }
-            // Saat gibi akan / aralıklı süre bitiş saatini geçemez
-            val maxEnd = inTime.maxOfOrNull { secsToEnd(it, t) } ?: 0L
-            curLeft = (curEff - used).coerceAtLeast(0).coerceAtMost(maxEnd)
+            // Süre saatle değil kullanımla düşer
+            curLeft = (curEff - used).coerceAtLeast(0)
         } else if (cur != null && (cur.section.id !in todayIds || cur.startDay != day) && cur.section.budgetMinutes != null) {
             // Dünden taşan gece bölümü: kendi süresi (devretme yok)
             val eff = cur.section.budgetMinutes * 60L

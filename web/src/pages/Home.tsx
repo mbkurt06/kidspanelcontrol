@@ -136,6 +136,7 @@ function ChildCard({ child }: { child: Child }) {
   const [lockMin, setLockMin] = useState(45);
   const [uDur, setUDur] = useState("closed");
   const [xOpen, setXOpen] = useState(false);
+  const [ringMenuOpen, setRingMenuOpen] = useState(false);
   const [tempNext, setTempNext] = useState<string | null>(null);
   const [dialThen, setDialThen] = useState<"none" | "unlock" | "time" | "lock">("none");
   const [pendingGive, setPendingGive] = useState(0);
@@ -574,6 +575,39 @@ function ChildCard({ child }: { child: Child }) {
     const icon = timedPossible(at, fam.sectionRules) || at.default_rule === "open" ? "🟢" : "🔒";
     return `${icon} ${at.name} (${hhmm(at.end_time)}'e kadar)`;
   })();
+  // --- İki halka: solda hak (süre), sağda açıklık (zaman) ---
+  const nowMin = nowBerlin().minute;
+  const nextAtMs = (hmStr: string) => Date.now() + ((((mins(hmStr) - nowMin) % 1440) + 1440) % 1440 || 1440) * 60000;
+  const dayEndHm = (fam.family?.day_end ?? "05:00").slice(0, 5);
+  const dayEndMs = nextAtMs(dayEndHm);
+  const isLocked = kiosk || limited || closed;
+  const lockEnd: { label: string; ms: number | null; task: boolean } | null = !st || !isLocked
+    ? null
+    : manualLock && kiosk && !manualLock.from
+      ? manualLock.runs.length
+        ? { label: "görev", ms: null, task: true }
+        : { label: manualLock.until ? new Date(manualLock.until).toLocaleTimeString("tr-TR", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" }) : "sen açana kadar", ms: manualLock.until ? new Date(manualLock.until).getTime() : null, task: false }
+      : taskLock
+        ? { label: "görev", ms: null, task: true }
+        : sec && !timedPossible(sec, fam.sectionRules)
+          ? { label: hhmm(sec.end_time), ms: nextAtMs(hhmm(sec.end_time)), task: false }
+          : nextOpenStart
+            ? { label: nextOpenStart, ms: nextAtMs(nextOpenStart), task: false }
+            : { label: "—", ms: null, task: false };
+  const lockPastDayEnd = !!lockEnd && !lockEnd.task && (lockEnd.ms == null || lockEnd.ms >= dayEndMs);
+  const openEndAbs = xMode === "temp" ? xBase : baseEnd;
+  const openLeft = st && !isLocked && (sec || tempOpen || extWin) ? Math.max(0, openEndAbs - nowMin) : null;
+  const openShort = openLeft != null && !unlimited && openLeft < (st?.remaining_minutes ?? 0);
+  const [ringMenu, setRingMenu] = [ringMenuOpen, setRingMenuOpen];
+  const openLock = () => {
+    setRingMenu(false); setUnlockOpen(false);
+    if (tempOpen || pmActive) setLockKind("resume");
+    else if (lockKind === "resume") setLockKind("kiosk");
+    setLockOpen(true);
+  };
+  const openExtend = () => { setRingMenu(false); setLockOpen(false); setUnlockOpen(false); setXDur("60"); setXOpen(true); };
+  const openUnlock = () => { setRingMenu(false); setLockOpen(false); setUnlockOpen(true); };
+
   const stateLine = !st
     ? null
     : tempOpen && !waiting && !kiosk
@@ -605,8 +639,8 @@ function ChildCard({ child }: { child: Child }) {
           aria-label="Süreyi çarkla ayarla"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (st) { setDial(0); setDialThen("none"); setDialOpen(true); } }}
         >
-          <Ring value={extraLive ? shownLeft : open && !unlimited ? st!.remaining_minutes : kiosk || limited || closed ? 1 : 0} max={extraLive ? Math.max(shownLeft + st!.used_minutes, 1) : open && !unlimited ? Math.max(st!.allowance_minutes, st!.remaining_minutes + st!.used_minutes, 1) : 1} color={ringColor} size={66}>
-            {ringInner}
+          <Ring value={unlimited ? 1 : st?.remaining_minutes ?? 0} max={unlimited ? 1 : Math.max(st?.allowance_minutes ?? 0, (st?.remaining_minutes ?? 0) + (st?.used_minutes ?? 0), 1)} color={!unlimited && (st?.remaining_minutes ?? 0) <= 10 ? "var(--warn)" : child.color} size={66}>
+            {!st ? <b>—</b> : unlimited ? <span className="ring-state"><b>∞</b><small>süre</small></span> : <span className="ring-state"><b>{minutesText(st.remaining_minutes)}</b><small>süre</small></span>}
           </Ring>
         </span>
         <div className="grow">
@@ -636,7 +670,10 @@ function ChildCard({ child }: { child: Child }) {
 
                 </span>
               )}
-              {kiosk && st.remaining_minutes > 0 && st.remaining_minutes < 1440 && <span className="muted small">Kalan süresi {minutesText(st.remaining_minutes)} · kilit kalkınca kullanır</span>}
+              {isLocked && st.remaining_minutes > 0 && !unlimited && (lockPastDayEnd
+                ? <span className="warn-text small">{minutesText(st.remaining_minutes)} {dayEndHm}'te kasaya gider</span>
+                : <span className="muted small">{minutesText(st.remaining_minutes)} telefon açılınca kullanılır</span>)}
+              {openShort && openLeft != null && <span className="warn-text small">Telefon {minutesText(openLeft)} sonra kapanır · kalan süre {dayEndHm}'te kasaya</span>}
               <span className="muted small">Bugün {minutesText(st.used_minutes)} kullandı</span>
               {timer && (
                 <span className="pill accent">
@@ -653,6 +690,24 @@ function ChildCard({ child }: { child: Child }) {
             <p className="muted small">Telefon henüz eşleşmedi. Çocuğun sayfasından eşleştirme kodu al.</p>
           )}
         </div>
+        {st && (
+          <span
+            className="dial"
+            role="button"
+            aria-label="Kilitle / aç / uzat"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); setRingMenu(true); }}
+          >
+            {isLocked ? (
+              <Ring value={1} max={1} color={limited || closed ? "var(--warn)" : "var(--bad)"} size={66}>
+                <span className="ring-state bad"><Icon name="lock" size={18} /><small>{lockEnd?.label ?? "Kilitli"}</small></span>
+              </Ring>
+            ) : (
+              <Ring value={openLeft ?? 1} max={openLeft == null || unlimited ? 1 : Math.max(openLeft, st.remaining_minutes, 1)} color={openShort ? "var(--warn)" : "var(--accent)"} size={66}>
+                <span className="ring-state"><b>{openLeft == null ? "açık" : minutesText(openLeft)}</b><small>{openLeft == null ? "telefon" : `${hm(Math.min(openEndAbs % 1440, 1439))}'e`}</small></span>
+              </Ring>
+            )}
+          </span>
+        )}
       </Link>
 
       <div className="card-divider" />
@@ -666,31 +721,6 @@ function ChildCard({ child }: { child: Child }) {
       )}
       <div className="card-actions">
         <div className="lock-wrap">
-          <button
-            className={`icon-pill ${lockOpen ? "on" : ""} ${kiosk ? "lock-on" : limited ? "limit-on" : ""}`}
-            disabled={!!busy}
-            aria-label="Kilitle"
-            title="Kilitle"
-            onClick={() => {
-              setUnlockOpen(false);
-              if (!lockOpen && (tempOpen || pmActive)) setLockKind("resume");
-              else if (!lockOpen && lockKind === "resume") setLockKind("kiosk");
-              setLockOpen(!lockOpen);
-            }}
-            aria-expanded={lockOpen}
-          >
-            <Icon name="lock" size={17} />
-          </button>
-          <button type="button" className={`icon-pill ${xOpen ? "on" : ""}`} aria-label="Süreyi uzat / kısalt" title="Süreyi uzat / kısalt" onClick={() => { setLockOpen(false); setUnlockOpen(false); setXDur("60"); setXOpen(true); }}>⏰</button>
-          <button
-            className={`icon-pill ${unlockOpen ? "on" : ""} ${kiosk || limited ? "unlock-ready" : ""}`}
-            disabled={!!busy}
-            aria-label="Kilidi aç"
-            title="Kilidi aç"
-            onClick={() => { setLockOpen(false); setUnlockOpen(true); }}
-          >
-            <Icon name="unlock" size={17} />
-          </button>
           {unlockOpen && createPortal(
             <>
               <div className="pop-backdrop sheet-like" onClick={() => { setUnlockOpen(false); setPendingGive(0); }} />
@@ -720,7 +750,7 @@ function ChildCard({ child }: { child: Child }) {
                       <div className="chips">
                         {chip("5", "5 dk")}{chip("15", "15 dk")}{chip("30", "30 dk")}{chip("60", "1 sa")}{chip("120", "2 sa")}{chip("min", "Süre…")}
                       </div>
-                      {uDur === "min" && <MinuteStepper value={uMin} onChange={setUMin} min={1} max={1440} step={5} label="Açık kalma süresi" />}
+                      {uDur === "min" && <MinuteStepper value={uMin} onChange={setUMin} min={1} max={1440} label="Açık kalma süresi" />}
                       <span className="small muted">Saatle</span>
                       <div className="chips">{chip("until", "Saate kadar…")}{chip("date", "Tarih + saate kadar…")}</div>
                       {uDur === "until" && <TimeField value={uUntil} onChange={setUUntil} label="Bitiş saati" />}
@@ -842,7 +872,7 @@ function ChildCard({ child }: { child: Child }) {
                       <div className="chips">
                         {chip("15", "15 dk")}{chip("30", "30 dk")}{chip("60", "1 sa")}{chip("120", "2 sa")}{chip("min", "Süre…")}
                       </div>
-                      {lockDur === "min" && <MinuteStepper value={lockMin} onChange={setLockMin} min={1} max={1440} step={5} label="Kilit süresi" />}
+                      {lockDur === "min" && <MinuteStepper value={lockMin} onChange={setLockMin} min={1} max={1440} label="Kilit süresi" />}
                       <span className="small muted">Saatle</span>
                       <div className="chips">
                         {chip("until", "Saate kadar…")}{chip("date", "Tarih + saate kadar…")}
@@ -877,13 +907,31 @@ function ChildCard({ child }: { child: Child }) {
           )}
         </div>
         <span className="grow" />
-        <button type="button" className="pill-btn primary" disabled={!!busy || !st} onClick={() => { setDial(0); setDialThen("none"); setDialOpen(true); }}>
-          ⏱ Süre
-        </button>
         <Link to={`/messages/${child.id}`} className="icon-pill" aria-label={`${child.name}'e mesaj yaz`} title="Mesaj yaz">
           <Icon name="chat" size={16} />
         </Link>
       </div>
+      {ringMenu && createPortal(
+        <>
+          <div className="pop-backdrop sheet-like" onClick={() => setRingMenu(false)} />
+          <div className="lock-pop sheet-pop" role="dialog" aria-label="Telefon ne zaman açık">
+            <b className="sheet-pop-title">{child.name} · telefon</b>
+            <p className="small muted" style={{ margin: 0 }}>{stateLine?.text}</p>
+            <div className="stack-s">
+              {(isLocked
+                ? [["unlock", "🔓 Kilidi aç", openUnlock], ["ext", "⏰ Kilidin süresini uzat / kısalt", openExtend], ["lock", "🔒 Kilit seçeneklerini değiştir", openLock]]
+                : [["lock", "🔒 Kilitle", openLock], ["ext", "⏰ Açık kalma süresini uzat / kısalt", openExtend], ["unlock", "🔓 Kilidi aç (kapalı saatleri de)", openUnlock]]
+              ).map(([k, l, fn]) => (
+                <button key={k as string} type="button" className="pill-btn" style={{ justifyContent: "flex-start", width: "100%" }} disabled={!!busy} onClick={fn as () => void}>{l as string}</button>
+              ))}
+            </div>
+            <div className="pop-actions">
+              <button className="pill-btn ghost" onClick={() => setRingMenu(false)}>Vazgeç</button>
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
       {xOpen && createPortal(
         <>
           <div className="pop-backdrop sheet-like" onClick={() => { setXOpen(false); setPendingGive(0); }} />
@@ -910,9 +958,9 @@ function ChildCard({ child }: { child: Child }) {
                   </div>
                   <span className="small muted">Kısalt</span>
                   <div className="chips">{chip("-15", "−15 dk")}{chip("-30", "−30 dk")}{chip("-60", "−1 sa")}{chip("minus", "− Süre…")}</div>
-                  {xDur === "minus" && <MinuteStepper value={xMinM} onChange={setXMinM} min={1} max={600} step={5} label="Kısaltma" />}
+                  {xDur === "minus" && <MinuteStepper value={xMinM} onChange={setXMinM} min={1} max={600} label="Kısaltma" />}
                   <span className="small muted">Saatle</span>
-                  {xDur === "min" && <MinuteStepper value={xMin} onChange={setXMin} min={5} max={600} step={5} label="Uzatma" />}
+                  {xDur === "min" && <MinuteStepper value={xMin} onChange={setXMin} min={5} max={600} label="Uzatma" />}
                   <div className="chips">{chip("until", "Saate kadar…")}{chip("midnight", "Gece yarısına kadar")}</div>
                   {xDur === "until" && <TimeField value={xUntil} onChange={setXUntil} label="Yeni bitiş" />}
                   {xMode === "open" && fam.children.length > 1 && (

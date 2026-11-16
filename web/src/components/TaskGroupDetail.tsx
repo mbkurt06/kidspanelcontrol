@@ -486,13 +486,13 @@ function TaskRow(p: {
             </>
           )}
         </div>
-        {rec && <MinuteStepper value={taskDuration(v)} onChange={(n) => save(durationPatch(v, Math.max(1, n)))} min={1} max={240} step={5} label="Görev süresi" />}
+        {rec && <MinuteStepper value={taskDuration(v)} onChange={(n) => save(durationPatch(v, Math.max(1, n)))} min={1} max={240} label="Görev süresi" />}
       </div>
 
       <div className="gt-cell">
         <span className="pop-label">ÖDÜL · CEZA</span>
-        <div className="gt-stepper"><span className="good-text small">Yaparsa +</span><MinuteStepper value={Math.max(0, v.reward_minutes ?? 0)} onChange={(n) => save({ reward_minutes: n || null })} min={0} max={600} step={5} label="Ödül dakikası" /></div>
-        <div className="gt-stepper"><span className="bad-text small">Yapmazsa −</span><MinuteStepper value={v.fail_minutes ?? 0} onChange={(n) => save({ fail_minutes: n || null })} min={0} max={600} step={5} label="Ceza dakikası" /></div>
+        <div className="gt-stepper"><span className="good-text small">Yaparsa +</span><MinuteStepper value={Math.max(0, v.reward_minutes ?? 0)} onChange={(n) => save({ reward_minutes: n || null })} min={0} max={600} label="Ödül dakikası" /></div>
+        <div className="gt-stepper"><span className="bad-text small">Yapmazsa −</span><MinuteStepper value={v.fail_minutes ?? 0} onChange={(n) => save({ fail_minutes: n || null })} min={0} max={600} label="Ceza dakikası" /></div>
         {(v.fail_minutes ?? 0) > 0 && (
           <select value={v.fail_target ?? "vault"} onChange={(e) => save({ fail_target: e.target.value as Task["fail_target"] }, 0)} aria-label="Ceza nereden">
             <option value="vault">Kasadan düşsün</option>

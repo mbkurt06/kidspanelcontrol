@@ -141,6 +141,7 @@ function ChildCard({ child }: { child: Child }) {
   const [pendingGive, setPendingGive] = useState(0);
   const [xDur, setXDur] = useState("60");
   const [xMin, setXMin] = useState(75);
+  const [xMinM, setXMinM] = useState(45);
   const [xUntil, setXUntil] = useState("22:30");
   const [xAll, setXAll] = useState(false);
   const [uMin, setUMin] = useState(45);
@@ -305,6 +306,7 @@ function ChildCard({ child }: { child: Child }) {
     switch (xDur) {
       case "-15": case "-30": case "-60": abs = Math.max(b + Number(xDur), now + 1); break;
       case "min": abs = b + xMin; break;
+      case "minus": abs = Math.max(b - xMinM, now + 1); break;
       case "until": { const m = mins(xUntil); abs = m > now ? m : m + 1440; break; }
       case "midnight": abs = 1440; break;
       default: abs = b + Number(xDur);
@@ -907,7 +909,9 @@ function ChildCard({ child }: { child: Child }) {
                     {chip("15", "+15 dk")}{chip("30", "+30 dk")}{chip("60", "+1 sa")}{chip("90", "+1,5 sa")}{chip("120", "+2 sa")}{chip("min", "+ Süre…")}
                   </div>
                   <span className="small muted">Kısalt</span>
-                  <div className="chips">{chip("-15", "−15 dk")}{chip("-30", "−30 dk")}{chip("-60", "−1 sa")}</div>
+                  <div className="chips">{chip("-15", "−15 dk")}{chip("-30", "−30 dk")}{chip("-60", "−1 sa")}{chip("minus", "− Süre…")}</div>
+                  {xDur === "minus" && <MinuteStepper value={xMinM} onChange={setXMinM} min={1} max={600} step={5} label="Kısaltma" />}
+                  <span className="small muted">Saatle</span>
                   {xDur === "min" && <MinuteStepper value={xMin} onChange={setXMin} min={5} max={600} step={5} label="Uzatma" />}
                   <div className="chips">{chip("until", "Saate kadar…")}{chip("midnight", "Gece yarısına kadar")}</div>
                   {xDur === "until" && <TimeField value={xUntil} onChange={setXUntil} label="Yeni bitiş" />}
@@ -917,7 +921,7 @@ function ChildCard({ child }: { child: Child }) {
                     </label>
                   )}
                   <p className="small muted" style={{ margin: 0 }} hidden={xMode !== "open"}>
-                    → Bugün {p.end}'e kadar açık. Bugün verilen / kazanılan süresini kullanabilir; kullanmadığı kısım {p.end}'de kasaya gider. Süresi biterse daha önce kilitlenir. Yarın program yine aynı.
+                    → Bugün {p.end}'e kadar açık. Bugünkü süresini kullanabilir; süresi biterse daha önce kilitlenir. Kullanmadığı süre gün bitişinde ({(fam.family?.day_end ?? "05:00").slice(0, 5)}) kasaya geçer. Yarın program yine aynı.
                   </p>
                   {xMode !== "open" && <p className="small muted" style={{ margin: 0 }}>→ {xMode === "lock" ? `🔒 ${p.end}'e kadar kilitli, sonra program neyse o.` : `🔓 ${p.end}'e kadar açık, sonra yine kilit.`}</p>}
                   <div className="pop-actions">

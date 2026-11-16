@@ -198,6 +198,8 @@ data class Command(
 /** Sunucudan alınan kuralların tamamı (telefonda saklanır, internet yokken de kullanılır). */
 data class Rules(
     val timezone: String = "Europe/Berlin",
+    /** Orbit günü bitişi (dakika, ör. 300 = 05:00): sayaçlar ve kalan sürenin kasaya geçişi bu saatte */
+    val dayEndMin: Int = 300,
     val apps: Map<String, AppRule> = emptyMap(),
     val usageRules: Map<String, AppUsageRule> = emptyMap(),
     val profiles: Map<String, Profile> = emptyMap(),

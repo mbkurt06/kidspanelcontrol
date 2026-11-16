@@ -129,8 +129,9 @@ export async function giveNow(
   const row = g as { valid_on: string | null; window_start: string | null; window_end: string | null; vault: boolean } | null;
   if (!row || row.vault) return "kasaya eklendi (kapalı saat)";
   const ws = row.window_start?.slice(0, 5), we = row.window_end?.slice(0, 5);
-  if (row.valid_on && row.valid_on !== todayISO()) return `${ws}'den itibaren kullanılır (sonraki açık saatler) · ${we}'de kalan kasaya`;
-  return `${we}'e kadar kullanabilir · kalan kasaya${opts.kiosk ? " · telefon kilitli (açmak için 🔓)" : ""}`;
+  void ws; void we;
+  const de = (fam as { family?: { day_end?: string } | null }).family?.day_end?.slice(0, 5) ?? "05:00";
+  return `telefon açıkken kullanır · kalan gün bitişinde (${de}) kasaya${opts.kiosk ? " · telefon kilitli (açmak için 🔓)" : ""}`;
 }
 
 /**

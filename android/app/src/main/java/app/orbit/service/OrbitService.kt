@@ -312,7 +312,9 @@ class OrbitService : Service() {
         val now = ZonedDateTime.now(zone)
 
         // 2) Gün değiştiyse kalan hakkı kasaya ayır, sonra sayaçları sıfırla.
-        val rolled = Store.rollover(now.toLocalDate())
+        // Orbit günü gün bitişinde (varsayılan 05:00) değişir
+        val lday = engine.logicalDay(now)
+        val rolled = Store.rollover(lday)
         if (rolled != null) {
             val oldEngine = RuleEngine(rules)
             val surplus = oldEngine.surplusMinutes(rolled.day, rolled)
@@ -329,7 +331,7 @@ class OrbitService : Service() {
                 }
             }
         }
-        var usage = Store.usage(now.toLocalDate())
+        var usage = Store.usage(lday)
         engine.refreshSpent(usage, now.toLocalDate())
         // Kullanılmayan saat aralıklı süreyi kasaya aktar (dakikada bir)
         if (nowMs - lastLeftover > 60_000) {

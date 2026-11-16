@@ -350,9 +350,11 @@ class RuleEngine(private val rules: Rules) {
         // Ebeveynin açtığı aralık (Kilidi aç / açık saati uzat): telefon günün açık (süreli) bölümü gibi davranır,
         // çocuk KENDİ hakkını harcar (bedava süre yok)
         activeWindows(day, t).filter { isTempOpen(it) }.maxByOrNull { it.window!!.end }?.let { tw ->
-            val open = daySections(day).filter { timedPossible(it) }
-            val sec = open.lastOrNull { it.start <= t } ?: open.firstOrNull()
-            if (sec != null) return SectionNow(sec, day, tw.window!!.end)
+            // Gece (gün bitişinden önce) açılırsa önceki günün açık bölümü: çocuk o günün hakkını kullanır
+            val d0 = if (t.toSecondOfDay() < rules.dayEndMin * 60) day.minusDays(1) else day
+            val open = daySections(d0).filter { timedPossible(it) }
+            val sec = (if (d0 == day) open.lastOrNull { it.start <= t } else open.lastOrNull()) ?: open.firstOrNull()
+            if (sec != null) return SectionNow(sec, d0, tw.window!!.end)
         }
         // Verilen süre (miktar) kapalı saati kendi başına AÇMAZ; sadece ebeveynin açtığı zamanda kullanılır
         return null
@@ -363,6 +365,9 @@ class RuleEngine(private val rules: Rules) {
         rules.sections.filter { it.profileId == profileFor(day).id }.sortedWith(compareBy({ it.start }, { it.order }))
 
     /** Bugün için saat aralıklı ekstra süreler. */
+    /** Orbit günü: gün bitişinden (ör. 05:00) önceki gece saatleri önceki güne sayılır */
+    fun logicalDay(now: ZonedDateTime): LocalDate = now.minusMinutes(rules.dayEndMin.toLong()).toLocalDate()
+
     /** Aralığın bitişine kalan saniye */
     private fun secsToEnd(g: Grant, t: LocalTime): Long {
         val w = g.window ?: return UNLIMITED_SECONDS

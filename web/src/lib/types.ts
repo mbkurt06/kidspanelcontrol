@@ -106,6 +106,8 @@ export type FamilySettings = {
   parent_pin_hash: string | null;
   task_before_photo_min: number;
   task_record_camera?: "back" | "front" | "choose";
+  /** Orbit günü bitişi ("05:00:00"): o güne ait süreler bu saate kadar bekler, kalan kasaya */
+  day_end?: string;
   task_before_photo_max: number;
   task_after_photo_min: number;
   task_after_photo_max: number;

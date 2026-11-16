@@ -37,7 +37,7 @@ object Sync {
             // Aile/çocuk bilgisi bağımsız; ikisini aynı anda al.
             val (fam, kid) = coroutineScope {
                 val famJob = async(Dispatchers.IO) {
-                    runCatching { Api.get("families?select=id,timezone,parent_pin_hash,pin_unlock_minutes&limit=1") }
+                    runCatching { Api.get("families?select=id,timezone,parent_pin_hash,pin_unlock_minutes,day_end&limit=1") }
                         .getOrElse { Api.get("families?select=timezone&limit=1") }
                 }
                 val kidJob = async(Dispatchers.IO) {
@@ -47,7 +47,9 @@ object Sync {
                 famJob.await() to kidJob.await()
             }
             val tz = fam.optJSONObject(0)?.optString("timezone") ?: "Europe/Berlin"
-            val today = java.time.LocalDate.now(java.time.ZoneId.of(tz)).toString()
+            // Orbit günü "gün bitişi"nde (varsayılan 05:00) değişir: gece 00:00–05:00 önceki güne sayılır
+            val dayEndMin = runCatching { fam.optJSONObject(0)?.optString("day_end")?.takeIf { it.length >= 5 }?.let { it.substring(0, 2).toInt() * 60 + it.substring(3, 5).toInt() } }.getOrNull() ?: 300
+            val today = java.time.ZonedDateTime.now(java.time.ZoneId.of(tz)).minusMinutes(dayEndMin.toLong()).toLocalDate().toString()
 
             // Bu istekler birbirinden bağımsız. Seri çekim telefonda her değişikliği 5–7 sn geciktiriyordu.
             val bundle = coroutineScope {
@@ -76,6 +78,7 @@ object Sync {
 
                 JSONObject()
                     .put("timezone", tz)
+                    .put("day_end_min", dayEndMin)
                     .put("wallet_daily_max", kid.optJSONObject(0)?.takeIf { it.has("wallet_daily_max") && !it.isNull("wallet_daily_max") }?.optInt("wallet_daily_max") ?: JSONObject.NULL)
                     .put("child", kid.optJSONObject(0) ?: JSONObject())
                     .put("family", fam.optJSONObject(0) ?: JSONObject())

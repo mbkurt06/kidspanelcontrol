@@ -203,6 +203,7 @@ object Parse {
     /** Sunucudan gelen ham parçaları tek bir JSON'da saklar. */
     fun rulesFromBundle(b: JSONObject): Rules = Rules(
         timezone = b.optString("timezone", "Europe/Berlin"),
+        dayEndMin = b.optInt("day_end_min", 300),
         apps = apps(b.optJSONArray("apps") ?: JSONArray()),
         usageRules = usageRules(b.optJSONArray("usage_rules") ?: JSONArray()),
         profiles = profiles(b.optJSONArray("profiles") ?: JSONArray()),

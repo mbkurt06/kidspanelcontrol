@@ -7,6 +7,7 @@ import { relTime } from "../lib/util";
 import type { Device, ParentDevice } from "../lib/types";
 import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
+import { TimeField } from "../components/DateTime";
 import type { CloudStatus } from "../lib/media";
 import { currentPushTypes, currentSubscription, disablePush, enablePush, isIOS, isStandalone, PUSH_EVENT_TYPES, pushSupported, updatePushTypes } from "../lib/push";
 import { biometricEnabled, biometricGrace, biometricSupported, disableBiometric, registerBiometric, setBiometricGrace } from "../lib/biometric";
@@ -115,6 +116,7 @@ export default function Settings() {
       {err && <p className="error">{err}</p>}
       {msg && <p className="ok">{msg}</p>}
 
+      <DayEndCard />
       <OneDriveCard />
       <UpdateTokenCard familyId={fam.familyId} />
       <ThemeCard />
@@ -819,6 +821,33 @@ function UpdateTokenCard({ familyId }: { familyId: string | null }) {
         {saved && <button className="btn small ghost" disabled={busy} onClick={() => confirm("Güncelleme anahtarı silinsin mi?") && save(null)}>Sil</button>}
       </div>
       {msg && <p className="tiny muted">{msg}</p>}
+    </div>
+  );
+}
+
+/** Orbit günü bitişi: süreler bu saate kadar bekler (telefon açıkken kullanılır), kalan kasaya geçer; sayaçlar sıfırlanır */
+function DayEndCard() {
+  const fam = useFamily();
+  const cur = (fam.family?.day_end ?? "05:00").slice(0, 5);
+  const [v, setV] = useState(cur);
+  const [msg, setMsg] = useState("");
+  useEffect(() => setV(cur), [cur]);
+  return (
+    <div className="card">
+      <h2>Gün bitişi <Info>O güne ait bütün süreler (günlük süre, verilen süre, görev ödülü) bu saate kadar bekler; telefon kilitli olsa da kaybolmaz, sadece telefon açıkken kullanılır. Bu saatte kalan ne varsa kasaya geçer, “bugün kullandı” sayacı ve günün görevleri yenilenir. Gece yarısından bu saate kadarki süre önceki güne sayılır.</Info></h2>
+      <div className="row gap-s" style={{ alignItems: "center" }}>
+        <span className="small">Gün</span>
+        <TimeField value={v} onChange={setV} label="Gün bitişi" />
+        <span className="small">'de biter</span>
+        <button className="btn small" disabled={v === cur} onClick={async () => {
+          const { error } = await supabase.from("families").update({ day_end: v }).eq("id", fam.familyId);
+          if (error) { setMsg(errorText(error)); return; }
+          await fam.reload();
+          for (const c of fam.children) await supabase.from("commands").insert({ child_id: c.id, type: "resync", payload: {} });
+          setMsg("Kaydedildi");
+        }}>Kaydet</button>
+        {msg && <span className="small good-text">{msg}</span>}
+      </div>
     </div>
   );
 }

@@ -90,7 +90,7 @@ type LockKind = "kiosk" | "limit" | string;
 const timeText = (iso: string) => new Date(iso).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
 
 /** Açık saatleri bugünlük uzat: bugünün süre aralıklarının bitişini ileri alır (kasaya geçiş de o saate kayar) */
-async function extendOpenToday(childId: string, endHm: string) {
+async function extendOpenToday(childId: string, endHm: string, openEnd: string | null) {
   const nowMin = nowBerlin().minute;
   const { data, error } = await supabase.from("time_grants").select("id, window_start, window_end, orig_window_end, use_mode, note")
     .eq("child_id", childId).eq("valid_on", todayISO()).eq("vault", false).gt("minutes", 0).is("settled_at", null).not("window_end", "is", null);
@@ -98,11 +98,14 @@ async function extendOpenToday(childId: string, endHm: string) {
   let n = 0;
   for (const g of (data ?? []) as { id: string; window_start: string; window_end: string; orig_window_end: string | null; use_mode: string | null; note: string | null }[]) {
     if (g.use_mode === "clock" || g.note?.startsWith("Geçici açma")) continue;
+    if (mins(g.window_end) < nowMin) continue; // bitmiş aralık
+    // Sadece açık saatlerin bitişine bağlı süreler (ya da daha önce uzatılmış olanlar) kayar
+    const bound = g.orig_window_end != null || (openEnd != null && mins(g.window_end) === mins(openEnd));
+    if (!bound) continue;
+    if (mins(endHm) <= mins(g.window_start) || mins(endHm) === mins(g.window_end)) continue;
     const orig = g.orig_window_end ?? g.window_end;
-    if (!g.orig_window_end && mins(g.window_end) < nowMin) continue; // bitmiş aralık
-    if (mins(endHm) <= mins(g.window_start)) continue;
-    if (!g.orig_window_end && mins(g.window_end) >= mins(endHm)) continue; // zaten daha geç
-    const { error: e2 } = await supabase.from("time_grants").update({ window_end: endHm, orig_window_end: orig }).eq("id", g.id);
+    const back = mins(endHm) === mins(orig);
+    const { error: e2 } = await supabase.from("time_grants").update({ window_end: endHm, orig_window_end: back ? null : orig }).eq("id", g.id);
     if (e2) throw e2;
     n++;
   }
@@ -320,10 +323,16 @@ function ChildCard({ child }: { child: Child }) {
     }
   }
   const extended = extras.filter((g) => g.orig_window_end);
-  const baseEnd = extended.length ? Math.max(...extended.map((g) => mins(g.window_end))) : sec ? mins(sec.end_time) : nowBerlin().minute;
+  // Bugünkü açık saatlerin (süreli bölümlerin) programdaki bitişi
+  const openEndToday = (() => {
+    const e = fam.sections.filter((x) => x.profile_id === sec?.profile_id && timedPossible(x, fam.sectionRules) && mins(x.end_time) > mins(x.start_time)).map((x) => mins(x.end_time));
+    return e.length ? hm(Math.max(...e)) : null;
+  })();
+  const baseEnd = extended.length ? Math.max(...extended.map((g) => mins(g.window_end))) : openEndToday ? mins(openEndToday) : sec ? mins(sec.end_time) : nowBerlin().minute;
   function extendPlan(): { end: string | null; text: string } {
     const cap = (m: number) => hm(Math.min(m, 1439));
     switch (xDur) {
+      case "-15": case "-30": case "-60": return { end: cap(Math.max(baseEnd + Number(xDur), nowBerlin().minute + 1)), text: "" };
       case "min": return { end: cap(baseEnd + xMin), text: "" };
       case "until": return { end: xUntil, text: "" };
       case "midnight": return { end: "23:59", text: "" };
@@ -337,9 +346,9 @@ function ChildCard({ child }: { child: Child }) {
     const ids = xAll ? fam.children.map((c) => c.id) : [child.id];
     run("give", async () => {
       let n = 0;
-      for (const id of ids) n += await extendOpenToday(id, p.end!);
+      for (const id of ids) n += await extendOpenToday(id, p.end!, openEndToday);
       await loadExtras();
-      return n ? `⏰ Bugün ${p.end}'e kadar uzatıldı${ids.length > 1 ? " (hepsi)" : ""}` : "Bugün uzatılacak süre yok";
+      return n ? `⏰ Bugün ${p.end}'e kadar${ids.length > 1 ? " (hepsi)" : ""}` : "Bugün değiştirilecek süre yok";
     }, (r) => String(r));
   }
   function applyUnlock() {
@@ -612,21 +621,28 @@ function ChildCard({ child }: { child: Child }) {
       <div className="card-actions">
         <div className="lock-wrap">
           <button
-            className={`pill-btn ${lockOpen ? "on" : ""} ${kiosk ? "lock-on" : limited ? "limit-on" : ""}`}
+            className={`icon-pill ${lockOpen ? "on" : ""} ${kiosk ? "lock-on" : limited ? "limit-on" : ""}`}
             disabled={!!busy}
+            aria-label="Kilitle"
+            title="Kilitle"
             onClick={() => {
-              if (kiosk || limited) {
-                setLockOpen(false);
-                setUnlockOpen(true);
-              } else {
-                if (!lockOpen && (tempOpen || pmActive)) setLockKind("resume");
-                else if (!lockOpen && lockKind === "resume") setLockKind("kiosk");
-                setLockOpen(!lockOpen);
-              }
+              setUnlockOpen(false);
+              if (!lockOpen && (tempOpen || pmActive)) setLockKind("resume");
+              else if (!lockOpen && lockKind === "resume") setLockKind("kiosk");
+              setLockOpen(!lockOpen);
             }}
-            aria-expanded={kiosk || limited ? undefined : lockOpen}
+            aria-expanded={lockOpen}
           >
-            <Icon name={kiosk || limited ? "unlock" : "lock"} size={15} /> {kiosk || limited ? "Kilidi aç" : "Kilitle"}
+            <Icon name="lock" size={17} />
+          </button>
+          <button
+            className={`icon-pill ${unlockOpen ? "on" : ""} ${kiosk || limited ? "unlock-ready" : ""}`}
+            disabled={!!busy}
+            aria-label="Kilidi aç"
+            title="Kilidi aç"
+            onClick={() => { setLockOpen(false); setUnlockOpen(true); }}
+          >
+            <Icon name="unlock" size={17} />
           </button>
           {unlockOpen && createPortal(
             <>
@@ -634,7 +650,7 @@ function ChildCard({ child }: { child: Child }) {
               <div className="lock-pop sheet-pop" role="dialog" aria-label="Kilidi aç">
                 <b className="sheet-pop-title">{child.name}</b>
                 <p className="small" style={{ margin: 0 }}>
-                  🔒 <b>Neden kilitli:</b> {taskLock ? `Görev: ${taskLock}` : (st?.lock_reason ?? "").replace("🔒", "").trim() || "Telefon kilitli"}
+                  {kiosk || limited || taskLock ? <>🔒 <b>Neden kilitli:</b> {taskLock ? `Görev: ${taskLock}` : (st?.lock_reason ?? "").replace("🔒", "").trim() || "Telefon kilitli"}</> : <>🟢 Şu an açık. Seçtiğin süre boyunca kilitler ve kapalı saatler devreye girmez.</>}
                 </p>
                 {tempOpen && (
                   <button className="pill-btn" onClick={() => { setUnlockOpen(false); setExtMin(30); setExtOpen(true); }}>
@@ -857,7 +873,7 @@ function ChildCard({ child }: { child: Child }) {
         <>
           <div className="pop-backdrop sheet-like" onClick={() => setXOpen(false)} />
           <div className="lock-pop sheet-pop" role="dialog" aria-label="Açık saatleri uzat">
-            <b className="sheet-pop-title">{child.name} · Açık saatleri uzat (sadece bugün)</b>
+            <b className="sheet-pop-title">{child.name} · Açık saatleri uzat / kısalt (sadece bugün)</b>
             <p className="small" style={{ margin: 0 }}>
               Bugün: {hm(Math.min(baseEnd, 1439))}'de kapanıyor{extended.length ? " (uzatılmış)" : ""}{st && st.remaining_minutes < 1440 ? ` · kalan süre ${minutesText(st.remaining_minutes)}` : ""}
             </p>
@@ -872,6 +888,8 @@ function ChildCard({ child }: { child: Child }) {
                   <div className="chips">
                     {chip("15", "+15 dk")}{chip("30", "+30 dk")}{chip("60", "+1 sa")}{chip("90", "+1,5 sa")}{chip("120", "+2 sa")}{chip("min", "+ Süre…")}
                   </div>
+                  <span className="small muted">Kısalt</span>
+                  <div className="chips">{chip("-15", "−15 dk")}{chip("-30", "−30 dk")}{chip("-60", "−1 sa")}</div>
                   {xDur === "min" && <MinuteStepper value={xMin} onChange={setXMin} min={5} max={600} step={5} label="Uzatma" />}
                   <div className="chips">{chip("until", "Saate kadar…")}{chip("midnight", "Gece yarısına kadar")}</div>
                   {xDur === "until" && <TimeField value={xUntil} onChange={setXUntil} label="Yeni bitiş" />}
@@ -892,7 +910,7 @@ function ChildCard({ child }: { child: Child }) {
                       }}>Geri al</button>
                     )}
                     <button className="pill-btn ghost" onClick={() => setXOpen(false)}>Vazgeç</button>
-                    <button className="pill-btn primary" disabled={!!busy} onClick={applyExtend}>Uzat</button>
+                    <button className="pill-btn primary" disabled={!!busy} onClick={applyExtend}>{xDur.startsWith("-") || (extendPlan().end ?? "") < hm(Math.min(baseEnd, 1439)) ? "Kısalt" : "Uzat"}</button>
                   </div>
                 </div>
               );

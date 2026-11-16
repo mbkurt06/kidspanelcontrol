@@ -2381,3 +2381,9 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .select-like { width: 100%; min-height: 44px; padding: 0 12px; text-align: left; font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
 .pill-btn.dashed { border-style: dashed; border-color: var(--accent); color: var(--accent); background: transparent; }
 @media (min-width: 1100px) { .gt-cell.gt-title { flex: 0 1 220px; } }
+
+/* Kart: kilitle / kilidi aç simge düğmeleri */
+.icon-pill.lock-on { background: color-mix(in srgb, var(--bad, #ef5b6b) 22%, transparent); border-color: var(--bad, #ef5b6b); color: var(--bad, #ef5b6b); }
+.icon-pill.limit-on { background: color-mix(in srgb, var(--warn, #f2b134) 22%, transparent); border-color: var(--warn, #f2b134); color: var(--warn, #f2b134); }
+.icon-pill.unlock-ready { border-color: var(--good, #2bb673); color: var(--good, #2bb673); }
+.icon-pill.on { outline: 2px solid var(--accent, #6b5ce7); }

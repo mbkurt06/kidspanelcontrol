@@ -218,9 +218,11 @@ class SectionEngineTest {
         assertEquals(20 * 60L, e.snapshot(at(21, 5), DayUsage(day)).remainingSeconds)
         val u = use(e, DayUsage(day), "com.insta", at(21, 5), 3)
         assertEquals(17 * 60L, e.snapshot(at(21, 10), u).remainingSeconds)
-        // Programdaki "Sınırla" verilen süre boyunca açılır
+        // Programdaki "Sınırla": verilen süre (miktar) açmaz; ebeveynin "Kilidi aç" aralığı açar
         val lim = app.orbit.engine.TimeRule("l2", "Akşam", "limit", (1..7).toSet(), W("16:00", "18:00"))
-        val g3 = Grant("a3", 10, day, null, null, null, null, window = W("16:30", "17:30"))
+        val given = Grant("a4", 10, day, null, null, null, null, window = W("16:30", "17:30"), source = "manual")
+        assertTrue(RuleEngine(rules(grants = listOf(given)).copy(timeRules = listOf(lim))).snapshot(at(16, 40), DayUsage(day)).locked)
+        val g3 = Grant("a3", 60, day, null, null, "Geçici açma · Sınırlı", null, window = W("16:30", "17:30"), source = "manual")
         val e2 = RuleEngine(rules(grants = listOf(g3)).copy(timeRules = listOf(lim)))
         assertFalse(e2.snapshot(at(16, 40), DayUsage(day)).locked)
         assertTrue(e2.snapshot(at(17, 40), DayUsage(day)).locked)

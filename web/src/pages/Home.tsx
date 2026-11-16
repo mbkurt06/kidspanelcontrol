@@ -127,7 +127,7 @@ function ChildCard({ child }: { child: Child }) {
     return () => clearInterval(t);
   }, [child.id, st?.updated_at]); // eslint-disable-line react-hooks/exhaustive-deps
   const [lockKind, setLockKind] = useState<LockKind>("kiosk");
-  const [lockDur, setLockDur] = useState("none");
+  const [lockDur, setLockDur] = useState("open");
   const [lockUntil, setLockUntil] = useState("19:00");
   const [give, setGive] = useState(0);
   const [giveText, setGiveText] = useState<string | null>(null);
@@ -180,6 +180,13 @@ function ChildCard({ child }: { child: Child }) {
     const today = timed.find((m) => m > minute);
     if (today != null) return `${hm(today)}'de açılır`;
     return timed.length ? `Yarın ${hm(timed[0])}'de açılır` : null;
+  })();
+  // Elle kilit için: bir sonraki açık saatlerin başlangıcı (bugün ya da yarın)
+  const nextOpenStart = (() => {
+    const { minute } = nowBerlin();
+    const st0 = fam.sections.filter((x) => x.profile_id === sec?.profile_id && x.default_rule !== "blocked" && timedPossible(x, fam.sectionRules)).map((x) => mins(x.start_time)).sort((a, b) => a - b);
+    const m = st0.find((v) => v > minute) ?? st0[0];
+    return m == null ? null : hm(m);
   })();
 
   async function run(key: string, fn: () => Promise<unknown>, ok: string | ((r: unknown) => string)) {
@@ -246,7 +253,11 @@ function ChildCard({ child }: { child: Child }) {
     const what = lockKind === "kiosk" ? "kilitlensin" : lockKind === "limit" ? "sınırlansın" : "profili başlasın";
     if (!confirm(`${child.name} ${what} mı?`)) return;
     const until =
-      lockDur === "none" ? null : lockDur === "until" ? untilFrom("until", lockUntil) : new Date(Date.now() + Number(lockDur) * 60000).toISOString();
+      lockDur === "none" ? null
+      : lockDur === "until" ? untilFrom("until", lockUntil)
+      : lockDur === "midnight" ? untilFrom("until", "00:00")
+      : lockDur === "open" ? (nextOpenStart ? untilFrom("until", nextOpenStart) : untilFrom("until", "00:00"))
+      : new Date(Date.now() + Number(lockDur) * 60000).toISOString();
     setLockOpen(false);
     if (lockKind === "kiosk") {
       setPending({ kind: "kiosk", at: Date.now() });
@@ -463,12 +474,28 @@ function ChildCard({ child }: { child: Child }) {
                 <p className="small" style={{ margin: 0 }}>
                   🔒 <b>Neden kilitli:</b> {taskLock ? `Görev: ${taskLock}` : (st?.lock_reason ?? "").replace("🔒", "").trim() || "Telefon kilitli"}
                 </p>
+                {!taskLock && (
+                  <>
+                    <button
+                      className="pill-btn primary"
+                      disabled={!!busy}
+                      onClick={() => {
+                        setUnlockOpen(false);
+                        setPending({ kind: "open", at: Date.now() });
+                        run("unlock", () => unlockNow(child.id), "");
+                      }}
+                    >
+                      🔓 Kilidi tamamen kaldır
+                    </button>
+                    <p className="muted small" style={{ margin: 0 }}>Elle kilit biter, telefon programa döner (açık saatse açık, kapalı saatse kapalı).</p>
+                  </>
+                )}
                 {tempOpen && (
                   <button className="pill-btn" onClick={() => { setUnlockOpen(false); setExtMin(30); setExtOpen(true); }}>
                     🔓 Geçici açık · {hm(Math.min(tempOpen.end, 1439))}'e kadar · ＋ Uzat
                   </button>
                 )}
-                <span className="pop-label">⏱ GEÇİCİ AÇ <Info>Telefon bu süre boyunca normal açık saat gibi çalışır. Süre dolunca (telefon kapalı ya da internetsiz olsa da) aynı sebepten yine kilitlenir. Beklemeden kilitlemek için “Kilitle → Kaldığı yerden devam et”.</Info></span>
+                <span className="pop-label">⏱ GEÇİCİ AÇ <Info>Telefon bu süre boyunca normal açık saat gibi çalışır. Süre dolunca (telefon kapalı ya da internetsiz olsa da) aynı sebepten yine kilitlenir (elle kilit dahil). Beklemeden kilitlemek için “Kilitle → Kaldığı yerden devam et”.</Info></span>
                 <div className="row gap-s" style={{ alignItems: "center" }}>
                   <MinuteStepper value={parentMin} onChange={setParentMin} min={1} max={240} step={1} label="Geçici açma süresi" />
                   <button
@@ -499,20 +526,7 @@ function ChildCard({ child }: { child: Child }) {
                 </button>
                 <div className="pop-actions">
                   <button className="pill-btn ghost" onClick={() => setUnlockOpen(false)}>Vazgeç</button>
-                  {!taskLock && (
-                    <button
-                      className="pill-btn"
-                      disabled={!!busy}
-                      onClick={() => {
-                        if (!confirm(`${child.name} kilidi tamamen kaldırılsın mı?`)) return;
-                        setUnlockOpen(false);
-                        setPending({ kind: "open", at: Date.now() });
-                        run("unlock", () => unlockNow(child.id), "");
-                      }}
-                    >
-                      Kilidi kaldır
-                    </button>
-                  )}
+
                 </div>
               </div>
             </>,
@@ -563,7 +577,9 @@ function ChildCard({ child }: { child: Child }) {
                 {lockKind !== "resume" && <span className="pop-label">NE KADAR</span>}
                 <div className="chips" hidden={lockKind === "resume"}>
                   {[
-                    ["none", lockKind === "kiosk" || lockKind === "limit" ? "Kaldırana kadar" : "Programa dönene kadar"],
+                    ["open", `Açık saatler başlayana kadar${nextOpenStart ? ` (${nextOpenStart})` : ""}`],
+                    ["midnight", "Gece yarısına kadar"],
+                    ["none", lockKind === "kiosk" || lockKind === "limit" ? "Ben kaldırana kadar" : "Programa dönene kadar"],
                     ["15", "15 dk"],
                     ["30", "30 dk"],
                     ["60", "1 sa"],
@@ -575,6 +591,7 @@ function ChildCard({ child }: { child: Child }) {
                     </button>
                   ))}
                 </div>
+                {lockKind !== "resume" && lockDur === "none" && (lockKind === "kiosk" || lockKind === "limit") && <p className="muted small" style={{ margin: 0 }}>Kendiliğinden bitmez. Geçici açınca süre bitiminde yine kilitlenir; tamamen açmak için “Kilidi aç → Kilidi tamamen kaldır”.</p>}
                 {lockKind !== "resume" && lockDur === "until" && <TimeField value={lockUntil} onChange={setLockUntil} label="Bitiş saati" />}
                 <div className="pop-actions">
                   <button className="pill-btn ghost" onClick={() => setLockOpen(false)}>

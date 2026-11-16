@@ -213,11 +213,13 @@ class SectionEngineTest {
         val W = { a: String, b: String -> app.orbit.engine.TimeWindow(t(a), t(b)) }
         val g1 = Grant("a1", 5, day, null, null, null, null, window = W("21:00", "23:59"))
         val g2 = Grant("a2", 15, day, null, null, null, null, window = W("21:02", "23:59"))
+        // Verilen süre (miktar) kapalı saati açmaz
         val e = RuleEngine(rules(grants = listOf(g1, g2)))
-        // 21:05 Uyku: iki süre toplanır (5 + 15)
-        assertEquals(20 * 60L, e.snapshot(at(21, 5), DayUsage(day)).remainingSeconds)
-        val u = use(e, DayUsage(day), "com.insta", at(21, 5), 3)
-        assertEquals(17 * 60L, e.snapshot(at(21, 10), u).remainingSeconds)
+        assertFalse(v(e, "com.insta", at(21, 5)).allowed)
+        // Ebeveyn "Kilidi aç" ile açınca çocuk süresini kullanır
+        val open = Grant("t1", 178, day, null, null, "Geçici açma · Uyku", null, window = W("21:00", "23:59"), source = "manual")
+        val eo = RuleEngine(rules(grants = listOf(g1, g2, open)))
+        assertTrue(v(eo, "com.insta", at(21, 5)).allowed)
         // Programdaki "Sınırla": verilen süre (miktar) açmaz; ebeveynin "Kilidi aç" aralığı açar
         val lim = app.orbit.engine.TimeRule("l2", "Akşam", "limit", (1..7).toSet(), W("16:00", "18:00"))
         val given = Grant("a4", 10, day, null, null, null, null, window = W("16:30", "17:30"), source = "manual")
@@ -229,19 +231,14 @@ class SectionEngineTest {
     }
 
     @Test
-    fun timeWindowGrantOpensClosedHoursAndVaultIsNotUsable() {
+    fun timeWindowGrantDoesNotOpenClosedHoursAndVaultIsNotUsable() {
         val window = Grant("w1", 30, day, null, null, "Film", null, window = app.orbit.engine.TimeWindow(t("21:00"), t("22:00")))
         val vault = Grant("v1", 45, null, null, null, "Kasada", null, vault = true)
         val e = RuleEngine(rules(grants = listOf(window, vault)))
-        // 21:30 normalde Uyku (kapalı); ekstra süre aralığında süreli uygulamalar açık
+        // 21:30 Uyku (kapalı): verilen süre telefonu açmaz
         val s = e.snapshot(at(21, 30), DayUsage(day))
-        assertEquals("Film", s.section?.section?.name)
-        assertEquals(30 * 60L, s.remainingSeconds)
-        assertTrue(v(e, "com.insta", at(21, 30)).allowed)
-        var u = use(e, DayUsage(day), "com.insta", at(21, 30), 30)
-        assertFalse(v(e, "com.insta", at(21, 50), u).allowed)
-        // Aralık dışında yine Uyku
-        assertEquals("Uyku", e.snapshot(at(22, 30), DayUsage(day)).section?.section?.name)
+        assertEquals("Uyku", s.section?.section?.name)
+        assertFalse(v(e, "com.insta", at(21, 30)).allowed)
         // Kasadaki süre çocuğun cüzdanında görünmez, bugüne eklenmez
         assertTrue(s.walletGrants.isEmpty())
         assertEquals(60 * 60L, e.snapshot(at(16, 5), DayUsage(day)).remainingSeconds)

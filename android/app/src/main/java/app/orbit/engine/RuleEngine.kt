@@ -354,8 +354,8 @@ class RuleEngine(private val rules: Rules) {
             val sec = open.lastOrNull { it.start <= t } ?: open.firstOrNull()
             if (sec != null) return SectionNow(sec, day, tw.window!!.end)
         }
-        // Birden fazla süre verildiyse en son biteni taşıyıcı olur; kalanlar toplanır (bkz. sectionSnapshot)
-        return activeWindows(day, t).filter { !isTempOpen(it) }.maxByOrNull { it.window!!.end }?.let { windowAsSection(it, day) }
+        // Verilen süre (miktar) kapalı saati kendi başına AÇMAZ; sadece ebeveynin açtığı zamanda kullanılır
+        return null
     }
 
     /** Bugünün bölümleri (saat sırasıyla) — çocuğun "Günüm" ekranı için. */

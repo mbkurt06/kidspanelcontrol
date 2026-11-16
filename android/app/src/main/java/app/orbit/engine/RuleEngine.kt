@@ -443,7 +443,14 @@ class RuleEngine(private val rules: Rules) {
             val wins = activeWindows(day, t).filter { !isTempOpen(it) }
             curEff = wins.sumOf { it.minutes } * 60L
             // Her aralık en fazla bitiş saatine kadar kullanılabilir (saat gibi akan süre kullanılmasa da biter)
-            curLeft = wins.sumOf { g -> minOf((g.minutes * 60L - bucket(usage, "s:grant:${g.id}@$day") - bucket(usage, "w:${g.id}")).coerceAtLeast(0), secsToEnd(g, t)) }
+            // Açık saatlerde bu aralıklardan harcanan gerçek süre = bölümlerin bütçesini aşan kullanım (havuzdan düşen);
+            // aralık başına sayaçlar (w:) aynı anda birden çok aralığa yazıldığı için toplamda kullanılmaz.
+            val ended = dayWindows(day).filter { !isTempOpen(it) && it !in wins }
+            val endedUsed = ended.sumOf { g -> minOf(bucket(usage, "w:${g.id}") + bucket(usage, "s:grant:${g.id}@$day"), g.minutes * 60L) }
+            val openUsed = (poolUsed - (poolMin * 60L).coerceAtLeast(0)).coerceAtLeast(0)
+            val consumed = (openUsed - endedUsed).coerceAtLeast(0) + wins.sumOf { bucket(usage, "s:grant:${it.id}@$day") }
+            val maxEnd = wins.maxOfOrNull { secsToEnd(it, t) } ?: 0L
+            curLeft = (curEff - consumed).coerceAtLeast(0).coerceAtMost(maxEnd)
         } else if (cur != null && (cur.section.id !in todayIds || cur.startDay != day) && cur.section.budgetMinutes != null) {
             // Dünden taşan gece bölümü: kendi süresi (devretme yok)
             val eff = cur.section.budgetMinutes * 60L

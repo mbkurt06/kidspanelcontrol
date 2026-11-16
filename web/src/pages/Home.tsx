@@ -179,6 +179,10 @@ function ChildCard({ child }: { child: Child }) {
       .gt("minutes", 0)
       .not("window_start", "is", null);
     setExtras((data ?? []) as typeof extras);
+    // Gece yarısını geçen açma: yarının 00:00'dan başlayan parçası (bitişi doğru göstermek için)
+    const { data: nx } = await supabase.from("time_grants").select("window_end").eq("child_id", child.id)
+      .eq("valid_on", todayISO("Europe/Berlin", 1)).eq("source", "manual").like("note", "Geçici açma%").eq("window_start", "00:00:00").is("settled_at", null).limit(1);
+    setTempNext((nx?.[0] as { window_end: string } | undefined)?.window_end?.slice(0, 5) ?? null);
   };
   useEffect(() => {
     loadExtras();
@@ -190,6 +194,7 @@ function ChildCard({ child }: { child: Child }) {
   const [lockMin, setLockMin] = useState(45);
   const [uDur, setUDur] = useState("closed");
   const [xOpen, setXOpen] = useState(false);
+  const [tempNext, setTempNext] = useState<string | null>(null);
   const [xDur, setXDur] = useState("60");
   const [xMin, setXMin] = useState(75);
   const [xUntil, setXUntil] = useState("22:30");
@@ -610,12 +615,13 @@ function ChildCard({ child }: { child: Child }) {
     return sameDay ? (h % 24) * 60 + m : 1439;
   })() : nowBerlin().minute;
   const xBase = xMode === "lock" ? lockEndMin : xMode === "temp" && tempOpen ? Math.min(tempOpen.end, 1439) : baseEnd;
+  const tempEndText = tempOpen ? (tempOpen.end >= 1439 && tempNext ? `yarın ${tempNext}` : hm(Math.min(tempOpen.end, 1439))) : "";
   const stateLine = !st
     ? null
     : tempOpen && !waiting && !kiosk
       ? tempOpen.reason.startsWith("Açık saatler")
         ? { cls: "good", text: `🟢 Açık saatler · ${hm(Math.min(tempOpen.end, 1439))}'e kadar (bugün uzatıldı)` }
-        : { cls: "good", text: `🔓 Açıldı · ${hm(Math.min(tempOpen.end, 1439))}'e kadar · sonra 🔒 ${tempOpen.reason}` }
+        : { cls: "good", text: `🔓 Açıldı · ${tempEndText}'e kadar · sonra 🔒 ${tempOpen.reason}` }
       : kiosk
       ? { cls: "bad", text: waiting && !realKiosk ? "Kilitli · telefona iletiliyor…" : `Kilitli · ${(st.lock_reason ?? "").replace("🔒", "").trim() || "Tam kilit"}${manualLock && /Tam kilit/.test(st.lock_reason ?? "") ? ` · ${manualLock.runs.length ? "görev bitene kadar" : untilText(manualLock.until)}` : ""}` }
       : limited
@@ -729,7 +735,7 @@ function ChildCard({ child }: { child: Child }) {
                 <p className="small" style={{ margin: 0 }}>
                   {kiosk || limited || taskLock ? <>🔒 <b>Neden kilitli:</b> {taskLock ? `Görev: ${taskLock}` : (st?.lock_reason ?? "").replace("🔒", "").trim() || "Telefon kilitli"}</> : <>🟢 Şu an açık. Seçtiğin süre boyunca kilitler ve kapalı saatler devreye girmez.</>}
                 </p>
-                {tempOpen && <p className="small muted" style={{ margin: 0 }}>🔓 Şu an {hm(Math.min(tempOpen.end, 1439))}'e kadar açık · süreyi ⏰ ile uzat / kısalt</p>}
+                {tempOpen && <p className="small muted" style={{ margin: 0 }}>🔓 Şu an {tempEndText}'e kadar açık · süreyi ⏰ ile uzat / kısalt</p>}
                 <span className="pop-label">NE KADAR AÇIK KALSIN <Info>Seçtiğin zamana kadar telefon normal açık saat gibi çalışır. Süre dolunca (telefon kapalı ya da internetsiz olsa da) aynı sebepten yine kilitlenir. Beklemeden kilitlemek için “Kilitle → Kaldığı yerden devam et”.</Info></span>
                 {(() => {
                   const chip = (k: string, l: string) => (
@@ -823,7 +829,7 @@ function ChildCard({ child }: { child: Child }) {
                 <span className="pop-label">NE OLSUN</span>
                 <div className="chips">
                   {[
-                    ...(tempOpen ? [{ id: "resume", name: `🔁 Kaldığı yerden devam et: ${tempOpen.reason}` }] : pmActive ? [{ id: "resume", name: "🔁 Kaldığı yerden devam et (ebeveyn modunu kapat)" }] : []),
+                    ...(tempOpen ? [{ id: "resume", name: "🔁 Kaldığı yerden devam et (açmayı bitir)" }] : pmActive ? [{ id: "resume", name: "🔁 Kaldığı yerden devam et (ebeveyn modunu kapat)" }] : []),
                     { id: "kiosk", name: "Kilitle" },
                     { id: "limit", name: "Sınırla" },
                     ...fam.modes.filter((m) => !m.builtin).map((m) => ({ id: m.id, name: m.name.replace(/ zamanı$/i, "") })),
@@ -846,7 +852,7 @@ function ChildCard({ child }: { child: Child }) {
                       <span className="small muted">Hazır</span>
                       <div className="chips">
                         {chip("open", `Açık saatler başlayana kadar${nextOpenStart ? ` · ${nextOpenStart}` : ""}`)}
-                        {nextClosedStart && chip("closed", `Kapalı saatler başlayana kadar · ${nextClosedStart}`)}
+                        {nextClosedStart && sec && timedPossible(sec, fam.sectionRules) && chip("closed", `Kapalı saatler başlayana kadar · ${nextClosedStart}`)}
                         {chip("midnight", "Gece yarısına kadar")}
                         {chip("morning", "Yarın sabaha kadar · 07:00")}
                       </div>

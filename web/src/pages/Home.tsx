@@ -137,7 +137,6 @@ function ChildCard({ child }: { child: Child }) {
   const [uDur, setUDur] = useState("closed");
   const [xOpen, setXOpen] = useState(false);
   const [ringMenuOpen, setRingMenuOpen] = useState(false);
-  const [qText, setQText] = useState("");
   const [tempNext, setTempNext] = useState<string | null>(null);
   const [dialThen, setDialThen] = useState<"none" | "unlock" | "time" | "lock">("none");
   const [pendingGive, setPendingGive] = useState(0);
@@ -249,22 +248,6 @@ function ChildCard({ child }: { child: Child }) {
       });
   }, [child.id, st?.updated_at]);
 
-  // Karttan hızlı mesaj: ebeveynin bu çocukla birebir sohbetine
-  async function sendQuick(ta: HTMLTextAreaElement | null) {
-    const body = qText.trim();
-    if (!body) return;
-    await run("msg", async () => {
-      const { data: u } = await supabase.auth.getUser();
-      const me = u.user?.id;
-      const { data: c } = await supabase.from("chats").select("id, family_id").eq("kind", "direct").contains("child_ids", [child.id]).contains("parent_ids", [me]).maybeSingle();
-      const chat = c as { id: string; family_id: string } | null;
-      if (!chat) throw new Error("Bu çocukla sohbet bulunamadı");
-      const { error } = await supabase.from("messages").insert({ family_id: chat.family_id, chat_id: chat.id, from_parent: true, body });
-      if (error) throw error;
-      setQText("");
-      if (ta) ta.style.height = "auto";
-    }, "Mesaj gönderildi");
-  }
   async function run(key: string, fn: () => Promise<unknown>, ok: string | ((r: unknown) => string)) {
     setBusy(key);
     setMsg("");
@@ -677,7 +660,7 @@ function ChildCard({ child }: { child: Child }) {
                 />
               )}
             {st?.battery != null && (
-              <span className={`batt ${st.battery <= 15 ? "low" : ""}`} title="Telefonun şarjı">🔋 %{st.battery}</span>
+              <Battery level={st.battery} />
             )}
             <Icon name="chevron" size={18} />
           </div>
@@ -733,7 +716,6 @@ function ChildCard({ child }: { child: Child }) {
         )}
       </Link>
 
-      <div className="card-divider" />
       {pmUntil && pmUntil.getTime() > Date.now() && (
         <div className="row gap-s pm-row" style={{ alignItems: "center" }}>
           <span className="grow small">🛠 Ebeveyn modu açık · {pmUntil.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}'e kadar <span className="muted tiny">· bitince kilitler kaldığı yerden sürer</span></span>
@@ -742,7 +724,7 @@ function ChildCard({ child }: { child: Child }) {
           </button>
         </div>
       )}
-      <div className="card-actions">
+      <div className="card-actions" style={{ display: "contents" }}>
         <div className="lock-wrap">
           {unlockOpen && createPortal(
             <>
@@ -929,22 +911,6 @@ function ChildCard({ child }: { child: Child }) {
             document.body
           )}
         </div>
-        <textarea
-          className="quick-msg"
-          rows={1}
-          value={qText}
-          placeholder={`${child.name}'e mesaj yaz…`}
-          aria-label={`${child.name}'e mesaj yaz`}
-          onChange={(e) => { setQText(e.target.value); e.target.style.height = "auto"; e.target.style.height = `${e.target.scrollHeight}px`; }}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void sendQuick(e.currentTarget); } }}
-        />
-        {qText.trim() ? (
-          <button type="button" className="icon-pill send-pill" disabled={busy === "msg"} aria-label="Gönder" title="Gönder" onClick={(e) => { const ta = e.currentTarget.parentElement?.querySelector("textarea"); void sendQuick(ta ?? null); }}>➤</button>
-        ) : (
-          <Link to={`/messages/${child.id}`} className="icon-pill" aria-label={`${child.name} ile sohbet`} title="Sohbeti aç">
-            <Icon name="chat" size={16} />
-          </Link>
-        )}
       </div>
       {ringMenu && createPortal(
         <>
@@ -1205,5 +1171,21 @@ function Onboarding() {
         </button>
       </div>
     </div>
+  );
+}
+
+/** Telefonun şarjı: dolulukla dolan küçük pil + yüzde (≤%15 kırmızı, ≤%30 sarı) */
+function Battery({ level }: { level: number }) {
+  const v = Math.max(0, Math.min(100, level));
+  const color = v <= 15 ? "var(--bad)" : v <= 30 ? "var(--warn)" : "var(--good)";
+  return (
+    <span className="batt" title={`Şarj %${v}`} aria-label={`Şarj yüzde ${v}`} style={{ color: v <= 15 ? "var(--bad)" : undefined }}>
+      <svg width="22" height="12" viewBox="0 0 22 12" aria-hidden="true">
+        <rect x="0.75" y="0.75" width="18.5" height="10.5" rx="2.5" fill="none" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.5" />
+        <rect x="20" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor" fillOpacity="0.55" />
+        <rect x="2.5" y="2.5" width={Math.max(1, (15 * v) / 100)} height="7" rx="1.2" fill={color} />
+      </svg>
+      %{v}
+    </span>
   );
 }

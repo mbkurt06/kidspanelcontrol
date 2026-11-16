@@ -431,20 +431,7 @@ function TaskRow(p: {
           <option value="wallet">Cüzdana</option>
           <option value="vault">Kasaya</option>
         </select>
-        {(v.reward_validity ?? "today") === "today" && (
-          <select value={v.use_mode ?? "usage"} onChange={(e) => save({ use_mode: e.target.value as UseMode, use_within_minutes: e.target.value === "within" ? v.use_within_minutes ?? 120 : null }, 0)} aria-label="Kullanım şekli">
-            <option value="usage">Kullandıkça düşsün</option>
-            <option value="clock">Saat gibi aksın</option>
-            <option value="within">Belirli süre içinde</option>
-          </select>
-        )}
-        {(v.reward_validity ?? "today") === "today" && v.use_mode === "within" && (
-          <select value={String(v.use_within_minutes ?? 120)} onChange={(e) => save({ use_within_minutes: Number(e.target.value) }, 0)} aria-label="Kullanma süresi">
-            <option value="60">1 saat içinde</option>
-            <option value="120">2 saat içinde</option>
-            <option value="180">3 saat içinde</option>
-          </select>
-        )}
+        {(v.reward_validity ?? "today") === "today" && <small className="muted">Kullandıkça düşer · açık saatler bitince kalanı kasaya</small>}
       </div>
 
       <div className="gt-cell">

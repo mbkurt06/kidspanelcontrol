@@ -5,6 +5,7 @@ import { useFamily } from "../lib/family";
 import { supabase, errorText } from "../lib/supabase";
 import { giveNow, parentModeUntil, seedDefaults, sendCommand, stopParentMode } from "../lib/actions";
 import { kioskOf, lockNow, unlockNow, untilFrom } from "./Lock";
+import { extendOpenToday, openUntil, setOpenEnd, undoExtendOpen } from "../lib/openness";
 import { currentSectionFor, hm, mins, nowBerlin, timedPossible } from "../lib/sections";
 import { TimeField } from "../components/DateTime";
 import { timerElapsed, timerRemaining } from "../lib/types";
@@ -89,65 +90,6 @@ type LockKind = "kiosk" | "limit" | string;
 
 const timeText = (iso: string) => new Date(iso).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
 
-/** Açık saatleri bugünlük uzat: bugünün süre aralıklarının bitişini ileri alır (kasaya geçiş de o saate kayar) */
-async function extendOpenToday(childId: string, endHm: string, openEnd: string | null) {
-  const nowMin = nowBerlin().minute;
-  const { data, error } = await supabase.from("time_grants").select("id, window_start, window_end, orig_window_end, use_mode, note")
-    .eq("child_id", childId).eq("valid_on", todayISO()).eq("vault", false).gt("minutes", 0).is("settled_at", null).not("window_end", "is", null);
-  if (error) throw error;
-  let n = 0;
-  for (const g of (data ?? []) as { id: string; window_start: string; window_end: string; orig_window_end: string | null; use_mode: string | null; note: string | null }[]) {
-    if (g.use_mode === "clock" || g.note?.startsWith("Geçici açma")) continue;
-    if (mins(g.window_end) < nowMin) continue; // bitmiş aralık
-    // Sadece açık saatlerin bitişine bağlı süreler (ya da daha önce uzatılmış olanlar) kayar
-    const bound = g.orig_window_end != null || (openEnd != null && mins(g.window_end) === mins(openEnd));
-    if (!bound) continue;
-    if (mins(endHm) <= mins(g.window_start) || mins(endHm) === mins(g.window_end)) continue;
-    const orig = g.orig_window_end ?? g.window_end;
-    const back = mins(endHm) === mins(orig);
-    const { error: e2 } = await supabase.from("time_grants").update({ window_end: endHm, orig_window_end: back ? null : orig }).eq("id", g.id);
-    if (e2) throw e2;
-    n++;
-  }
-  if (n) await sendCommand(childId, "resync", {});
-  return n;
-}
-async function undoExtendOpen(childId: string) {
-  const { data, error } = await supabase.from("time_grants").select("id, orig_window_end").eq("child_id", childId).eq("valid_on", todayISO()).not("orig_window_end", "is", null);
-  if (error) throw error;
-  for (const g of (data ?? []) as { id: string; orig_window_end: string }[]) {
-    await supabase.from("time_grants").update({ window_end: g.orig_window_end, orig_window_end: null }).eq("id", g.id);
-  }
-  await sendCommand(childId, "resync", {});
-}
-
-/** Bugünün açık saat bitişini değiştirir (sadece açıklık zamanı; kullanım hakkı değişmez).
- *  Uzatma: açık saat bitişinden yeni bitişe "açıklık" aralığı + bitişe bağlı sürelerin bitişi kayar.
- *  Kısaltma: yeni bitişten itibaren geçerli ileri tarihli kilit + bitişe bağlı süreler yeni bitişte kapanır. */
-async function setOpenEnd(childId: string, endHm: string, openEnd: string) {
-  const today = todayISO();
-  const nowIso = new Date().toISOString();
-  // Önceki uzatma / kısaltmayı temizle
-  await supabase.from("time_grants").update({ minutes: 0, settled_at: nowIso })
-    .eq("child_id", childId).eq("valid_on", today).eq("note", "${EXT}").is("settled_at", null);
-  const { data: cmds } = await supabase.from("commands").select("id, payload").eq("child_id", childId).eq("type", "kiosk_start").is("cancelled_at", null).gte("created_at", new Date(Date.now() - 36 * 3600e3).toISOString());
-  for (const c of (cmds ?? []) as { id: string; payload: { reason?: string } | null }[]) {
-    if (c.payload?.reason === "shorten") await supabase.from("commands").update({ cancelled_at: nowIso }).eq("id", c.id);
-  }
-  await undoExtendOpen(childId);
-  const e = mins(endHm), o = mins(openEnd), now = nowBerlin().minute;
-  if (e > o) {
-    const s0 = Math.max(o, now);
-    const { error } = await supabase.from("time_grants").insert({ child_id: childId, minutes: Math.max(1, Math.min(e, 1439) - s0), valid_on: today, source: "manual", note: "${EXT}", window_start: hm(s0), window_end: hm(Math.min(e, 1439)), use_mode: "clock", to_vault: false, vault: false });
-    if (error) throw error;
-    await extendOpenToday(childId, hm(Math.min(e, 1439)), openEnd);
-  } else if (e < o) {
-    await extendOpenToday(childId, endHm, openEnd);
-    await sendCommand(childId, "kiosk_start", { message: null, reason: "shorten", from_at: untilFrom("until", endHm) }, untilFrom("until", openEnd));
-  }
-  await sendCommand(childId, "resync", {});
-}
-
 function ChildCard({ child }: { child: Child }) {
   const fam = useFamily();
   const st = fam.statuses[child.id];
@@ -195,6 +137,8 @@ function ChildCard({ child }: { child: Child }) {
   const [uDur, setUDur] = useState("closed");
   const [xOpen, setXOpen] = useState(false);
   const [tempNext, setTempNext] = useState<string | null>(null);
+  const [dialThen, setDialThen] = useState<"none" | "unlock" | "time" | "lock">("none");
+  const [pendingGive, setPendingGive] = useState(0);
   const [xDur, setXDur] = useState("60");
   const [xMin, setXMin] = useState(75);
   const [xUntil, setXUntil] = useState("22:30");
@@ -318,32 +262,10 @@ function ChildCard({ child }: { child: Child }) {
   /** Belirli bir zamana kadar geçici aç: gün gün aralıklar (gece yarısını geçerse ertesi günlere bölünür) */
   async function tempUntil(endIso: string) {
     const reason = taskLock ? `Görev: ${taskLock}` : (st?.lock_reason ?? "").replace("🔒", "").trim() || "Kilit";
-    const end = new Date(endIso);
-    const endDay = end.toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
-    const [eh, em] = end.toLocaleTimeString("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hour12: false }).split(":").map(Number);
-    const endMin = (eh % 24) * 60 + em;
-    const rows: Record<string, unknown>[] = [];
-    for (let i = 0; i < 31; i++) {
-      const d = todayISO("Europe/Berlin", i);
-      const last = d === endDay;
-      const s0 = i === 0 ? nowBerlin().minute : 0;
-      const e = last ? Math.min(endMin, 1439) : 1439;
-      if (e > s0) rows.push({ child_id: child.id, minutes: e - s0, valid_on: d, source: "manual", note: `Geçici açma · ${reason}`, window_start: hm(s0), window_end: hm(e), use_mode: "clock", to_vault: false, vault: false });
-      if (last || d > endDay) break;
-    }
-    if (!rows.length) throw new Error("Bitiş zamanı geçmiş");
-    const { error } = await supabase.from("time_grants").insert(rows);
-    if (error) throw error;
-    // Bugünkü (açık saat bitişine bağlı) süreler de açıklık bitene kadar kullanılabilsin
-    const todayEnd = endDay === todayISO() ? Math.min(endMin, 1439) : 1439;
-    if (openEndToday && todayEnd > mins(openEndToday)) await extendOpenToday(child.id, hm(todayEnd), openEndToday);
-    await sendCommand(child.id, "resync", {});
+    await openUntil(child.id, endIso, reason, openEndToday);
     await loadExtras();
     return `🔓 ${untilText(endIso)} açık · sonra yine ${reason}`;
   }
-  useEffect(() => {
-    if (unlockOpen) setUDur(closed || !nextClosedStart ? "60" : "closed");
-  }, [unlockOpen]); // eslint-disable-line react-hooks/exhaustive-deps
   function unlockPlan(): { end: string | null; text: string } {
     const plus = (m: number) => new Date(Date.now() + m * 60000).toISOString();
     switch (uDur) {
@@ -400,7 +322,7 @@ function ChildCard({ child }: { child: Child }) {
         if (error) throw error;
         await sendCommand(child.id, "resync", {});
         setManualLock({ ...manualLock, until: iso });
-        return `🔒 Kilit ${untilText(iso)}`;
+        return giveAfter(`🔒 Kilit ${untilText(iso)}`);
       }, (r) => String(r));
       return;
     }
@@ -412,7 +334,7 @@ function ChildCard({ child }: { child: Child }) {
         if (openEndToday && end > mins(openEndToday)) await extendOpenToday(child.id, hm(end), openEndToday);
         await sendCommand(child.id, "resync", {});
         await loadExtras();
-        return `🔓 ${hm(end)}'e kadar açık`;
+        return giveAfter(`🔓 ${hm(end)}'e kadar açık`);
       }, (r) => String(r));
       return;
     }
@@ -421,15 +343,15 @@ function ChildCard({ child }: { child: Child }) {
     run("give", async () => {
       for (const id of ids) await setOpenEnd(id, p.end!, openEndToday);
       await loadExtras();
-      return `⏰ Bugün açık saatler ${p.end}'e kadar${ids.length > 1 ? " (hepsi)" : ""}`;
+      return giveAfter(`⏰ Bugün açık saatler ${p.end}'e kadar${ids.length > 1 ? " (hepsi)" : ""}`);
     }, (r) => String(r));
   }
   function applyUnlock() {
     const p = unlockPlan();
     setUnlockOpen(false);
     setPending({ kind: "open", at: Date.now() });
-    if (p.end === null) run("unlock", () => unlockNow(child.id), "");
-    else run("unlock", () => tempUntil(p.end!), (r) => String(r));
+    if (p.end === null) run("unlock", async () => { await unlockNow(child.id); return giveAfter("🔓 Kilit kaldırıldı"); }, (r) => String(r));
+    else run("unlock", async () => giveAfter(String(await tempUntil(p.end!))), (r) => String(r));
   }
   /** Süren geçici açmanın bitişini ileri alır (yeni açma eklemez) */
   async function extendTemp(add: number) {
@@ -505,10 +427,10 @@ function ChildCard({ child }: { child: Child }) {
     setLockOpen(false);
     if (lockKind === "kiosk") {
       setPending({ kind: "kiosk", at: Date.now() });
-      run("lock", () => plan.runs ? sendCommand(child.id, "kiosk_start", { message: kioskOf(child).message || null, until_runs: plan.runs }, until) : lockNow(child.id, "kiosk", until, kioskOf(child).message), "");
+      run("lock", async () => { await (plan.runs ? sendCommand(child.id, "kiosk_start", { message: kioskOf(child).message || null, until_runs: plan.runs }, until) : lockNow(child.id, "kiosk", until, kioskOf(child).message)); return giveAfter("🔒 Kilitlendi"); }, (r) => String(r));
     } else if (lockKind === "limit") {
       setPending({ kind: "limit", at: Date.now() });
-      run("lock", () => plan.runs ? sendCommand(child.id, "lock", { until_runs: plan.runs }, until) : lockNow(child.id, "limit", until), "");
+      run("lock", async () => { await (plan.runs ? sendCommand(child.id, "lock", { until_runs: plan.runs }, until) : lockNow(child.id, "limit", until)); return giveAfter("Sınırlandı"); }, (r) => String(r));
     }
     else run("lock", () => sendCommand(child.id, "start_mode", { mode_id: lockKind }, until), "Profil uygulanıyor");
   }
@@ -535,10 +457,25 @@ function ChildCard({ child }: { child: Child }) {
   const [dialOpen, setDialOpen] = useState(false);
   const [dial, setDial] = useState(0);
   const remainingNow = st && open && !unlimited ? st.remaining_minutes : 0;
+  /** Çarktan "süre + zaman": önce zaman penceresi açılır, uygulanınca süre de verilir */
+  async function giveAfter(note: string) {
+    const g = pendingGive;
+    setPendingGive(0);
+    if (g <= 0) return note;
+    const r = await giveNow(child.id, g, fam, st, {});
+    return `${note} · +${minutesText(g)} ${r}`;
+  }
   function applyDial() {
     const d = dial;
     if (!d) return;
     setDial(0);
+    if (d > 0 && dialThen !== "none") {
+      setPendingGive(d);
+      if (dialThen === "unlock") setUnlockOpen(true);
+      else if (dialThen === "time") { setXDur("60"); setXOpen(true); }
+      else { setLockKind("kiosk"); setLockOpen(true); }
+      return;
+    }
     if (d > 0) {
       run("give", async () => giveNow(child.id, d, fam, st, { kiosk, limited: limited || closed || finished }), (r) => `+${minutesText(d)} · ${r}`);
     } else {
@@ -639,7 +576,7 @@ function ChildCard({ child }: { child: Child }) {
           className="dial"
           role="button"
           aria-label="Süreyi çarkla ayarla"
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (st) { setDial(0); setDialOpen(true); } }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (st) { setDial(0); setDialThen("none"); setDialOpen(true); } }}
         >
           <Ring value={extraLive ? shownLeft : open && !unlimited ? st!.remaining_minutes : kiosk || limited || closed ? 1 : 0} max={extraLive ? Math.max(shownLeft + st!.used_minutes, 1) : open && !unlimited ? Math.max(st!.allowance_minutes, st!.remaining_minutes + st!.used_minutes, 1) : 1} color={ringColor} size={66}>
             {ringInner}
@@ -729,9 +666,10 @@ function ChildCard({ child }: { child: Child }) {
           </button>
           {unlockOpen && createPortal(
             <>
-              <div className="pop-backdrop sheet-like" onClick={() => setUnlockOpen(false)} />
+              <div className="pop-backdrop sheet-like" onClick={() => { setUnlockOpen(false); setPendingGive(0); }} />
               <div className="lock-pop sheet-pop" role="dialog" aria-label="Kilidi aç">
                 <b className="sheet-pop-title">{child.name}</b>
+                {pendingGive > 0 && <p className="small good-text" style={{ margin: 0 }}>⏱ Uygulayınca +{minutesText(pendingGive)} süre de verilecek</p>}
                 <p className="small" style={{ margin: 0 }}>
                   {kiosk || limited || taskLock ? <>🔒 <b>Neden kilitli:</b> {taskLock ? `Görev: ${taskLock}` : (st?.lock_reason ?? "").replace("🔒", "").trim() || "Telefon kilitli"}</> : <>🟢 Şu an açık. Seçtiğin süre boyunca kilitler ve kapalı saatler devreye girmez.</>}
                 </p>
@@ -823,9 +761,10 @@ function ChildCard({ child }: { child: Child }) {
           )}
           {lockOpen && createPortal(
             <>
-              <div className="pop-backdrop sheet-like" onClick={() => setLockOpen(false)} />
+              <div className="pop-backdrop sheet-like" onClick={() => { setLockOpen(false); setPendingGive(0); }} />
               <div className="lock-pop sheet-pop" role="dialog" aria-label="Kilit">
                 <b className="sheet-pop-title">{child.name}</b>
+                {pendingGive > 0 && <p className="small good-text" style={{ margin: 0 }}>⏱ Uygulayınca +{minutesText(pendingGive)} süre de verilecek</p>}
                 <span className="pop-label">NE OLSUN</span>
                 <div className="chips">
                   {[
@@ -911,37 +850,8 @@ function ChildCard({ child }: { child: Child }) {
           )}
         </div>
         <span className="grow" />
-        <div className="give-box">
-          <button type="button" aria-label="1 dk azalt" disabled={give === 0} {...holdDown}>
-            −
-          </button>
-          <input
-            inputMode="numeric"
-            aria-label="Verilecek dakika"
-            value={giveText ?? String(give)}
-            onFocus={(e) => {
-              setGiveText(String(give));
-              e.target.select();
-            }}
-            onChange={(e) => {
-              const t = e.target.value.replace(/\D/g, "").slice(0, 3);
-              setGiveText(t);
-              setGive(Math.min(600, Number(t) || 0));
-            }}
-            onBlur={() => setGiveText(null)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") giveTime();
-              if (e.key === "ArrowUp") { e.preventDefault(); setGiveText(null); step(1); }
-              if (e.key === "ArrowDown") { e.preventDefault(); setGiveText(null); step(-1); }
-            }}
-          />
-          <span className="give-unit">dk</span>
-          <button type="button" aria-label="1 dk artır" {...holdUp}>
-            +
-          </button>
-        </div>
-        <button className="pill-btn primary" disabled={!!busy || give === 0} onClick={giveTime}>
-          Ver
+        <button type="button" className="pill-btn primary" disabled={!!busy || !st} onClick={() => { setDial(0); setDialThen("none"); setDialOpen(true); }}>
+          ⏱ Süre
         </button>
         <Link to={`/messages/${child.id}`} className="icon-pill" aria-label={`${child.name}'e mesaj yaz`} title="Mesaj yaz">
           <Icon name="chat" size={16} />
@@ -949,9 +859,10 @@ function ChildCard({ child }: { child: Child }) {
       </div>
       {xOpen && createPortal(
         <>
-          <div className="pop-backdrop sheet-like" onClick={() => setXOpen(false)} />
+          <div className="pop-backdrop sheet-like" onClick={() => { setXOpen(false); setPendingGive(0); }} />
           <div className="lock-pop sheet-pop" role="dialog" aria-label="Açık saatleri uzat">
             <b className="sheet-pop-title">{child.name} · {xMode === "lock" ? "Kilidin süresini uzat / kısalt" : xMode === "temp" ? "Geçici açmayı uzat / kısalt" : "Açık saatleri uzat / kısalt (sadece bugün)"}</b>
+            {pendingGive > 0 && <p className="small good-text" style={{ margin: 0 }}>⏱ Uygulayınca +{minutesText(pendingGive)} süre de verilecek</p>}
             <p className="small" style={{ margin: 0 }}>
               {xMode === "lock"
                 ? `🔒 Şu an kilitli · ${manualLock?.runs.length ? "görev bitene kadar" : untilText(manualLock?.until ?? null)}`
@@ -1009,6 +920,8 @@ function ChildCard({ child }: { child: Child }) {
           showRemaining={open && !unlimited}
           value={dial}
           onChange={setDial}
+          then={dialThen}
+          onThen={setDialThen}
           onClose={() => { setDialOpen(false); setDial(0); }}
           onApply={() => { setDialOpen(false); applyDial(); }}
         />,
@@ -1029,9 +942,10 @@ function ChildCard({ child }: { child: Child }) {
 }
 
 /** Büyük süre çarkı: tam tur 60 dk, her çentik 1 dk; saat yönü artırır, ters yönü azaltır (kalan sürenin altına inmez). */
-function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, onApply }: {
+function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, onApply, then, onThen }: {
   name: string; remaining: number; showRemaining: boolean; value: number;
   onChange: (v: number) => void; onClose: () => void; onApply: () => void;
+  then: "none" | "unlock" | "time" | "lock"; onThen: (v: "none" | "unlock" | "time" | "lock") => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef<{ last: number; acc: number; base: number } | null>(null);
@@ -1089,9 +1003,20 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
             <button key={d} className="chip-btn" disabled={d < 0 && value + d < -remaining} onClick={() => onChange(clamp(value + d))}>{d > 0 ? "+" : "−"}{d === 60 ? "1 sa" : Math.abs(d)}</button>
           ))}
         </div>
+        {value > 0 && (
+          <div className="stack-s">
+            <span className="pop-label">TELEFON NE ZAMAN AÇIK OLSUN</span>
+            <div className="chips">
+              {([["none", "Değiştirme"], ["unlock", "🔓 Kilidi aç"], ["time", "⏰ Uzat / kısalt"], ["lock", "🔒 Kilitle"]] as const).map(([k, l]) => (
+                <button key={k} className={`chip-btn ${then === k ? "on" : ""}`} onClick={() => onThen(k)}>{l}</button>
+              ))}
+            </div>
+            {then !== "none" && <p className="muted tiny" style={{ margin: 0 }}>Uygula’ya basınca {then === "unlock" ? "kilidi aç" : then === "time" ? "uzat / kısalt" : "kilitle"} seçenekleri açılır; onaylayınca süre de verilir.</p>}
+          </div>
+        )}
         <div className="row gap-xs">
           <button className="pill-btn grow" onClick={onClose}>Vazgeç</button>
-          <button className="pill-btn primary grow" disabled={!value} onClick={onApply}>✓ Uygula</button>
+          <button className="pill-btn primary grow" disabled={!value} onClick={onApply}>{value > 0 && then !== "none" ? "Devam →" : "✓ Uygula"}</button>
         </div>
       </div>
     </>

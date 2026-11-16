@@ -963,7 +963,7 @@ export default function TaskEdit() {
           </label>
         )}
         {f.reward_on && f.reward_validity === "today" && Number(f.reward_minutes) > 0 && !f.group_id && (
-          <UseModePicker mode={f.use_mode} within={f.use_within_minutes} onMode={(m) => set("use_mode", m)} onWithin={(v) => set("use_within_minutes", v)} />
+          <small className="muted">Kullandıkça düşer · açık saatler bitince kalanı kasaya gider</small>
         )}
         {f.reward_on && f.reward_validity === "wallet" && (
           <div className="field">

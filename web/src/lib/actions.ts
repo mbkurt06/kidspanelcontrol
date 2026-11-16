@@ -118,30 +118,19 @@ export async function giveNow(
   opts: { override?: ClosedMode; note?: string; kiosk?: boolean; limited?: boolean } = {}
 ): Promise<string> {
   // Elle verilen süre: saat, kısıtlama ve gece kuralına bakmadan seçilen moda göre (sunucu hesaplar)
-  const res = opts.override ? { cm: opts.override, from: null } : await closedModeFor(childId, fam);
-  const cm = res.cm;
-  if (cm.mode === "none") {
-    await grantMinutes(childId, minutes, { validOn: null, vault: true, note: opts.note });
-    return `${res.from ?? "bu profil"} süre vermeye kapalı · kasaya eklendi`;
-  }
+  // Süre sadece miktar: geçerli (ya da sonraki) açık zamanda kullandıkça düşer
+  void fam;
+  const cm: ClosedMode = { mode: "usage", withinMinutes: null, withinFactor: null };
   const within = cm.mode === "within" ? (cm.withinFactor ? minutes * cm.withinFactor : cm.withinMinutes ?? 120) : null;
-  const lockState = await childLockState(childId);
-  const { error } = await supabase.rpc("parent_give_time", { p_child: childId, p_minutes: minutes, p_mode: cm.mode, p_within: within, p_note: opts.note ?? null });
+  const { data: gid, error } = await supabase.rpc("parent_give_time", { p_child: childId, p_minutes: minutes, p_mode: cm.mode, p_within: within, p_note: opts.note ?? null });
   if (error) throw error;
-  const { minute } = nowBerlin();
-  const end = (m: number) => hm(Math.min(m, 1439));
-  // Kilit / Tam kilit / kapalı saatte süre her zaman saat gibi akar (sunucu böyle kaydeder)
-  if (lockState) return `${lockStateLabel(lockState)} · saat gibi akar · ${hm((minute + minutes) % 1440)}'e kadar açık, sonra yine ${lockStateAfter(lockState)}`;
-  if (cm.mode === "clock") return `şu andan ${end(minute + minutes)}'e kadar açık · kullanılmayan kasaya`;
-  if (cm.mode === "within") return `kullandıkça düşer · ${end(minute + (within ?? 120))}'e kadar kullanmalı`;
-  if (cm.mode === "open") {
-    // Açık saatler çocuğun bugünkü programından (kilitli olmayan bölümler)
-    const { data } = await supabase.rpc("open_hours", { p_child: childId, p_day: todayISO() });
-    const h = (Array.isArray(data) ? data[0] : data) as { os: number; oe: number } | null;
-    const os = h?.os ?? 480, oe = h?.oe ?? 1260;
-    return minute >= os && minute < oe ? `açık saatlerde kullanılır · ${hm(oe)}'de kalan kasaya` : "kapalı saat · süre kasaya eklendi";
-  }
-  return "kullandıkça düşer · bitene kadar telefon açık";
+  // Mesaj: sunucunun yazdığı gerçek aralığa göre (süre ≠ açıklık; kilitliyse telefon kilitli kalır)
+  const { data: g } = await supabase.from("time_grants").select("valid_on, window_start, window_end, vault").eq("id", gid as string).maybeSingle();
+  const row = g as { valid_on: string | null; window_start: string | null; window_end: string | null; vault: boolean } | null;
+  if (!row || row.vault) return "kasaya eklendi (kapalı saat)";
+  const ws = row.window_start?.slice(0, 5), we = row.window_end?.slice(0, 5);
+  if (row.valid_on && row.valid_on !== todayISO()) return `${ws}'den itibaren kullanılır (sonraki açık saatler) · ${we}'de kalan kasaya`;
+  return `${we}'e kadar kullanabilir · kalan kasaya${opts.kiosk ? " · telefon kilitli (açmak için 🔓)" : ""}`;
 }
 
 /**

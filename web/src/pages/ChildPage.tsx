@@ -5,6 +5,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
+import { openEndOf, openUntil, setOpenEnd } from "../lib/openness";
+import { untilFrom } from "./Lock";
 import { childLockState, closedModeFor, closedModeOf, fromPatch, lockStateLabel, type LockState, giveNow, grantMinutes, insertGrant, nowPatch, sendCommand, type ClosedMode, type GrantPatch } from "../lib/actions";
 import { ClosedModePicker, closedModeLabel, sameClosedMode } from "../components/ClosedModePicker";
 import { dateText, dateTimeText, hhmm, minutesText, relTime, todayISO } from "../lib/util";
@@ -700,13 +702,17 @@ function TimeTab({ childId }: { childId: string }) {
   // Varsayılan: o anki bölümün kullanım profilinde seçim varsa o, yoksa çocuğun ayarı
   const [def, setDef] = useState<{ cm: ClosedMode; from: string | null }>({ cm: closedModeOf(child), from: null });
   const defMode = def.cm;
-  const [cmode, setCmode] = useState<ClosedMode>(defMode);
+  // Süre sadece miktar: hep "kullandıkça düşer" (ne zaman açık olacağı aşağıdaki ZAMAN bölümünden)
+  const USAGE: ClosedMode = { mode: "usage", withinMinutes: null, withinFactor: null };
+  const [cmode, setCmode] = useState<ClosedMode>(USAGE);
+  const [zMode, setZMode] = useState<"none" | "unlock" | "time">("none");
+  const [zEnd, setZEnd] = useState(() => hm(Math.min(nowBerlin().minute + 60, 1439)));
   useEffect(() => {
     let on = true;
     closedModeFor(childId, fam).then((r) => {
       if (!on) return;
       setDef(r);
-      setCmode(r.cm);
+      setCmode(USAGE);
     });
     return () => {
       on = false;
@@ -776,8 +782,16 @@ function TimeTab({ childId }: { childId: string }) {
         if (error) throw error;
         setMsg(`${minutesText(m)} verildi · ${day === today ? "bugün" : dateText(day)} ${rg.start}–${rg.end} arası`);
       } else if (when === "now") {
-        const text = await giveNow(childId, m, fam, fam.statuses[childId], { override: cmode, note: note || undefined });
-        setMsg(`${minutesText(m)} verildi · ${text}`);
+        // Önce zaman (telefon ne zaman açık), sonra süre: böylece süre açılan zamanda kullanılır, kasaya düşmez
+        let zText = "";
+        if (zMode !== "none") {
+          if (mins(zEnd) <= nowBerlin().minute) throw new Error("Bitiş saati geçmiş.");
+          const oe = await openEndOf(childId);
+          if (zMode === "unlock") { await openUntil(childId, untilFrom("until", zEnd)!, "Kilit", oe); zText = ` · 🔓 ${zEnd}'e kadar açık`; }
+          else if (oe) { await setOpenEnd(childId, zEnd, oe); zText = ` · ⏰ açık saatler ${zEnd}'e kadar`; }
+        }
+        const text = await giveNow(childId, m, fam, fam.statuses[childId], { override: USAGE, note: note || undefined });
+        setMsg(`${minutesText(m)} verildi${zText} · ${text}`);
       } else if (cmode.mode === "none" && when === "custom") {
         await grantMinutes(childId, m, { validOn: null, vault: true, note: note || undefined });
         setMsg(`${minutesText(m)} süre kasasına kaydedildi`);
@@ -953,32 +967,24 @@ function TimeTab({ childId }: { childId: string }) {
               <Info>“Ver” sadece kullanım hakkı (süre) ekler; telefonu açmaz. Kapalı saatte verilen süre bir sonraki açık saatlerde kullanılır.</Info>
             </p>
           )}
-          {(when === "now" || when === "custom") && (
-            <details className="sub-collapse">
-              <summary className="sub-collapse-head">
-                <span>
-                  Nasıl kullanılsın: <b className="text-strong">{closedModeLabel(cmode)}</b>
-                  {sameClosedMode(cmode, defMode) ? " · varsayılan" : ""}
-                </span>
-                <span className="collapse-arrow" aria-hidden="true" />
-              </summary>
-              <div className="stack-s">
-                <ClosedModePicker allowRange value={cmode} onChange={setCmode} allowNone={cmode.mode === "none" || defMode.mode === "none"} />
-                <div className="row gap-s" style={{ alignItems: "center" }}>
-                  <span className="muted tiny grow">
-                    Varsayılan: {closedModeLabel(defMode)}{def.from ? ` · ${def.from} profilinden` : ""} <Info>Seçtiğin ayar sadece bu veriş için geçerli. “Varsayılan yap” dersen Kurallar’daki ayar da değişir. Bu ayar açık saatlerde geçerli. Kilit, Tam kilit ve kapalı saatlerde verilen süre her zaman saat gibi akar.</Info>
-                  </span>
-                  {!sameClosedMode(cmode, defMode) && (def.from ? (
-                    <button type="button" className="chip-btn" onClick={() => setCmode(defMode)}>Geri al</button>
-                  ) : (
-                    <>
-                      <button type="button" className="chip-btn" onClick={() => setCmode(defMode)}>Geri al</button>
-                      {!cmode.range && <button type="button" className="chip-btn" onClick={saveDefaultMode}>Varsayılan yap</button>}
-                    </>
-                  ))}
-                </div>
+          {when === "now" && (
+            <div className="stack-s">
+              <span className="pop-label">TELEFON NE ZAMAN AÇIK OLSUN <Info>Süre sadece ne kadar kullanacağını belirler. Telefon kilitliyse ya da kapalı saatse buradan aynı anda açabilirsin; böylece verilen süre kasaya gitmez.</Info></span>
+              <div className="chips">
+                {([["none", "Değiştirme"], ["unlock", "🔓 Kilidi aç"], ["time", "⏰ Açık saati uzat / kısalt"]] as const).map(([k, l]) => (
+                  <button key={k} type="button" className={`chip-btn ${zMode === k ? "on" : ""}`} onClick={() => setZMode(k)}>{l}</button>
+                ))}
               </div>
-            </details>
+              {zMode !== "none" && (
+                <div className="row gap-s" style={{ alignItems: "center" }}>
+                  <span className="small muted">{zMode === "unlock" ? "Şu saate kadar açık:" : "Bugün açık saatler şu saate kadar:"}</span>
+                  <TimeField value={zEnd} onChange={setZEnd} label="Bitiş saati" />
+                </div>
+              )}
+              <p className="muted tiny" style={{ margin: 0 }}>
+                → {zMode === "none" ? "Telefonun kilit / açık saat durumu değişmez." : zMode === "unlock" ? `🔓 ${zEnd}'e kadar açılır, süre bu sürede kullanılır; sonra yine kilit.` : `⏰ Bugün açık saatler ${zEnd}'e kadar; kalan süre o saatte kasaya.`}
+              </p>
+            </div>
           )}
         </div>
         {when === "custom" && customWhen === "from" && (

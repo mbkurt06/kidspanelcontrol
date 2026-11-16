@@ -579,7 +579,13 @@ function ChildCard({ child }: { child: Child }) {
         ? { cls: "good", text: `🟢 Açık saatler · ${tempEndText}'e kadar (bugün uzatıldı)` }
         : { cls: "good", text: `🔓 Açıldı · ${tempEndText}'e kadar · sonra ${afterOpen}` }
       : kiosk
-      ? { cls: "bad", text: waiting && !realKiosk ? "Kilitli · telefona iletiliyor…" : `Kilitli · ${(st.lock_reason ?? "").replace("🔒", "").trim() || "Tam kilit"}${manualLock && /Tam kilit/.test(st.lock_reason ?? "") ? ` · ${manualLock.runs.length ? "görev bitene kadar" : untilText(manualLock.until)}` : ""}` }
+      ? { cls: "bad", text: waiting && !realKiosk ? "Kilitli · telefona iletiliyor…" : manualLock && !manualLock.from
+          ? `🔒 Tam kilit (elle) · ${manualLock.runs.length ? "görev bitene kadar" : untilText(manualLock.until)}`
+          : taskLock
+            ? `🔒 Önce görev: ${taskLock}`
+            : sec && !timedPossible(sec, fam.sectionRules)
+              ? `🔒 ${sec.name} · ${hhmm(sec.end_time)}'e kadar`
+              : `🔒 ${(st.lock_reason ?? "").replace("🔒", "").trim() || "Kilitli"}` }
       : limited
         ? { cls: "warn", text: waiting && !realLimited ? "Sınırlı · telefona iletiliyor…" : `Sınırlı · ${st.lock_reason ?? ""}`.replace(/ · $/, "") }
         : closed

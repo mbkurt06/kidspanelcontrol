@@ -113,6 +113,7 @@ class OrbitService : Service() {
     private val recBusy = java.util.concurrent.atomic.AtomicBoolean(false)
     private var lastRecPump = 0L
     private var lastRecFront = 0L
+    private var outsideSince = 0L
     private var lastKioskFront = 0L
     private var lastKioskKey: String? = null
     private var mediaFocus: AudioFocusRequest? = null
@@ -445,6 +446,7 @@ class OrbitService : Service() {
             snap.remainingSeconds <= 0 -> "Günlük süren bitti"
             else -> null
         }
+        if (session == null || fg == null || fg in session.packages || fg == packageName) outsideSince = 0L
         if (kiosk != null) {
             lockReason = "🔒 ${kiosk.name}"
             val ok = mutableSetOf(packageName, "android", "com.android.systemui", "com.android.phone", "com.android.emergency", "com.android.server.telecom")
@@ -462,9 +464,16 @@ class OrbitService : Service() {
         } else if (session != null && interactive && fg != null && fg !in session.packages && fg != packageName &&
             fg !in setOf("android", "com.android.systemui", "com.android.phone", "com.android.server.telecom", "com.android.permissioncontroller", "com.google.android.permissioncontroller") &&
             fg != runCatching { getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull()) {
-            // Görev sürerken başka uygulamaya geçilemez: Orbit'e dön (orada duraklat / bitir)
-            lockReason = "Görev sürüyor: ${session.title}"
-            if (nowMs - lastRecFront > 2_000) {
+            // Görev sürerken başka uygulamaya geçilemez: Orbit'e dön (orada duraklat / bitir).
+            // Ekran kaydında reklam / mağaza gibi kısa geçişler için 45 sn tanınır; uzarsa kayıt duraklar.
+            if (outsideSince == 0L) outsideSince = nowMs
+            val grace = session.screen && nowMs - outsideSince < 45_000
+            if (!grace) lockReason = "Görev sürüyor: ${session.title}"
+            if (!grace && session.screen && ScreenCaptureService.running) {
+                runCatching { startService(Intent(this, ScreenCaptureService::class.java).setAction(ScreenCaptureService.ACT_PAUSE)) }
+                outsideSince = 0L
+            }
+            if (!grace && nowMs - lastRecFront > 2_000) {
                 lastRecFront = nowMs
                 runCatching {
                     startActivity(Intent(this, MainActivity::class.java)

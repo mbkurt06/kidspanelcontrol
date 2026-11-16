@@ -54,7 +54,11 @@ class ScreenCaptureActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val mpm = getSystemService(MediaProjectionManager::class.java)
-        runCatching { startActivityForResult(mpm.createScreenCaptureIntent(), REQ) }
+        // Android 14+: "tek uygulama" seçeneği çıkmasın; reklam ayrı pencerede açılınca kayıt durmasın
+        val req = if (android.os.Build.VERSION.SDK_INT >= 34)
+            mpm.createScreenCaptureIntent(android.media.projection.MediaProjectionConfig.createConfigForDefaultDisplay())
+        else mpm.createScreenCaptureIntent()
+        runCatching { startActivityForResult(req, REQ) }
             .onFailure { Toast.makeText(this, "Ekran yakalama açılamadı", Toast.LENGTH_LONG).show(); finish() }
     }
 

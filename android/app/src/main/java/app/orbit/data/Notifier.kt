@@ -58,6 +58,20 @@ object Notifier {
         runCatching { ctx.getSystemService(NotificationManager::class.java).notify(77, n) }
     }
 
+    /** Ekran kaydı sistemden durdu: dokununca Orbit açılır, "Ekran kaydına devam et" ile kaldığı yerden sürer */
+    fun screenStopped(ctx: Context, title: String) {
+        val open = Intent(ctx, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+        val pi = PendingIntent.getActivity(ctx, 78, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val n = Notification.Builder(ctx, CH_TASKS)
+            .setSmallIcon(R.drawable.ic_orbit)
+            .setContentTitle("🎬 Ekran kaydı durdu")
+            .setContentText("$title — kaldığı yerden devam etmek için dokun")
+            .setContentIntent(pi)
+            .setAutoCancel(true)
+            .build()
+        runCatching { ctx.getSystemService(NotificationManager::class.java).notify(78, n) }
+    }
+
     fun cancel(id: Int) {
         val ctx = app ?: return
         runCatching { ctx.getSystemService(NotificationManager::class.java).cancel(id) }

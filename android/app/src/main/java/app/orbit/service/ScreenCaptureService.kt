@@ -463,6 +463,7 @@ class ScreenCaptureService : Service() {
             closeSegment()
             bg.post { Recorder.pump() }
             toast("Kayıt durdu; görevden tekrar başlatınca kaldığı yerden devam eder")
+            runCatching { app.orbit.data.Notifier.screenStopped(this, title) }
         }
         stopAll()
     }

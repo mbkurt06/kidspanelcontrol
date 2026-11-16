@@ -157,6 +157,7 @@ object Parse {
             p.optBoolean("maintenance"),
             p.str("message")?.takeIf { it.isNotBlank() },
             p.optJSONArray("screens")?.let { strings(it).toSet() },
+            ts(p.str("from_at")),
         )
     }
 

@@ -46,8 +46,8 @@ object Extras {
             .maxByOrNull { it.createdAt }
         // Ebeveynin kilitten SONRA verdiği süre / "Geçici aç" o aralık boyunca elle kilidi kaldırır; aralık bitince kilit kaldığı yerden sürer
         val openedAfter = last?.type == CommandType.KIOSK_START &&
-            engine.activeWindows(day, t).any { it.source == "manual" && it.createdAtMs > last.createdAt }
-        if (last?.type == CommandType.KIOSK_START && (last.untilAt == null || last.untilAt > nowMs) && !openedAfter) {
+            engine.activeWindows(day, t).any { engine.isTempOpen(it) && it.createdAtMs > last.createdAt }
+        if (last?.type == CommandType.KIOSK_START && (last.untilAt == null || last.untilAt > nowMs) && (last.fromAt == null || nowMs >= last.fromAt) && !openedAfter) {
             return KioskNow("manual", "Tam kilit", last.message ?: def.message, last.screens ?: def.screens, last.untilAt)
         }
         // Görevin Tam kilidi: görev ödülü / eski süreler kaldırmaz; sadece görevden sonra ebeveynin verdiği süre (taskRestrictionNow)
@@ -56,7 +56,7 @@ object Extras {
             return KioskNow("task", "Önce görev: ${task.title}", def.message, task.screens.ifEmpty { def.screens } + "tasks", end)
         }
         // Ebeveynin verdiği (ya da görevden kazanılan) saat aralıklı süre sürerken programlı kilit kalkar
-        if (engine.activeWindows(day, t).isNotEmpty()) return null
+        if (engine.activeWindows(day, t).any { engine.isTempOpen(it) }) return null
         engine.activeModeAt(day, t)?.takeIf { it.kioskEnabled }?.let { mode ->
             return KioskNow("profile", mode.name, mode.kioskMessage ?: def.message, mode.kioskScreens.ifEmpty { def.screens }, null)
         }

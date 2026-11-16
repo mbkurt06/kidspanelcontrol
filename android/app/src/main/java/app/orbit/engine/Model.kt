@@ -191,6 +191,8 @@ data class Command(
     /** Tam kilit: çocuğa mesaj ve açık Orbit ekranları (null = varsayılan) */
     val message: String? = null,
     val screens: Set<String>? = null,
+    /** İleri tarihli kilit: bu andan (epoch ms) itibaren geçerli (ör. açık saati bugünlük kısaltma) */
+    val fromAt: Long? = null,
 )
 
 /** Sunucudan alınan kuralların tamamı (telefonda saklanır, internet yokken de kullanılır). */

@@ -5,7 +5,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
-import { childLockState, closedModeFor, closedModeOf, fromPatch, lockStateAfter, lockStateLabel, type LockState, giveNow, grantMinutes, insertGrant, nowPatch, sendCommand, type ClosedMode, type GrantPatch } from "../lib/actions";
+import { childLockState, closedModeFor, closedModeOf, fromPatch, lockStateLabel, type LockState, giveNow, grantMinutes, insertGrant, nowPatch, sendCommand, type ClosedMode, type GrantPatch } from "../lib/actions";
 import { ClosedModePicker, closedModeLabel, sameClosedMode } from "../components/ClosedModePicker";
 import { dateText, dateTimeText, hhmm, minutesText, relTime, todayISO } from "../lib/util";
 import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type DayOverride, type Device, type Section, type TimeGrant } from "../lib/types";
@@ -949,9 +949,8 @@ function TimeTab({ childId }: { childId: string }) {
           )}
           {when === "now" && lockSt && !rng && (
             <p className="muted tiny">
-              🔒 {lockStateLabel(lockSt)}: süre saat gibi akar
-              {Number(minutes) > 0 ? ` · ${hm((nowBerlin().minute + Number(minutes)) % 1440)}'e kadar açık` : ""}, bitince yine {lockStateAfter(lockSt)}.{" "}
-              <Info>Kilit, Tam kilit ve kapalı saatlerde verilen süre (Saat aralığı seçilmediyse) verildiği andan itibaren akar. Çocuk kullanmasa da biter; telefon kapalı ya da internetsiz olsa da süre dolunca kilit geri gelir. Kalan kasaya gitmez.</Info>
+              🔒 {lockStateLabel(lockSt)}: süre eklenir ama telefon kilitli kalır. Açmak için ana sayfada 🔓 Kilidi aç.{" "}
+              <Info>“Ver” sadece kullanım hakkı (süre) ekler; telefonu açmaz. Kapalı saatte verilen süre bir sonraki açık saatlerde kullanılır.</Info>
             </p>
           )}
           {(when === "now" || when === "custom") && (

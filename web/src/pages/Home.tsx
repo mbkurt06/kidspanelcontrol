@@ -121,6 +121,33 @@ async function undoExtendOpen(childId: string) {
   await sendCommand(childId, "resync", {});
 }
 
+/** Bugünün açık saat bitişini değiştirir (sadece açıklık zamanı; kullanım hakkı değişmez).
+ *  Uzatma: açık saat bitişinden yeni bitişe "açıklık" aralığı + bitişe bağlı sürelerin bitişi kayar.
+ *  Kısaltma: yeni bitişten itibaren geçerli ileri tarihli kilit + bitişe bağlı süreler yeni bitişte kapanır. */
+async function setOpenEnd(childId: string, endHm: string, openEnd: string) {
+  const today = todayISO();
+  const nowIso = new Date().toISOString();
+  // Önceki uzatma / kısaltmayı temizle
+  await supabase.from("time_grants").update({ minutes: 0, settled_at: nowIso })
+    .eq("child_id", childId).eq("valid_on", today).eq("note", "${EXT}").is("settled_at", null);
+  const { data: cmds } = await supabase.from("commands").select("id, payload").eq("child_id", childId).eq("type", "kiosk_start").is("cancelled_at", null).gte("created_at", new Date(Date.now() - 36 * 3600e3).toISOString());
+  for (const c of (cmds ?? []) as { id: string; payload: { reason?: string } | null }[]) {
+    if (c.payload?.reason === "shorten") await supabase.from("commands").update({ cancelled_at: nowIso }).eq("id", c.id);
+  }
+  await undoExtendOpen(childId);
+  const e = mins(endHm), o = mins(openEnd), now = nowBerlin().minute;
+  if (e > o) {
+    const s0 = Math.max(o, now);
+    const { error } = await supabase.from("time_grants").insert({ child_id: childId, minutes: Math.max(1, Math.min(e, 1439) - s0), valid_on: today, source: "manual", note: "${EXT}", window_start: hm(s0), window_end: hm(Math.min(e, 1439)), use_mode: "clock", to_vault: false, vault: false });
+    if (error) throw error;
+    await extendOpenToday(childId, hm(Math.min(e, 1439)), openEnd);
+  } else if (e < o) {
+    await extendOpenToday(childId, endHm, openEnd);
+    await sendCommand(childId, "kiosk_start", { message: null, reason: "shorten", from_at: untilFrom("until", endHm) }, untilFrom("until", openEnd));
+  }
+  await sendCommand(childId, "resync", {});
+}
+
 function ChildCard({ child }: { child: Child }) {
   const fam = useFamily();
   const st = fam.statuses[child.id];
@@ -175,7 +202,7 @@ function ChildCard({ child }: { child: Child }) {
   const [lockDateTime, setLockDateTime] = useState("08:00");
   const [lockRun, setLockRun] = useState("");
   const [openRuns, setOpenRuns] = useState<{ id: string; title: string; mandatory: boolean }[]>([]);
-  const [manualLock, setManualLock] = useState<{ id: string; until: string | null; runs: string[] } | null>(null);
+  const [manualLock, setManualLock] = useState<{ id: string; until: string | null; runs: string[]; from: string | null } | null>(null);
   const [lockUntil, setLockUntil] = useState("19:00");
   const [give, setGive] = useState(0);
   const [giveText, setGiveText] = useState<string | null>(null);
@@ -259,9 +286,9 @@ function ChildCard({ child }: { child: Child }) {
     supabase.from("commands").select("id, type, payload, until_at, created_at").eq("child_id", child.id).in("type", ["kiosk_start", "kiosk_end"]).is("cancelled_at", null)
       .order("created_at", { ascending: false }).limit(1)
       .then(({ data }) => {
-        const c = data?.[0] as { id: string; type: string; payload: { until_runs?: string[] } | null; until_at: string | null } | undefined;
+        const c = data?.[0] as { id: string; type: string; payload: { until_runs?: string[]; from_at?: string } | null; until_at: string | null } | undefined;
         if (!c || c.type !== "kiosk_start" || (c.until_at && new Date(c.until_at).getTime() < Date.now())) setManualLock(null);
-        else setManualLock({ id: c.id, until: c.until_at, runs: c.payload?.until_runs ?? [] });
+        else setManualLock({ id: c.id, until: c.until_at, runs: c.payload?.until_runs ?? [], from: c.payload?.from_at ?? null });
       });
   }, [child.id, st?.updated_at]);
 
@@ -302,6 +329,9 @@ function ChildCard({ child }: { child: Child }) {
     if (!rows.length) throw new Error("Bitiş zamanı geçmiş");
     const { error } = await supabase.from("time_grants").insert(rows);
     if (error) throw error;
+    // Bugünkü (açık saat bitişine bağlı) süreler de açıklık bitene kadar kullanılabilsin
+    const todayEnd = endDay === todayISO() ? Math.min(endMin, 1439) : 1439;
+    if (openEndToday && todayEnd > mins(openEndToday)) await extendOpenToday(child.id, hm(todayEnd), openEndToday);
     await sendCommand(child.id, "resync", {});
     await loadExtras();
     return `🔓 ${untilText(endIso)} açık · sonra yine ${reason}`;
@@ -328,7 +358,12 @@ function ChildCard({ child }: { child: Child }) {
     const e = fam.sections.filter((x) => x.profile_id === sec?.profile_id && timedPossible(x, fam.sectionRules) && mins(x.end_time) > mins(x.start_time)).map((x) => mins(x.end_time));
     return e.length ? hm(Math.max(...e)) : null;
   })();
-  const baseEnd = extended.length ? Math.max(...extended.map((g) => mins(g.window_end))) : openEndToday ? mins(openEndToday) : sec ? mins(sec.end_time) : nowBerlin().minute;
+  const extWin = extras.find((g) => g.note === "${EXT}");
+  const shortenAt = manualLock?.from && new Date(manualLock.from).getTime() > Date.now() ? (() => {
+    const [h, m] = new Date(manualLock.from!).toLocaleTimeString("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hour12: false }).split(":").map(Number);
+    return (h % 24) * 60 + m;
+  })() : null;
+  const baseEnd = extWin ? (extWin.window_end.startsWith("23:59") ? 1439 : mins(extWin.window_end)) : shortenAt != null ? shortenAt : openEndToday ? mins(openEndToday) : sec ? mins(sec.end_time) : nowBerlin().minute;
   function extendPlan(): { end: string | null; text: string } {
     const cap = (m: number) => hm(Math.min(m, 1439));
     if (xMode !== "open") {
@@ -369,18 +404,19 @@ function ChildCard({ child }: { child: Child }) {
         const end = mins(p.end!) >= 1439 ? 1439 : mins(p.end!);
         const { error } = await supabase.from("time_grants").update({ window_end: hm(end), minutes: Math.max(1, end - tempOpen.start) }).eq("id", tempOpen.id);
         if (error) throw error;
+        if (openEndToday && end > mins(openEndToday)) await extendOpenToday(child.id, hm(end), openEndToday);
         await sendCommand(child.id, "resync", {});
         await loadExtras();
-        return `🔓 Geçici açma ${hm(end)}'e kadar`;
+        return `🔓 ${hm(end)}'e kadar açık`;
       }, (r) => String(r));
       return;
     }
+    if (!openEndToday) { alert("Bugün için açık saat bulunamadı."); return; }
     const ids = xAll ? fam.children.map((c) => c.id) : [child.id];
     run("give", async () => {
-      let n = 0;
-      for (const id of ids) n += await extendOpenToday(id, p.end!, openEndToday);
+      for (const id of ids) await setOpenEnd(id, p.end!, openEndToday);
       await loadExtras();
-      return n ? `⏰ Bugün ${p.end}'e kadar${ids.length > 1 ? " (hepsi)" : ""}` : "Bugün değiştirilecek süre yok";
+      return `⏰ Bugün açık saatler ${p.end}'e kadar${ids.length > 1 ? " (hepsi)" : ""}`;
     }, (r) => String(r));
   }
   function applyUnlock() {
@@ -577,7 +613,9 @@ function ChildCard({ child }: { child: Child }) {
   const stateLine = !st
     ? null
     : tempOpen && !waiting && !kiosk
-      ? { cls: "good", text: `🔓 Geçici açık · ${minutesText(tempOpen.left)} kaldı · sonra: 🔒 ${tempOpen.reason}` }
+      ? tempOpen.reason.startsWith("Açık saatler")
+        ? { cls: "good", text: `🟢 Açık saatler · ${hm(Math.min(tempOpen.end, 1439))}'e kadar (bugün uzatıldı)` }
+        : { cls: "good", text: `🔓 Açıldı · ${hm(Math.min(tempOpen.end, 1439))}'e kadar · sonra 🔒 ${tempOpen.reason}` }
       : kiosk
       ? { cls: "bad", text: waiting && !realKiosk ? "Kilitli · telefona iletiliyor…" : `Kilitli · ${(st.lock_reason ?? "").replace("🔒", "").trim() || "Tam kilit"}${manualLock && /Tam kilit/.test(st.lock_reason ?? "") ? ` · ${manualLock.runs.length ? "görev bitene kadar" : untilText(manualLock.until)}` : ""}` }
       : limited
@@ -586,7 +624,7 @@ function ChildCard({ child }: { child: Child }) {
           ? { cls: "warn", text: [st.current_mode_name ?? "Kapalı saatler", nextOpen].filter(Boolean).join(" · ") }
           : finished
             ? { cls: "warn", text: [st.current_mode_name ?? "Bugün", sec ? `${hhmm(sec.end_time)}'e kadar` : null].filter(Boolean).join(" · ") }
-            : { cls: "good", text: [st.current_mode_name ?? "Açık", extended.length ? `${hm(Math.min(baseEnd, 1439))}'e kadar (bugün uzatıldı)` : sec && open ? `${hhmm(sec.end_time)}'e kadar` : null].filter(Boolean).join(" · ") };
+            : { cls: "good", text: [st.current_mode_name ?? "Açık", extWin || extended.length ? `${hm(Math.min(baseEnd, 1439))}'e kadar (bugün uzatıldı)` : shortenAt != null ? `${hm(shortenAt)}'e kadar (bugün kısaltıldı)` : sec && open ? `${hhmm(sec.end_time)}'e kadar` : null].filter(Boolean).join(" · ") };
 
   return (
     <div className="card child-card">
@@ -625,10 +663,7 @@ function ChildCard({ child }: { child: Child }) {
                 <span className={`state-line ${stateLine.cls}`}>
                   <span className="state-ico" aria-hidden>🕘</span>
                   {stateLine.text}
-                  {tempOpen && !kiosk && (
-                    <button type="button" className="pill-btn small" style={{ marginLeft: 6 }} disabled={!!busy}
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setExtMin(30); setExtOpen(true); }}>＋ Uzat</button>
-                  )}
+
                 </span>
               )}
               {kiosk && st.remaining_minutes > 0 && st.remaining_minutes < 1440 && <span className="muted small">Kalan süresi {minutesText(st.remaining_minutes)} · kilit kalkınca kullanır</span>}
@@ -694,11 +729,7 @@ function ChildCard({ child }: { child: Child }) {
                 <p className="small" style={{ margin: 0 }}>
                   {kiosk || limited || taskLock ? <>🔒 <b>Neden kilitli:</b> {taskLock ? `Görev: ${taskLock}` : (st?.lock_reason ?? "").replace("🔒", "").trim() || "Telefon kilitli"}</> : <>🟢 Şu an açık. Seçtiğin süre boyunca kilitler ve kapalı saatler devreye girmez.</>}
                 </p>
-                {tempOpen && (
-                  <button className="pill-btn" onClick={() => { setUnlockOpen(false); setExtMin(30); setExtOpen(true); }}>
-                    🔓 Geçici açık · {hm(Math.min(tempOpen.end, 1439))}'e kadar · ＋ Uzat
-                  </button>
-                )}
+                {tempOpen && <p className="small muted" style={{ margin: 0 }}>🔓 Şu an {hm(Math.min(tempOpen.end, 1439))}'e kadar açık · süreyi ⏰ ile uzat / kısalt</p>}
                 <span className="pop-label">NE KADAR AÇIK KALSIN <Info>Seçtiğin zamana kadar telefon normal açık saat gibi çalışır. Süre dolunca (telefon kapalı ya da internetsiz olsa da) aynı sebepten yine kilitlenir. Beklemeden kilitlemek için “Kilitle → Kaldığı yerden devam et”.</Info></span>
                 {(() => {
                   const chip = (k: string, l: string) => (

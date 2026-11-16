@@ -202,10 +202,11 @@ class RuleEngine(private val rules: Rules) {
         val profile = profileFor(day)
         val (lockedCmd, free0, lockUntil0) = lockState(nowMs)
         // Ebeveynin şu an için verdiği saat aralıklı süre "Sınırla"yı (elle ya da programdan) o süre boyunca açar
-        val windowNow = activeWindows(day, t).isNotEmpty()
+        // Sadece ebeveynin "Kilidi aç / açıklık" aralığı kilitleri kaldırır; verilen süre (miktar) kaldırmaz
+        val windowNow = activeWindows(day, t).any { isTempOpen(it) }
         // Elle kilit her zaman kilitler; sadece kilitten SONRA elle verilen süre / geçici açma o aralıkta kaldırır
         val lockAt = rules.commands.filter { !it.cancelled && it.type == CommandType.LOCK }.maxOfOrNull { it.createdAt } ?: 0L
-        val locked0 = lockedCmd && activeWindows(day, t).none { it.source == "manual" && it.createdAtMs > lockAt }
+        val locked0 = lockedCmd && activeWindows(day, t).none { isTempOpen(it) && it.createdAtMs > lockAt }
         // Görevin kısıtlaması: sadece ebeveynin elle verdiği süre sürerken kalkar
         // (görev ödülü ya da cüzdandan açılan süre kısıtlamayı kaldırmaz)
         val taskR = taskRestrictionNow(day, t)
@@ -295,7 +296,7 @@ class RuleEngine(private val rules: Rules) {
     fun liveTaskRestrictions(day: LocalDate, t: LocalTime): List<TaskRestriction> {
         val wins = activeWindows(day, t).filter { it.source == "manual" || it.source == "task" }
         fun lifts(g: Grant, r: TaskRestriction) = g.createdAtMs > r.createdAtMs && (
-            g.source == "manual" || (r.groupId != null && g.taskRunId != null && rules.taskRunGroups[g.taskRunId] == r.groupId))
+            isTempOpen(g) || (r.groupId != null && g.taskRunId != null && rules.taskRunGroups[g.taskRunId] == r.groupId))
         return taskRestrictionsNow(day, t).filter { r -> wins.none { lifts(it, r) } }
     }
 
@@ -309,7 +310,7 @@ class RuleEngine(private val rules: Rules) {
         // süre bitince (kullanıldı / saat doldu) sıradaki zorunlu görevin kısıtlaması geri gelir
         val wins = activeWindows(day, t).filter { it.source == "manual" || it.source == "task" }
         fun lifts(g: Grant, r: TaskRestriction) = g.createdAtMs > r.createdAtMs && (
-            g.source == "manual" ||
+            isTempOpen(g) ||
                 // Görevden kazanılan süre sadece aynı grubun kilidini kaldırır (tek görevin ya da başka grubun kilidi sürer)
                 (r.groupId != null && g.taskRunId != null && rules.taskRunGroups[g.taskRunId] == r.groupId))
         return taskRestrictionsNow(day, t).filter { r -> wins.none { lifts(it, r) } }.maxByOrNull { it.rank }
@@ -346,8 +347,15 @@ class RuleEngine(private val rules: Rules) {
     fun windowSection(day: LocalDate, t: LocalTime): SectionNow? {
         val reg = regularSection(day, t)
         if (reg != null && timedPossible(reg.section)) return null
+        // Ebeveynin açtığı aralık (Kilidi aç / açık saati uzat): telefon günün açık (süreli) bölümü gibi davranır,
+        // çocuk KENDİ hakkını harcar (bedava süre yok)
+        activeWindows(day, t).filter { isTempOpen(it) }.maxByOrNull { it.window!!.end }?.let { tw ->
+            val open = daySections(day).filter { timedPossible(it) }
+            val sec = open.lastOrNull { it.start <= t } ?: open.firstOrNull()
+            if (sec != null) return SectionNow(sec, day, tw.window!!.end)
+        }
         // Birden fazla süre verildiyse en son biteni taşıyıcı olur; kalanlar toplanır (bkz. sectionSnapshot)
-        return activeWindows(day, t).maxByOrNull { it.window!!.end }?.let { windowAsSection(it, day) }
+        return activeWindows(day, t).filter { !isTempOpen(it) }.maxByOrNull { it.window!!.end }?.let { windowAsSection(it, day) }
     }
 
     /** Bugünün bölümleri (saat sırasıyla) — çocuğun "Günüm" ekranı için. */
@@ -416,11 +424,6 @@ class RuleEngine(private val rules: Rules) {
             winCredit += minOf(w, (g.minutes * 60L - sv).coerceAtLeast(0)) + if (g in overlay) minOf(left, secsToEnd(g, t)) else 0L
         }
         val allExtra = dayGrants.sumOf { it.minutes } + walletDebt + adjust + dayWindows(day).filter { !isTempOpen(it) }.sumOf { it.minutes }
-        // Geçici açma: süre eklemez; çocuğun kendi süresi bitse bile aralık sonuna kadar açık tutar
-        val tempLeft = activeWindows(day, t).filter { isTempOpen(it) }.maxOfOrNull { w ->
-            val end = if (w.window!!.end == LocalTime.MIDNIGHT || w.window.end <= w.window.start) 86_400L else w.window.end.toSecondOfDay().toLong()
-            (end - t.toSecondOfDay()).coerceAtLeast(0)
-        } ?: 0L
 
         // Bölüm zinciri: sırayla etkin süre, devreden, havuzdan taşan
         var carry = 0L
@@ -469,7 +472,6 @@ class RuleEngine(private val rules: Rules) {
         val sectionPart = if (!timedPossible) 0L else (curLeft ?: UNLIMITED_SECONDS)
         var remaining = if (openSection) UNLIMITED_SECONDS else if (!timedPossible) 0L else (sectionPart + poolLeft).coerceAtMost(UNLIMITED_SECONDS)
         if (capLeft != null) remaining = minOf(remaining, capLeft)
-        if (tempLeft > 0 && remaining < tempLeft) remaining = tempLeft
 
         val allowance = when {
             cur != null && curLeft != null -> ((curEff / 60) + poolMin).toInt()

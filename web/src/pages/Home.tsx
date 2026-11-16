@@ -175,7 +175,7 @@ function ChildCard({ child }: { child: Child }) {
   const [lockDateTime, setLockDateTime] = useState("08:00");
   const [lockRun, setLockRun] = useState("");
   const [openRuns, setOpenRuns] = useState<{ id: string; title: string; mandatory: boolean }[]>([]);
-  const [manualLock, setManualLock] = useState<{ until: string | null; runs: string[] } | null>(null);
+  const [manualLock, setManualLock] = useState<{ id: string; until: string | null; runs: string[] } | null>(null);
   const [lockUntil, setLockUntil] = useState("19:00");
   const [give, setGive] = useState(0);
   const [giveText, setGiveText] = useState<string | null>(null);
@@ -256,12 +256,12 @@ function ChildCard({ child }: { child: Child }) {
   }, [lockOpen, child.id]);
   // Elle kilidin ne zamana kadar sürdüğü (kartta gösterilir)
   useEffect(() => {
-    supabase.from("commands").select("type, payload, until_at, created_at").eq("child_id", child.id).in("type", ["kiosk_start", "kiosk_end"]).is("cancelled_at", null)
+    supabase.from("commands").select("id, type, payload, until_at, created_at").eq("child_id", child.id).in("type", ["kiosk_start", "kiosk_end"]).is("cancelled_at", null)
       .order("created_at", { ascending: false }).limit(1)
       .then(({ data }) => {
-        const c = data?.[0] as { type: string; payload: { until_runs?: string[] } | null; until_at: string | null } | undefined;
+        const c = data?.[0] as { id: string; type: string; payload: { until_runs?: string[] } | null; until_at: string | null } | undefined;
         if (!c || c.type !== "kiosk_start" || (c.until_at && new Date(c.until_at).getTime() < Date.now())) setManualLock(null);
-        else setManualLock({ until: c.until_at, runs: c.payload?.until_runs ?? [] });
+        else setManualLock({ id: c.id, until: c.until_at, runs: c.payload?.until_runs ?? [] });
       });
   }, [child.id, st?.updated_at]);
 
@@ -329,8 +329,27 @@ function ChildCard({ child }: { child: Child }) {
     return e.length ? hm(Math.max(...e)) : null;
   })();
   const baseEnd = extended.length ? Math.max(...extended.map((g) => mins(g.window_end))) : openEndToday ? mins(openEndToday) : sec ? mins(sec.end_time) : nowBerlin().minute;
+  // ⏰ neyi ayarlar: elle kilit varsa kilidin bitişi, geçici açıksa açmanın bitişi, yoksa açık saatlerin bitişi
+  const xMode: "lock" | "temp" | "open" = manualLock && kiosk ? "lock" : tempOpen ? "temp" : "open";
+  const lockEndMin = manualLock?.until ? (() => {
+    const d = new Date(manualLock.until);
+    const [h, m] = d.toLocaleTimeString("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hour12: false }).split(":").map(Number);
+    const sameDay = d.toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" }) === todayISO();
+    return sameDay ? (h % 24) * 60 + m : 1439;
+  })() : nowBerlin().minute;
+  const xBase = xMode === "lock" ? lockEndMin : xMode === "temp" && tempOpen ? Math.min(tempOpen.end, 1439) : baseEnd;
   function extendPlan(): { end: string | null; text: string } {
     const cap = (m: number) => hm(Math.min(m, 1439));
+    if (xMode !== "open") {
+      const b = xBase;
+      switch (xDur) {
+        case "-15": case "-30": case "-60": return { end: cap(Math.max(b + Number(xDur), nowBerlin().minute + 1)), text: "" };
+        case "min": return { end: cap(b + xMin), text: "" };
+        case "until": return { end: xUntil, text: "" };
+        case "midnight": return { end: "23:59", text: "" };
+        default: return { end: cap(b + Number(xDur)), text: "" };
+      }
+    }
     switch (xDur) {
       case "-15": case "-30": case "-60": return { end: cap(Math.max(baseEnd + Number(xDur), nowBerlin().minute + 1)), text: "" };
       case "min": return { end: cap(baseEnd + xMin), text: "" };
@@ -343,6 +362,28 @@ function ChildCard({ child }: { child: Child }) {
     const p = extendPlan();
     if (!p.end || mins(p.end) <= nowBerlin().minute) { alert("Bitiş saati geçmiş."); return; }
     setXOpen(false);
+    if (xMode === "lock" && manualLock) {
+      run("lock", async () => {
+        const iso = untilFrom("until", p.end!);
+        const { error } = await supabase.from("commands").update({ until_at: iso }).eq("id", manualLock.id);
+        if (error) throw error;
+        await sendCommand(child.id, "resync", {});
+        setManualLock({ ...manualLock, until: iso });
+        return `🔒 Kilit ${untilText(iso)}`;
+      }, (r) => String(r));
+      return;
+    }
+    if (xMode === "temp" && tempOpen) {
+      run("unlock", async () => {
+        const end = mins(p.end!) >= 1439 ? 1439 : mins(p.end!);
+        const { error } = await supabase.from("time_grants").update({ window_end: hm(end), minutes: Math.max(1, end - tempOpen.start) }).eq("id", tempOpen.id);
+        if (error) throw error;
+        await sendCommand(child.id, "resync", {});
+        await loadExtras();
+        return `🔓 Geçici açma ${hm(end)}'e kadar`;
+      }, (r) => String(r));
+      return;
+    }
     const ids = xAll ? fam.children.map((c) => c.id) : [child.id];
     run("give", async () => {
       let n = 0;
@@ -635,6 +676,7 @@ function ChildCard({ child }: { child: Child }) {
           >
             <Icon name="lock" size={17} />
           </button>
+          <button type="button" className={`icon-pill ${xOpen ? "on" : ""}`} aria-label="Süreyi uzat / kısalt" title="Süreyi uzat / kısalt" onClick={() => { setLockOpen(false); setUnlockOpen(false); setXDur("60"); setXOpen(true); }}>⏰</button>
           <button
             className={`icon-pill ${unlockOpen ? "on" : ""} ${kiosk || limited ? "unlock-ready" : ""}`}
             disabled={!!busy}
@@ -864,7 +906,6 @@ function ChildCard({ child }: { child: Child }) {
         <button className="pill-btn primary" disabled={!!busy || give === 0} onClick={giveTime}>
           Ver
         </button>
-        <button type="button" className="icon-pill" aria-label="Açık saatleri bugünlük uzat" title="Açık saatleri uzat (bugün)" onClick={() => setXOpen(true)}>⏰</button>
         <Link to={`/messages/${child.id}`} className="icon-pill" aria-label={`${child.name}'e mesaj yaz`} title="Mesaj yaz">
           <Icon name="chat" size={16} />
         </Link>
@@ -873,9 +914,13 @@ function ChildCard({ child }: { child: Child }) {
         <>
           <div className="pop-backdrop sheet-like" onClick={() => setXOpen(false)} />
           <div className="lock-pop sheet-pop" role="dialog" aria-label="Açık saatleri uzat">
-            <b className="sheet-pop-title">{child.name} · Açık saatleri uzat / kısalt (sadece bugün)</b>
+            <b className="sheet-pop-title">{child.name} · {xMode === "lock" ? "Kilidin süresini uzat / kısalt" : xMode === "temp" ? "Geçici açmayı uzat / kısalt" : "Açık saatleri uzat / kısalt (sadece bugün)"}</b>
             <p className="small" style={{ margin: 0 }}>
-              Bugün: {hm(Math.min(baseEnd, 1439))}'de kapanıyor{extended.length ? " (uzatılmış)" : ""}{st && st.remaining_minutes < 1440 ? ` · kalan süre ${minutesText(st.remaining_minutes)}` : ""}
+              {xMode === "lock"
+                ? `🔒 Şu an kilitli · ${manualLock?.runs.length ? "görev bitene kadar" : untilText(manualLock?.until ?? null)}`
+                : xMode === "temp"
+                  ? `🔓 Geçici açık · ${hm(xBase)}'e kadar`
+                  : `Bugün: ${hm(Math.min(baseEnd, 1439))}'de kapanıyor${extended.length ? " (uzatılmış)" : ""}${st && st.remaining_minutes < 1440 ? ` · kalan süre ${minutesText(st.remaining_minutes)}` : ""}`}
             </p>
             {(() => {
               const chip = (k: string, l: string) => (
@@ -893,16 +938,17 @@ function ChildCard({ child }: { child: Child }) {
                   {xDur === "min" && <MinuteStepper value={xMin} onChange={setXMin} min={5} max={600} step={5} label="Uzatma" />}
                   <div className="chips">{chip("until", "Saate kadar…")}{chip("midnight", "Gece yarısına kadar")}</div>
                   {xDur === "until" && <TimeField value={xUntil} onChange={setXUntil} label="Yeni bitiş" />}
-                  {fam.children.length > 1 && (
+                  {xMode === "open" && fam.children.length > 1 && (
                     <label className="row gap-s small" style={{ alignItems: "center" }}>
                       <input type="checkbox" checked={xAll} onChange={(e) => setXAll(e.target.checked)} /> Bütün çocuklara uygula
                     </label>
                   )}
-                  <p className="small muted" style={{ margin: 0 }}>
+                  <p className="small muted" style={{ margin: 0 }} hidden={xMode !== "open"}>
                     → Bugün {p.end}'e kadar açık. Bugün verilen / kazanılan süresini kullanabilir; kullanmadığı kısım {p.end}'de kasaya gider. Süresi biterse daha önce kilitlenir. Yarın program yine aynı.
                   </p>
+                  {xMode !== "open" && <p className="small muted" style={{ margin: 0 }}>→ {xMode === "lock" ? `🔒 ${p.end}'e kadar kilitli, sonra program neyse o.` : `🔓 ${p.end}'e kadar açık, sonra yine kilit.`}</p>}
                   <div className="pop-actions">
-                    {extended.length > 0 && (
+                    {xMode === "open" && extended.length > 0 && (
                       <button className="pill-btn ghost" disabled={!!busy} onClick={() => {
                         setXOpen(false);
                         const ids = xAll ? fam.children.map((c) => c.id) : [child.id];
@@ -910,7 +956,7 @@ function ChildCard({ child }: { child: Child }) {
                       }}>Geri al</button>
                     )}
                     <button className="pill-btn ghost" onClick={() => setXOpen(false)}>Vazgeç</button>
-                    <button className="pill-btn primary" disabled={!!busy} onClick={applyExtend}>{xDur.startsWith("-") || (extendPlan().end ?? "") < hm(Math.min(baseEnd, 1439)) ? "Kısalt" : "Uzat"}</button>
+                    <button className="pill-btn primary" disabled={!!busy} onClick={applyExtend}>{xDur.startsWith("-") || (extendPlan().end ?? "") < hm(Math.min(xBase, 1439)) ? "Kısalt" : "Uzat"}</button>
                   </div>
                 </div>
               );

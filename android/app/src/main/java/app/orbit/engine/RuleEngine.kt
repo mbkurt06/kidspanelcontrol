@@ -279,9 +279,8 @@ class RuleEngine(private val rules: Rules) {
     var spentWindows: Set<String> = emptySet()
 
     /** Saat aralıklı sürede kullanılan saniye */
-    // Açık saatte aynı anda geçerli bütün aralıklara (w:) aynı kullanım yazılır; o yüzden "bitti" kararı sadece
-    // aralığın kendi (kapalı saat) sayacına bakar. Açık saatteki harcama havuzdan, kapalı saatte toplamdan düşülür.
-    fun windowUsedSeconds(usage: DayUsage, g: Grant, day: LocalDate) = bucket(usage, "s:grant:${g.id}@$day")
+    /** Aralıktan harcanan: açık saatte w: (her saniye tek bir aralığa yazılır), kapalı saatte s:grant: */
+    fun windowUsedSeconds(usage: DayUsage, g: Grant, day: LocalDate) = bucket(usage, "s:grant:${g.id}@$day") + bucket(usage, "w:${g.id}")
 
     fun refreshSpent(usage: DayUsage, day: LocalDate) {
         spentWindows = dayWindows(day).filter { windowUsedSeconds(usage, it, day) >= it.minutes * 60L }.map { it.id }.toSet()
@@ -412,8 +411,9 @@ class RuleEngine(private val rules: Rules) {
         for (g in dayWindows(day).filter { !isTempOpen(it) }) {
             val sv = bucket(usage, "s:grant:${g.id}@$day")
             val w = bucket(usage, "w:${g.id}")
-            val avail = (g.minutes * 60L - sv).coerceAtLeast(0)
-            winCredit += if (g in overlay) minOf(avail, secsToEnd(g, t) + w) else minOf(w, avail)
+            val left = (g.minutes * 60L - sv - w).coerceAtLeast(0)
+            // Havuza katkı: bu aralıktan harcanan (w) + açıksa kalan kısmı (en fazla bitişine kadar)
+            winCredit += minOf(w, (g.minutes * 60L - sv).coerceAtLeast(0)) + if (g in overlay) minOf(left, secsToEnd(g, t)) else 0L
         }
         val allExtra = dayGrants.sumOf { it.minutes } + walletDebt + adjust + dayWindows(day).filter { !isTempOpen(it) }.sumOf { it.minutes }
         // Geçici açma: süre eklemez; çocuğun kendi süresi bitse bile aralık sonuna kadar açık tutar
@@ -441,18 +441,14 @@ class RuleEngine(private val rules: Rules) {
             carry = if (sec.carryOver) left else 0
         }
         if (virtualWin) {
-            // Kapalı saatte verilen süreler üst üste eklenir: o an geçerli bütün aralıkların toplamı
-            val wins = activeWindows(day, t).filter { !isTempOpen(it) }
-            curEff = wins.sumOf { it.minutes } * 60L
-            // Her aralık en fazla bitiş saatine kadar kullanılabilir (saat gibi akan süre kullanılmasa da biter)
-            // Açık saatlerde bu aralıklardan harcanan gerçek süre = bölümlerin bütçesini aşan kullanım (havuzdan düşen);
-            // aralık başına sayaçlar (w:) aynı anda birden çok aralığa yazıldığı için toplamda kullanılmaz.
-            val ended = dayWindows(day).filter { !isTempOpen(it) && it !in wins }
-            val endedUsed = ended.sumOf { g -> minOf(bucket(usage, "w:${g.id}") + bucket(usage, "s:grant:${g.id}@$day"), g.minutes * 60L) }
-            val openUsed = (poolUsed - (poolMin * 60L).coerceAtLeast(0)).coerceAtLeast(0)
-            val consumed = (openUsed - endedUsed).coerceAtLeast(0) + wins.sumOf { bucket(usage, "s:grant:${it.id}@$day") }
-            val maxEnd = wins.maxOfOrNull { secsToEnd(it, t) } ?: 0L
-            curLeft = (curEff - consumed).coerceAtLeast(0).coerceAtMost(maxEnd)
+            // Kapalı saatte verilen süreler üst üste eklenir: o an saatleri geçerli bütün aralıkların toplamından
+            // açık saatte (w:) ve kapalı saatte (s:grant:, taşıyıcı aralığa yazılır) harcananlar düşülür.
+            val inTime = dayWindows(day).filter { !isTempOpen(it) && it.window!!.contains(t) && it.minutes > 0 }
+            curEff = inTime.sumOf { it.minutes } * 60L
+            val used = inTime.sumOf { bucket(usage, "w:${it.id}") + bucket(usage, "s:grant:${it.id}@$day") }
+            // Saat gibi akan / aralıklı süre bitiş saatini geçemez
+            val maxEnd = inTime.maxOfOrNull { secsToEnd(it, t) } ?: 0L
+            curLeft = (curEff - used).coerceAtLeast(0).coerceAtMost(maxEnd)
         } else if (cur != null && (cur.section.id !in todayIds || cur.startDay != day) && cur.section.budgetMinutes != null) {
             // Dünden taşan gece bölümü: kendi süresi (devretme yok)
             val eff = cur.section.budgetMinutes * 60L
@@ -489,7 +485,11 @@ class RuleEngine(private val rules: Rules) {
             sectionMode = true, section = cur, sectionLeftSeconds = curLeft, poolLeftSeconds = poolLeft, capLeftSeconds = capLeft,
             sectionClosed = cur != null && !timedPossible && cur.section.defaultRule == SecRule.BLOCKED &&
                 rules.sectionRules.none { it.sectionId == cur.section.id && it.rule == SecRule.OPEN },
-            windowBuckets = overlay.map { "w:${it.id}" },
+            // Açık saatte bölümün kendi süresi bitince kullanım tek bir aralığa yazılır: en erken biten, yeri olan
+            windowBuckets = if (overlay.isEmpty() || (curLeft ?: 1L) > 0L) emptyList() else listOfNotNull(
+                overlay.filter { g -> g.minutes * 60L - bucket(usage, "s:grant:${g.id}@$day") - bucket(usage, "w:${g.id}") > 0 }
+                    .minByOrNull { secsToEnd(it, t) }?.let { "w:${it.id}" }
+            ),
         )
     }
 

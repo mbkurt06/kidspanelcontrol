@@ -455,15 +455,25 @@ function ChildCard({ child }: { child: Child }) {
   async function giveAfter(note: string) {
     const g = pendingGive;
     setPendingGive(0);
-    if (g <= 0) return note;
+    if (g === 0) return note;
+    if (g < 0) return `${note} · −${minutesText(-g)} ${await reduceTime(-g)}`;
     const r = await giveNow(child.id, g, fam, st, {});
     return `${note} · +${minutesText(g)} ${r}`;
+  }
+  /** Süre azalt: önce bugün verilen ekstra süreler sunucuda geri alınır; artan kısım telefona komut olarak gider */
+  async function reduceTime(m: number) {
+    const { data, error } = await supabase.rpc("parent_reduce_time", { p_child: child.id, p_minutes: m });
+    if (error) throw error;
+    const rest = Number(data ?? 0);
+    if (rest > 0) await sendCommand(child.id, "adjust_minutes", { minutes: -rest });
+    fam.reload();
+    return rest === m ? "telefona iletildi" : rest > 0 ? `ekstra süre geri alındı · ${minutesText(rest)} telefona iletildi` : "ekstra süre geri alındı";
   }
   function applyDial() {
     const d = dial;
     if (!d) return;
     setDial(0);
-    if (d > 0 && dialThen !== "none") {
+    if (dialThen !== "none") {
       setPendingGive(d);
       if (dialThen === "unlock") setUnlockOpen(true);
       else if (dialThen === "time") { setXDur("60"); setXOpen(true); }
@@ -659,7 +669,7 @@ function ChildCard({ child }: { child: Child }) {
               <div className="pop-backdrop sheet-like" onClick={() => { setUnlockOpen(false); setPendingGive(0); }} />
               <div className="lock-pop sheet-pop" role="dialog" aria-label="Kilidi aç">
                 <b className="sheet-pop-title">{child.name}</b>
-                {pendingGive > 0 && <p className="small good-text" style={{ margin: 0 }}>⏱ Uygulayınca +{minutesText(pendingGive)} süre de verilecek</p>}
+                {pendingGive !== 0 && <p className={`small ${pendingGive > 0 ? "good-text" : "bad-text"}`} style={{ margin: 0 }}>⏱ Uygulayınca {pendingGive > 0 ? `+${minutesText(pendingGive)} süre de verilecek` : `${minutesText(-pendingGive)} süre de düşülecek`}</p>}
                 <p className="small" style={{ margin: 0 }}>
                   {kiosk || limited || taskLock ? <>🔒 <b>Neden kilitli:</b> {taskLock ? `Görev: ${taskLock}` : (st?.lock_reason ?? "").replace("🔒", "").trim() || "Telefon kilitli"}</> : <>🟢 Şu an açık. Seçtiğin süre boyunca kilitler ve kapalı saatler devreye girmez.</>}
                 </p>
@@ -754,7 +764,7 @@ function ChildCard({ child }: { child: Child }) {
               <div className="pop-backdrop sheet-like" onClick={() => { setLockOpen(false); setPendingGive(0); }} />
               <div className="lock-pop sheet-pop" role="dialog" aria-label="Kilit">
                 <b className="sheet-pop-title">{child.name}</b>
-                {pendingGive > 0 && <p className="small good-text" style={{ margin: 0 }}>⏱ Uygulayınca +{minutesText(pendingGive)} süre de verilecek</p>}
+                {pendingGive !== 0 && <p className={`small ${pendingGive > 0 ? "good-text" : "bad-text"}`} style={{ margin: 0 }}>⏱ Uygulayınca {pendingGive > 0 ? `+${minutesText(pendingGive)} süre de verilecek` : `${minutesText(-pendingGive)} süre de düşülecek`}</p>}
                 <span className="pop-label">NE OLSUN</span>
                 <div className="chips">
                   {[
@@ -852,7 +862,7 @@ function ChildCard({ child }: { child: Child }) {
           <div className="pop-backdrop sheet-like" onClick={() => { setXOpen(false); setPendingGive(0); }} />
           <div className="lock-pop sheet-pop" role="dialog" aria-label="Açık saatleri uzat">
             <b className="sheet-pop-title">{child.name} · {xMode === "lock" ? "Kilidin süresini uzat / kısalt" : xMode === "temp" ? "Geçici açmayı uzat / kısalt" : "Açık saatleri uzat / kısalt (sadece bugün)"}</b>
-            {pendingGive > 0 && <p className="small good-text" style={{ margin: 0 }}>⏱ Uygulayınca +{minutesText(pendingGive)} süre de verilecek</p>}
+            {pendingGive !== 0 && <p className={`small ${pendingGive > 0 ? "good-text" : "bad-text"}`} style={{ margin: 0 }}>⏱ Uygulayınca {pendingGive > 0 ? `+${minutesText(pendingGive)} süre de verilecek` : `${minutesText(-pendingGive)} süre de düşülecek`}</p>}
             <p className="small" style={{ margin: 0 }}>
               {xMode === "lock"
                 ? `🔒 Şu an kilitli · ${manualLock?.runs.length ? "görev bitene kadar" : untilText(manualLock?.until ?? null)}`
@@ -993,7 +1003,7 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
             <button key={d} className="chip-btn" disabled={d < 0 && value + d < -remaining} onClick={() => onChange(clamp(value + d))}>{d > 0 ? "+" : "−"}{d === 60 ? "1 sa" : Math.abs(d)}</button>
           ))}
         </div>
-        {value > 0 && (
+        {value !== 0 && (
           <div className="stack-s">
             <span className="pop-label">TELEFON NE ZAMAN AÇIK OLSUN</span>
             <div className="chips">
@@ -1001,12 +1011,12 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
                 <button key={k} className={`chip-btn ${then === k ? "on" : ""}`} onClick={() => onThen(k)}>{l}</button>
               ))}
             </div>
-            {then !== "none" && <p className="muted tiny" style={{ margin: 0 }}>Uygula’ya basınca {then === "unlock" ? "kilidi aç" : then === "time" ? "uzat / kısalt" : "kilitle"} seçenekleri açılır; onaylayınca süre de verilir.</p>}
+            {then !== "none" && <p className="muted tiny" style={{ margin: 0 }}>Devam’a basınca {then === "unlock" ? "kilidi aç" : then === "time" ? "uzat / kısalt" : "kilitle"} seçenekleri açılır; onaylayınca süre de {value > 0 ? "verilir" : "düşülür"}.</p>}
           </div>
         )}
         <div className="row gap-xs">
           <button className="pill-btn grow" onClick={onClose}>Vazgeç</button>
-          <button className="pill-btn primary grow" disabled={!value} onClick={onApply}>{value > 0 && then !== "none" ? "Devam →" : "✓ Uygula"}</button>
+          <button className="pill-btn primary grow" disabled={!value} onClick={onApply}>{value !== 0 && then !== "none" ? "Devam →" : "✓ Uygula"}</button>
         </div>
       </div>
     </>

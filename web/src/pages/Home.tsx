@@ -5,7 +5,7 @@ import { useFamily } from "../lib/family";
 import { supabase, errorText } from "../lib/supabase";
 import { giveNow, parentModeUntil, seedDefaults, sendCommand, stopParentMode } from "../lib/actions";
 import { kioskOf, lockNow, unlockNow, untilFrom } from "./Lock";
-import { extendOpenToday, openUntil, setOpenEnd, undoExtendOpen } from "../lib/openness";
+import { EXT_NOTE, extendOpenToday, isoAtAbs, openUntil, setOpenEnd, setTempEnd, undoExtendOpen } from "../lib/openness";
 import { currentSectionFor, hm, mins, nowBerlin, timedPossible } from "../lib/sections";
 import { TimeField } from "../components/DateTime";
 import { timerElapsed, timerRemaining } from "../lib/types";
@@ -261,7 +261,7 @@ function ChildCard({ child }: { child: Child }) {
   /** Geçici açma: saat gibi akan süre; bitince (ya da "Kaldığı yerden") telefon kilitlendiği sebebe döner */
   /** Belirli bir zamana kadar geçici aç: gün gün aralıklar (gece yarısını geçerse ertesi günlere bölünür) */
   async function tempUntil(endIso: string) {
-    const reason = taskLock ? `Görev: ${taskLock}` : (st?.lock_reason ?? "").replace("🔒", "").trim() || "Kilit";
+    const reason = taskLock ? `Görev: ${taskLock}` : kiosk ? ((st?.lock_reason ?? "").replace("🔒", "").trim() || "Tam kilit") : limited ? "Sınırlı" : "Kapalı saat";
     await openUntil(child.id, endIso, reason, openEndToday);
     await loadExtras();
     return `🔓 ${untilText(endIso)} açık · sonra yine ${reason}`;
@@ -285,39 +285,35 @@ function ChildCard({ child }: { child: Child }) {
     const e = fam.sections.filter((x) => x.profile_id === sec?.profile_id && timedPossible(x, fam.sectionRules) && mins(x.end_time) > mins(x.start_time)).map((x) => mins(x.end_time));
     return e.length ? hm(Math.max(...e)) : null;
   })();
-  const extWin = extras.find((g) => g.note === "${EXT}");
+  const extWin = extras.find((g) => g.note === EXT_NOTE);
   const shortenAt = manualLock?.from && new Date(manualLock.from).getTime() > Date.now() ? (() => {
     const [h, m] = new Date(manualLock.from!).toLocaleTimeString("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hour12: false }).split(":").map(Number);
     return (h % 24) * 60 + m;
   })() : null;
   const baseEnd = extWin ? (extWin.window_end.startsWith("23:59") ? 1439 : mins(extWin.window_end)) : shortenAt != null ? shortenAt : openEndToday ? mins(openEndToday) : sec ? mins(sec.end_time) : nowBerlin().minute;
-  function extendPlan(): { end: string | null; text: string } {
-    const cap = (m: number) => hm(Math.min(m, 1439));
-    if (xMode !== "open") {
-      const b = xBase;
-      switch (xDur) {
-        case "-15": case "-30": case "-60": return { end: cap(Math.max(b + Number(xDur), nowBerlin().minute + 1)), text: "" };
-        case "min": return { end: cap(b + xMin), text: "" };
-        case "until": return { end: xUntil, text: "" };
-        case "midnight": return { end: "23:59", text: "" };
-        default: return { end: cap(b + Number(xDur)), text: "" };
-      }
-    }
+  /** ⏰ hedef bitiş: bugünün 00:00'ından dakika (1440+ = yarın) */
+  function extendPlan(): { end: string | null; abs: number; text: string } {
+    const now = nowBerlin().minute;
+    const b = xMode === "open" ? baseEnd : xBase;
+    let abs: number;
     switch (xDur) {
-      case "-15": case "-30": case "-60": return { end: cap(Math.max(baseEnd + Number(xDur), nowBerlin().minute + 1)), text: "" };
-      case "min": return { end: cap(baseEnd + xMin), text: "" };
-      case "until": return { end: xUntil, text: "" };
-      case "midnight": return { end: "23:59", text: "" };
-      default: return { end: cap(baseEnd + Number(xDur)), text: "" };
+      case "-15": case "-30": case "-60": abs = Math.max(b + Number(xDur), now + 1); break;
+      case "min": abs = b + xMin; break;
+      case "until": { const m = mins(xUntil); abs = m > now ? m : m + 1440; break; }
+      case "midnight": abs = 1440; break;
+      default: abs = b + Number(xDur);
     }
+    abs = Math.min(abs, 1440 + 720);
+    const end = abs >= 1440 ? `yarın ${hm(abs - 1440)}` : hm(abs);
+    return { end: abs === 1440 ? "gece yarısı" : end, abs, text: "" };
   }
   function applyExtend() {
     const p = extendPlan();
-    if (!p.end || mins(p.end) <= nowBerlin().minute) { alert("Bitiş saati geçmiş."); return; }
+    if (p.abs <= nowBerlin().minute) { alert("Bitiş saati geçmiş."); return; }
     setXOpen(false);
     if (xMode === "lock" && manualLock) {
       run("lock", async () => {
-        const iso = untilFrom("until", p.end!);
+        const iso = isoAtAbs(p.abs);
         const { error } = await supabase.from("commands").update({ until_at: iso }).eq("id", manualLock.id);
         if (error) throw error;
         await sendCommand(child.id, "resync", {});
@@ -328,20 +324,18 @@ function ChildCard({ child }: { child: Child }) {
     }
     if (xMode === "temp" && tempOpen) {
       run("unlock", async () => {
-        const end = mins(p.end!) >= 1439 ? 1439 : mins(p.end!);
-        const { error } = await supabase.from("time_grants").update({ window_end: hm(end), minutes: Math.max(1, end - tempOpen.start) }).eq("id", tempOpen.id);
-        if (error) throw error;
-        if (openEndToday && end > mins(openEndToday)) await extendOpenToday(child.id, hm(end), openEndToday);
-        await sendCommand(child.id, "resync", {});
+        const note = extras.find((g) => g.id === tempOpen.id)?.note ?? `Geçici açma · ${tempOpen.reason}`;
+        if (note === EXT_NOTE && openEndToday) await setOpenEnd(child.id, p.abs, openEndToday);
+        else await setTempEnd(child.id, note, p.abs, openEndToday);
         await loadExtras();
-        return giveAfter(`🔓 ${hm(end)}'e kadar açık`);
+        return giveAfter(`🔓 ${p.end}'e kadar açık`);
       }, (r) => String(r));
       return;
     }
     if (!openEndToday) { alert("Bugün için açık saat bulunamadı."); return; }
     const ids = xAll ? fam.children.map((c) => c.id) : [child.id];
     run("give", async () => {
-      for (const id of ids) await setOpenEnd(id, p.end!, openEndToday);
+      for (const id of ids) await setOpenEnd(id, p.abs, openEndToday);
       await loadExtras();
       return giveAfter(`⏰ Bugün açık saatler ${p.end}'e kadar${ids.length > 1 ? " (hepsi)" : ""}`);
     }, (r) => String(r));
@@ -545,20 +539,16 @@ function ChildCard({ child }: { child: Child }) {
 
   // ⏰ neyi ayarlar: elle kilit varsa kilidin bitişi, geçici açıksa açmanın bitişi, yoksa açık saatlerin bitişi
   const xMode: "lock" | "temp" | "open" = manualLock && kiosk ? "lock" : tempOpen ? "temp" : "open";
-  const lockEndMin = manualLock?.until ? (() => {
-    const d = new Date(manualLock.until);
-    const [h, m] = d.toLocaleTimeString("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hour12: false }).split(":").map(Number);
-    const sameDay = d.toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" }) === todayISO();
-    return sameDay ? (h % 24) * 60 + m : 1439;
-  })() : nowBerlin().minute;
-  const xBase = xMode === "lock" ? lockEndMin : xMode === "temp" && tempOpen ? Math.min(tempOpen.end, 1439) : baseEnd;
+  // Elle kilidin bitişi: bugünün 00:00'ından dakika (yarına taşabilir)
+  const lockEndAbs = manualLock?.until ? Math.max(nowBerlin().minute, nowBerlin().minute + Math.round((new Date(manualLock.until).getTime() - Date.now()) / 60000)) : nowBerlin().minute;
+  const xBase = xMode === "lock" ? lockEndAbs : xMode === "temp" && tempOpen ? (tempOpen.end >= 1439 && tempNext ? 1440 + mins(tempNext) : tempOpen.end) : baseEnd;
   const tempEndText = tempOpen ? (tempOpen.end >= 1439 && tempNext ? `yarın ${tempNext}` : hm(Math.min(tempOpen.end, 1439))) : "";
   const stateLine = !st
     ? null
     : tempOpen && !waiting && !kiosk
-      ? tempOpen.reason.startsWith("Açık saatler")
-        ? { cls: "good", text: `🟢 Açık saatler · ${hm(Math.min(tempOpen.end, 1439))}'e kadar (bugün uzatıldı)` }
-        : { cls: "good", text: `🔓 Açıldı · ${tempEndText}'e kadar · sonra 🔒 ${tempOpen.reason}` }
+      ? tempOpen.reason === "Açık saatler uzatıldı"
+        ? { cls: "good", text: `🟢 Açık saatler · ${tempEndText}'e kadar (bugün uzatıldı)` }
+        : { cls: "good", text: `🔓 Açıldı · ${tempEndText}'e kadar · sonra 🔒 ${/süren bitti|Şu an/.test(tempOpen.reason) ? "Kapalı saat" : tempOpen.reason}` }
       : kiosk
       ? { cls: "bad", text: waiting && !realKiosk ? "Kilitli · telefona iletiliyor…" : `Kilitli · ${(st.lock_reason ?? "").replace("🔒", "").trim() || "Tam kilit"}${manualLock && /Tam kilit/.test(st.lock_reason ?? "") ? ` · ${manualLock.runs.length ? "görev bitene kadar" : untilText(manualLock.until)}` : ""}` }
       : limited
@@ -680,7 +670,7 @@ function ChildCard({ child }: { child: Child }) {
                     <button key={k} className={`chip-btn ${uDur === k ? "on" : ""}`} onClick={() => setUDur(k)}>{l}</button>
                   );
                   const p = unlockPlan();
-                  const reason = taskLock ? `Görev: ${taskLock}` : (st?.lock_reason ?? "").replace("🔒", "").trim() || "Kilit";
+                  const reason = taskLock ? `Görev: ${taskLock}` : kiosk ? ((st?.lock_reason ?? "").replace("🔒", "").trim() || "Tam kilit") : limited ? "Sınırlı" : "Kapalı saat";
                   return (
                     <div className="stack-s">
                       <span className="small muted">Hazır</span>
@@ -867,7 +857,7 @@ function ChildCard({ child }: { child: Child }) {
               {xMode === "lock"
                 ? `🔒 Şu an kilitli · ${manualLock?.runs.length ? "görev bitene kadar" : untilText(manualLock?.until ?? null)}`
                 : xMode === "temp"
-                  ? `🔓 Geçici açık · ${hm(xBase)}'e kadar`
+                  ? `🔓 Açık · ${tempEndText}'e kadar`
                   : `Bugün: ${hm(Math.min(baseEnd, 1439))}'de kapanıyor${extended.length ? " (uzatılmış)" : ""}${st && st.remaining_minutes < 1440 ? ` · kalan süre ${minutesText(st.remaining_minutes)}` : ""}`}
             </p>
             {(() => {
@@ -904,7 +894,7 @@ function ChildCard({ child }: { child: Child }) {
                       }}>Geri al</button>
                     )}
                     <button className="pill-btn ghost" onClick={() => setXOpen(false)}>Vazgeç</button>
-                    <button className="pill-btn primary" disabled={!!busy} onClick={applyExtend}>{xDur.startsWith("-") || (extendPlan().end ?? "") < hm(Math.min(xBase, 1439)) ? "Kısalt" : "Uzat"}</button>
+                    <button className="pill-btn primary" disabled={!!busy} onClick={applyExtend}>{extendPlan().abs < (xMode === "open" ? baseEnd : xBase) ? "Kısalt" : "Uzat"}</button>
                   </div>
                 </div>
               );

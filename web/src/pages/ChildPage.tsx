@@ -785,10 +785,12 @@ function TimeTab({ childId }: { childId: string }) {
         // Önce zaman (telefon ne zaman açık), sonra süre: böylece süre açılan zamanda kullanılır, kasaya düşmez
         let zText = "";
         if (zMode !== "none") {
-          if (mins(zEnd) <= nowBerlin().minute) throw new Error("Bitiş saati geçmiş.");
+          // Şu andan önceki saat = gece yarısından sonra (yarın)
+          const zAbs = mins(zEnd) > nowBerlin().minute ? mins(zEnd) : mins(zEnd) + 1440;
+          const zLabel = zAbs >= 1440 ? `yarın ${zEnd}` : zEnd;
           const oe = await openEndOf(childId);
-          if (zMode === "unlock") { await openUntil(childId, untilFrom("until", zEnd)!, "Kilit", oe); zText = ` · 🔓 ${zEnd}'e kadar açık`; }
-          else if (oe) { await setOpenEnd(childId, zEnd, oe); zText = ` · ⏰ açık saatler ${zEnd}'e kadar`; }
+          if (zMode === "unlock") { await openUntil(childId, untilFrom("until", zEnd)!, "Kilit", oe); zText = ` · 🔓 ${zLabel}'e kadar açık`; }
+          else if (oe) { await setOpenEnd(childId, zAbs, oe); zText = ` · ⏰ açık saatler ${zLabel}'e kadar`; }
         }
         const text = await giveNow(childId, m, fam, fam.statuses[childId], { override: USAGE, note: note || undefined });
         setMsg(`${minutesText(m)} verildi${zText} · ${text}`);

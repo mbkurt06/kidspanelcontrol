@@ -44,30 +44,52 @@ export async function undoExtendOpen(childId: string) {
 /** Bugünün açık saat bitişini değiştirir (sadece açıklık zamanı; kullanım hakkı değişmez).
  *  Uzatma: açık saat bitişinden yeni bitişe "açıklık" aralığı + bitişe bağlı sürelerin bitişi kayar.
  *  Kısaltma: yeni bitişten itibaren geçerli ileri tarihli kilit + bitişe bağlı süreler yeni bitişte kapanır. */
-export async function setOpenEnd(childId: string, endHm: string, openEnd: string) {
-  const today = todayISO();
+/** Açık saat uzatma aralığının notu (telefonda "Geçici açma" = açıklık; süre vermez) */
+export const EXT_NOTE = "Geçici açma · Açık saatler uzatıldı";
+
+/** Şu anki dakikadan itibaren `abs` (bugünün 00:00'ından dakika; 1440+ = yarın) anına ISO zaman */
+export function isoAtAbs(abs: number) {
+  return new Date(Date.now() + (abs - nowBerlin().minute) * 60000).toISOString();
+}
+
+/** Bugünün açık saat bitişini değiştirir (sadece açıklık zamanı; kullanım hakkı değişmez).
+ *  endAbs: bugünün 00:00'ından dakika (1440 ve üstü = gece yarısından sonra, yarın).
+ *  Uzatma: açık saat bitişinden yeni bitişe "açıklık" aralığı (gerekirse yarına taşar) + bitişe bağlı süreler kayar.
+ *  Kısaltma: yeni bitişten itibaren geçerli ileri tarihli kilit + bitişe bağlı süreler yeni bitişte kapanır. */
+export async function setOpenEnd(childId: string, endAbs: number, openEnd: string) {
+  const today = todayISO(), tomorrow = todayISO("Europe/Berlin", 1);
   const nowIso = new Date().toISOString();
   // Önceki uzatma / kısaltmayı temizle
   await supabase.from("time_grants").update({ minutes: 0, settled_at: nowIso })
-    .eq("child_id", childId).eq("valid_on", today).eq("note", "${EXT}").is("settled_at", null);
+    .eq("child_id", childId).in("valid_on", [today, tomorrow]).eq("note", EXT_NOTE).is("settled_at", null);
   const { data: cmds } = await supabase.from("commands").select("id, payload").eq("child_id", childId).eq("type", "kiosk_start").is("cancelled_at", null).gte("created_at", new Date(Date.now() - 36 * 3600e3).toISOString());
   for (const c of (cmds ?? []) as { id: string; payload: { reason?: string } | null }[]) {
     if (c.payload?.reason === "shorten") await supabase.from("commands").update({ cancelled_at: nowIso }).eq("id", c.id);
   }
   await undoExtendOpen(childId);
-  const e = mins(endHm), o = mins(openEnd), now = nowBerlin().minute;
-  if (e > o) {
+  const o = mins(openEnd), now = nowBerlin().minute;
+  if (endAbs > o) {
     const s0 = Math.max(o, now);
-    const { error } = await supabase.from("time_grants").insert({ child_id: childId, minutes: Math.max(1, Math.min(e, 1439) - s0), valid_on: today, source: "manual", note: "${EXT}", window_start: hm(s0), window_end: hm(Math.min(e, 1439)), use_mode: "clock", to_vault: false, vault: false });
-    if (error) throw error;
-    await extendOpenToday(childId, hm(Math.min(e, 1439)), openEnd);
-  } else if (e < o) {
-    await extendOpenToday(childId, endHm, openEnd);
-    await sendCommand(childId, "kiosk_start", { message: null, reason: "shorten", from_at: untilFrom("until", endHm) }, untilFrom("until", openEnd));
+    const e1 = Math.min(endAbs, 1439);
+    const rows: Record<string, unknown>[] = [];
+    if (e1 > s0) rows.push({ child_id: childId, minutes: e1 - s0, valid_on: today, source: "manual", note: EXT_NOTE, window_start: hm(s0), window_end: hm(e1), use_mode: "clock", to_vault: false, vault: false });
+    if (endAbs > 1440) rows.push({ child_id: childId, minutes: endAbs - 1440, valid_on: tomorrow, source: "manual", note: EXT_NOTE, window_start: "00:00", window_end: hm(Math.min(endAbs - 1440, 1439)), use_mode: "clock", to_vault: false, vault: false });
+    if (rows.length) { const { error } = await supabase.from("time_grants").insert(rows); if (error) throw error; }
+    await extendOpenToday(childId, hm(e1), openEnd);
+  } else if (endAbs < o) {
+    await extendOpenToday(childId, hm(endAbs), openEnd);
+    await sendCommand(childId, "kiosk_start", { message: null, reason: "shorten", from_at: isoAtAbs(endAbs) }, untilFrom("until", openEnd));
   }
   await sendCommand(childId, "resync", {});
 }
 
+/** Süren "Kilidi aç" açıklığının bitişini değiştirir (gece yarısını geçebilir) */
+export async function setTempEnd(childId: string, note: string, endAbs: number, openEnd: string | null) {
+  const today = todayISO(), tomorrow = todayISO("Europe/Berlin", 1);
+  await supabase.from("time_grants").update({ minutes: 0, settled_at: new Date().toISOString() })
+    .eq("child_id", childId).in("valid_on", [today, tomorrow]).eq("note", note).is("settled_at", null);
+  await openUntil(childId, isoAtAbs(endAbs), note.replace(/^Geçici açma · /, ""), openEnd);
+}
 
 /** Belirli bir zamana kadar aç (gün gün aralıklar) + bugünkü açık saat bitişine bağlı süreler de o zamana kadar geçerli olsun */
 export async function openUntil(childId: string, endIso: string, reason: string, openEnd: string | null) {

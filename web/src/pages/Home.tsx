@@ -329,15 +329,6 @@ function ChildCard({ child }: { child: Child }) {
     return e.length ? hm(Math.max(...e)) : null;
   })();
   const baseEnd = extended.length ? Math.max(...extended.map((g) => mins(g.window_end))) : openEndToday ? mins(openEndToday) : sec ? mins(sec.end_time) : nowBerlin().minute;
-  // ⏰ neyi ayarlar: elle kilit varsa kilidin bitişi, geçici açıksa açmanın bitişi, yoksa açık saatlerin bitişi
-  const xMode: "lock" | "temp" | "open" = manualLock && kiosk ? "lock" : tempOpen ? "temp" : "open";
-  const lockEndMin = manualLock?.until ? (() => {
-    const d = new Date(manualLock.until);
-    const [h, m] = d.toLocaleTimeString("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hour12: false }).split(":").map(Number);
-    const sameDay = d.toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" }) === todayISO();
-    return sameDay ? (h % 24) * 60 + m : 1439;
-  })() : nowBerlin().minute;
-  const xBase = xMode === "lock" ? lockEndMin : xMode === "temp" && tempOpen ? Math.min(tempOpen.end, 1439) : baseEnd;
   function extendPlan(): { end: string | null; text: string } {
     const cap = (m: number) => hm(Math.min(m, 1439));
     if (xMode !== "open") {
@@ -574,6 +565,15 @@ function ChildCard({ child }: { child: Child }) {
     <span className="ring-state"><b>{minutesText(st.remaining_minutes)}</b><small>kaldı</small></span>
   );
 
+  // ⏰ neyi ayarlar: elle kilit varsa kilidin bitişi, geçici açıksa açmanın bitişi, yoksa açık saatlerin bitişi
+  const xMode: "lock" | "temp" | "open" = manualLock && kiosk ? "lock" : tempOpen ? "temp" : "open";
+  const lockEndMin = manualLock?.until ? (() => {
+    const d = new Date(manualLock.until);
+    const [h, m] = d.toLocaleTimeString("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hour12: false }).split(":").map(Number);
+    const sameDay = d.toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" }) === todayISO();
+    return sameDay ? (h % 24) * 60 + m : 1439;
+  })() : nowBerlin().minute;
+  const xBase = xMode === "lock" ? lockEndMin : xMode === "temp" && tempOpen ? Math.min(tempOpen.end, 1439) : baseEnd;
   const stateLine = !st
     ? null
     : tempOpen && !waiting && !kiosk

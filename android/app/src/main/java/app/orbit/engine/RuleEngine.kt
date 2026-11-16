@@ -485,8 +485,9 @@ class RuleEngine(private val rules: Rules) {
             sectionMode = true, section = cur, sectionLeftSeconds = curLeft, poolLeftSeconds = poolLeft, capLeftSeconds = capLeft,
             sectionClosed = cur != null && !timedPossible && cur.section.defaultRule == SecRule.BLOCKED &&
                 rules.sectionRules.none { it.sectionId == cur.section.id && it.rule == SecRule.OPEN },
-            // Açık saatte bölümün kendi süresi bitince kullanım tek bir aralığa yazılır: en erken biten, yeri olan
-            windowBuckets = if (overlay.isEmpty() || (curLeft ?: 1L) > 0L) emptyList() else listOfNotNull(
+            // Açık saatte kullanım (önce bitecek olan harcansın diye) TEK bir aralığa yazılır: en erken biten, yeri olan.
+            // Eskiden geçerli bütün aralıklara aynı anda yazılıyordu; birden çok süre varken hepsi erkenden "bitmiş" görünüyordu.
+            windowBuckets = if (overlay.isEmpty()) emptyList() else listOfNotNull(
                 overlay.filter { g -> g.minutes * 60L - bucket(usage, "s:grant:${g.id}@$day") - bucket(usage, "w:${g.id}") > 0 }
                     .minByOrNull { secsToEnd(it, t) }?.let { "w:${it.id}" }
             ),

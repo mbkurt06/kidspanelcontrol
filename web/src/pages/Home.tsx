@@ -128,6 +128,12 @@ function ChildCard({ child }: { child: Child }) {
   }, [child.id, st?.updated_at]); // eslint-disable-line react-hooks/exhaustive-deps
   const [lockKind, setLockKind] = useState<LockKind>("kiosk");
   const [lockDur, setLockDur] = useState("open");
+  const [lockMin, setLockMin] = useState(45);
+  const [lockDate, setLockDate] = useState(() => todayISO("Europe/Berlin", 1));
+  const [lockDateTime, setLockDateTime] = useState("08:00");
+  const [lockRun, setLockRun] = useState("");
+  const [openRuns, setOpenRuns] = useState<{ id: string; title: string; mandatory: boolean }[]>([]);
+  const [manualLock, setManualLock] = useState<{ until: string | null; runs: string[] } | null>(null);
   const [lockUntil, setLockUntil] = useState("19:00");
   const [give, setGive] = useState(0);
   const [giveText, setGiveText] = useState<string | null>(null);
@@ -188,6 +194,34 @@ function ChildCard({ child }: { child: Child }) {
     const m = st0.find((v) => v > minute) ?? st0[0];
     return m == null ? null : hm(m);
   })();
+  const nextClosedStart = (() => {
+    const { minute } = nowBerlin();
+    const st0 = fam.sections.filter((x) => x.profile_id === sec?.profile_id && (x.default_rule === "blocked" || !timedPossible(x, fam.sectionRules))).map((x) => mins(x.start_time)).sort((a, b) => a - b);
+    const m = st0.find((v) => v > minute) ?? st0[0];
+    return m == null ? null : hm(m);
+  })();
+  // Kilit penceresi açılınca bugünün bitmemiş görevleri
+  useEffect(() => {
+    if (!lockOpen) return;
+    supabase.from("task_runs").select("id, status, task:tasks(title, mandatory)").eq("child_id", child.id).eq("day", todayISO())
+      .in("status", ["open", "started", "submitted", "rejected"])
+      .then(({ data }) => {
+        const rs = ((data ?? []) as unknown as { id: string; task: { title: string; mandatory: boolean } | null }[])
+          .map((x) => ({ id: x.id, title: x.task?.title ?? "Görev", mandatory: !!x.task?.mandatory }));
+        setOpenRuns(rs);
+        setLockRun((v) => (rs.some((x) => x.id === v) ? v : rs[0]?.id ?? ""));
+      });
+  }, [lockOpen, child.id]);
+  // Elle kilidin ne zamana kadar sürdüğü (kartta gösterilir)
+  useEffect(() => {
+    supabase.from("commands").select("type, payload, until_at, created_at").eq("child_id", child.id).in("type", ["kiosk_start", "kiosk_end"]).is("cancelled_at", null)
+      .order("created_at", { ascending: false }).limit(1)
+      .then(({ data }) => {
+        const c = data?.[0] as { type: string; payload: { until_runs?: string[] } | null; until_at: string | null } | undefined;
+        if (!c || c.type !== "kiosk_start" || (c.until_at && new Date(c.until_at).getTime() < Date.now())) setManualLock(null);
+        else setManualLock({ until: c.until_at, runs: c.payload?.until_runs ?? [] });
+      });
+  }, [child.id, st?.updated_at]);
 
   async function run(key: string, fn: () => Promise<unknown>, ok: string | ((r: unknown) => string)) {
     setBusy(key);
@@ -243,6 +277,39 @@ function ChildCard({ child }: { child: Child }) {
     return `Kilit kaldığı yerden sürüyor · ${tempOpen.reason}`;
   }
 
+  function untilText(iso: string | null) {
+    if (!iso) return "sen kaldırana kadar";
+    const d = new Date(iso);
+    const day = d.toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
+    const t = d.toLocaleTimeString("tr-TR", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit" });
+    if (day === todayISO()) return `${t}'e kadar`;
+    if (day === todayISO("Europe/Berlin", 1)) return `yarın ${t}'e kadar`;
+    return `${d.toLocaleDateString("tr-TR", { timeZone: "Europe/Berlin", day: "numeric", month: "short", weekday: "short" })} ${t}'e kadar`;
+  }
+  function lockPlan(): { until: string | null; runs: string[] | null; text: string } {
+    const mid = untilFrom("until", "00:00");
+    switch (lockDur) {
+      case "none": return { until: null, runs: null, text: "Kendiliğinden bitmez" };
+      case "open": { const u = untilFrom("until", nextOpenStart ?? "00:00"); return { until: u, runs: null, text: untilText(u) }; }
+      case "closed": { const u = untilFrom("until", nextClosedStart ?? "00:00"); return { until: u, runs: null, text: untilText(u) }; }
+      case "midnight": return { until: mid, runs: null, text: untilText(mid) };
+      case "morning": { const u = untilFrom("until", "07:00"); return { until: u, runs: null, text: untilText(u) }; }
+      case "tasks": {
+        const m = openRuns.filter((x) => x.mandatory);
+        const rs = m.length ? m : openRuns;
+        return { until: mid, runs: rs.map((x) => x.id), text: rs.length ? `${rs.map((x) => x.title).join(", ")} onaylanınca açılır · en geç gece yarısı` : "Bugün bitmemiş görev yok" };
+      }
+      case "task": {
+        const t = openRuns.find((x) => x.id === lockRun);
+        return { until: mid, runs: t ? [t.id] : [], text: t ? `${t.title} onaylanınca açılır · en geç gece yarısı` : "Görev seç" };
+      }
+      case "min": { const u = new Date(Date.now() + lockMin * 60000).toISOString(); return { until: u, runs: null, text: untilText(u) }; }
+      case "until": { const u = untilFrom("until", lockUntil); return { until: u, runs: null, text: untilText(u) }; }
+      case "date": { const d = new Date(`${lockDate}T${lockDateTime}:00`); return { until: isNaN(d.getTime()) ? null : d.toISOString(), runs: null, text: isNaN(d.getTime()) ? "Tarih seç" : untilText(d.toISOString()) }; }
+      default: { const u = new Date(Date.now() + Number(lockDur) * 60000).toISOString(); return { until: u, runs: null, text: untilText(u) }; }
+    }
+  }
+
   function applyLock() {
     if (lockKind === "resume") {
       setLockOpen(false);
@@ -252,19 +319,17 @@ function ChildCard({ child }: { child: Child }) {
     }
     const what = lockKind === "kiosk" ? "kilitlensin" : lockKind === "limit" ? "sınırlansın" : "profili başlasın";
     if (!confirm(`${child.name} ${what} mı?`)) return;
-    const until =
-      lockDur === "none" ? null
-      : lockDur === "until" ? untilFrom("until", lockUntil)
-      : lockDur === "midnight" ? untilFrom("until", "00:00")
-      : lockDur === "open" ? (nextOpenStart ? untilFrom("until", nextOpenStart) : untilFrom("until", "00:00"))
-      : new Date(Date.now() + Number(lockDur) * 60000).toISOString();
+    const plan = lockPlan();
+    if (plan.runs && !plan.runs.length) { alert("Bitmemiş görev yok; başka bir seçenek seç."); return; }
+    if (plan.until && new Date(plan.until).getTime() <= Date.now()) { alert("Bitiş zamanı geçmiş."); return; }
+    const until = plan.until;
     setLockOpen(false);
     if (lockKind === "kiosk") {
       setPending({ kind: "kiosk", at: Date.now() });
-      run("lock", () => lockNow(child.id, "kiosk", until, kioskOf(child).message), "");
+      run("lock", () => plan.runs ? sendCommand(child.id, "kiosk_start", { message: kioskOf(child).message || null, until_runs: plan.runs }, until) : lockNow(child.id, "kiosk", until, kioskOf(child).message), "");
     } else if (lockKind === "limit") {
       setPending({ kind: "limit", at: Date.now() });
-      run("lock", () => lockNow(child.id, "limit", until), "");
+      run("lock", () => plan.runs ? sendCommand(child.id, "lock", { until_runs: plan.runs }, until) : lockNow(child.id, "limit", until), "");
     }
     else run("lock", () => sendCommand(child.id, "start_mode", { mode_id: lockKind }, until), "Profil uygulanıyor");
   }
@@ -367,7 +432,7 @@ function ChildCard({ child }: { child: Child }) {
     : tempOpen && !waiting && !kiosk
       ? { cls: "good", text: `🔓 Geçici açık · ${minutesText(tempOpen.left)} kaldı · sonra: 🔒 ${tempOpen.reason}` }
       : kiosk
-      ? { cls: "bad", text: waiting && !realKiosk ? "Kilitli · telefona iletiliyor…" : `Kilitli · ${(st.lock_reason ?? "").replace("🔒", "").trim() || "sen kaldırana kadar"}` }
+      ? { cls: "bad", text: waiting && !realKiosk ? "Kilitli · telefona iletiliyor…" : `Kilitli · ${(st.lock_reason ?? "").replace("🔒", "").trim() || "Tam kilit"}${manualLock && /Tam kilit/.test(st.lock_reason ?? "") ? ` · ${manualLock.runs.length ? "görev bitene kadar" : untilText(manualLock.until)}` : ""}` }
       : limited
         ? { cls: "warn", text: waiting && !realLimited ? "Sınırlı · telefona iletiliyor…" : `Sınırlı · ${st.lock_reason ?? ""}`.replace(/ · $/, "") }
         : closed
@@ -575,24 +640,62 @@ function ChildCard({ child }: { child: Child }) {
                 </div>
                 {lockKind === "resume" && <p className="muted small" style={{ margin: 0 }}>Geçici açma hemen biter, telefon kilitlendiği sebebe geri döner.</p>}
                 {lockKind !== "resume" && <span className="pop-label">NE KADAR</span>}
-                <div className="chips" hidden={lockKind === "resume"}>
-                  {[
-                    ["open", `Açık saatler başlayana kadar${nextOpenStart ? ` (${nextOpenStart})` : ""}`],
-                    ["midnight", "Gece yarısına kadar"],
-                    ["none", lockKind === "kiosk" || lockKind === "limit" ? "Ben kaldırana kadar" : "Programa dönene kadar"],
-                    ["15", "15 dk"],
-                    ["30", "30 dk"],
-                    ["60", "1 sa"],
-                    ["120", "2 sa"],
-                    ["until", "Saate kadar…"],
-                  ].map(([k, l]) => (
-                    <button key={k} className={`chip-btn ${lockDur === k ? "on" : ""}`} onClick={() => setLockDur(k)}>
-                      {l}
-                    </button>
-                  ))}
-                </div>
-                {lockKind !== "resume" && lockDur === "none" && (lockKind === "kiosk" || lockKind === "limit") && <p className="muted small" style={{ margin: 0 }}>Kendiliğinden bitmez. Geçici açınca süre bitiminde yine kilitlenir; tamamen açmak için “Kilidi aç → Kilidi tamamen kaldır”.</p>}
-                {lockKind !== "resume" && lockDur === "until" && <TimeField value={lockUntil} onChange={setLockUntil} label="Bitiş saati" />}
+                {lockKind !== "resume" && (() => {
+                  const manual = lockKind === "kiosk" || lockKind === "limit";
+                  const chip = (k: string, l: string) => (
+                    <button key={k} className={`chip-btn ${lockDur === k ? "on" : ""}`} onClick={() => setLockDur(k)}>{l}</button>
+                  );
+                  const plan = lockPlan();
+                  return (
+                    <div className="stack-s">
+                      <span className="small muted">Hazır</span>
+                      <div className="chips">
+                        {chip("open", `Açık saatler başlayana kadar${nextOpenStart ? ` · ${nextOpenStart}` : ""}`)}
+                        {nextClosedStart && chip("closed", `Kapalı saatler başlayana kadar · ${nextClosedStart}`)}
+                        {chip("midnight", "Gece yarısına kadar")}
+                        {chip("morning", "Yarın sabaha kadar · 07:00")}
+                      </div>
+                      {manual && (
+                        <>
+                          <span className="small muted">Görevle</span>
+                          <div className="chips">
+                            {chip("tasks", "Görevler bitene kadar")}
+                            {chip("task", "Şu görev bitene kadar")}
+                          </div>
+                          {lockDur === "task" && (
+                            openRuns.length ? (
+                              <select value={lockRun} onChange={(e) => setLockRun(e.target.value)}>
+                                {openRuns.map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
+                              </select>
+                            ) : <p className="muted small" style={{ margin: 0 }}>Bugün bitmemiş görev yok</p>
+                          )}
+                        </>
+                      )}
+                      <span className="small muted">Süreyle</span>
+                      <div className="chips">
+                        {chip("15", "15 dk")}{chip("30", "30 dk")}{chip("60", "1 sa")}{chip("120", "2 sa")}{chip("min", "Süre…")}
+                      </div>
+                      {lockDur === "min" && <MinuteStepper value={lockMin} onChange={setLockMin} min={1} max={1440} step={5} label="Kilit süresi" />}
+                      <span className="small muted">Saatle</span>
+                      <div className="chips">
+                        {chip("until", "Saate kadar…")}{chip("date", "Tarih + saate kadar…")}
+                      </div>
+                      {lockDur === "until" && <TimeField value={lockUntil} onChange={setLockUntil} label="Bitiş saati" />}
+                      {lockDur === "date" && (
+                        <div className="row gap-s" style={{ alignItems: "center" }}>
+                          <input type="date" value={lockDate} min={todayISO()} onChange={(e) => setLockDate(e.target.value)} />
+                          <TimeField value={lockDateTime} onChange={setLockDateTime} label="Saat" />
+                        </div>
+                      )}
+                      <div className="chips">{chip("none", manual ? "Ben kaldırana kadar" : "Programa dönene kadar")}</div>
+                      <p className={`small ${lockDur === "none" && manual ? "warn-text" : "muted"}`} style={{ margin: 0 }}>
+                        {lockDur === "none"
+                          ? manual ? "⚠ Kendiliğinden bitmez. Tamamen açmak için “Kilidi aç → Kilidi tamamen kaldır”." : "Program kendi saatinde döner."
+                          : `🔒 ${plan.text}${plan.runs ? "" : ", sonra program neyse o."}`}
+                      </p>
+                    </div>
+                  );
+                })()}
                 <div className="pop-actions">
                   <button className="pill-btn ghost" onClick={() => setLockOpen(false)}>
                     Vazgeç

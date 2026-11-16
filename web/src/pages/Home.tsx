@@ -553,12 +553,26 @@ function ChildCard({ child }: { child: Child }) {
   const lockEndAbs = manualLock?.until ? Math.max(nowBerlin().minute, nowBerlin().minute + Math.round((new Date(manualLock.until).getTime() - Date.now()) / 60000)) : nowBerlin().minute;
   const xBase = xMode === "lock" ? lockEndAbs : xMode === "temp" && tempOpen ? (tempOpen.end >= 1439 && tempNext ? 1440 + mins(tempNext) : tempOpen.end) : baseEnd;
   const tempEndText = tempOpen ? (tempOpen.end >= 1439 && tempNext ? `yarın ${tempNext}` : hm(Math.min(tempOpen.end, 1439))) : "";
+  // Açma bitince ne olur: kayıttaki eski sebep yerine o anki kurallara göre hesaplanır (her çocukta aynı dil)
+  const afterOpen = (() => {
+    if (!tempOpen) return "";
+    const endAbs = tempOpen.end >= 1439 && tempNext ? 1440 + mins(tempNext) : tempOpen.end;
+    const endMs = Date.now() + (endAbs - nowBerlin().minute) * 60000;
+    if (manualLock && !manualLock.from && (!manualLock.until || new Date(manualLock.until).getTime() > endMs)) return "🔒 Tam kilit";
+    const m = endAbs % 1440;
+    const inSec = (x: Section) => { const a = mins(x.start_time), b = mins(x.end_time); return a < b ? m >= a && m < b : m >= a || m < b; };
+    const at = fam.sections.find((x) => x.profile_id === sec?.profile_id && inSec(x));
+    if (!at) return "program neyse o";
+    if (timedPossible(at, fam.sectionRules)) return "🟢 Açık saatler";
+    if (at.default_rule === "open") return "🟢 Serbest";
+    return "🔒 Kapalı saat";
+  })();
   const stateLine = !st
     ? null
     : tempOpen && !waiting && !kiosk
       ? tempOpen.reason === "Açık saatler uzatıldı"
         ? { cls: "good", text: `🟢 Açık saatler · ${tempEndText}'e kadar (bugün uzatıldı)` }
-        : { cls: "good", text: `🔓 Açıldı · ${tempEndText}'e kadar · sonra 🔒 ${/süren bitti|Şu an/.test(tempOpen.reason) ? "Kapalı saat" : tempOpen.reason}` }
+        : { cls: "good", text: `🔓 Açıldı · ${tempEndText}'e kadar · sonra ${afterOpen}` }
       : kiosk
       ? { cls: "bad", text: waiting && !realKiosk ? "Kilitli · telefona iletiliyor…" : `Kilitli · ${(st.lock_reason ?? "").replace("🔒", "").trim() || "Tam kilit"}${manualLock && /Tam kilit/.test(st.lock_reason ?? "") ? ` · ${manualLock.runs.length ? "görev bitene kadar" : untilText(manualLock.until)}` : ""}` }
       : limited

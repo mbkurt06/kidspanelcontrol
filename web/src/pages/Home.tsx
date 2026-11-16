@@ -129,6 +129,11 @@ function ChildCard({ child }: { child: Child }) {
   const [lockKind, setLockKind] = useState<LockKind>("kiosk");
   const [lockDur, setLockDur] = useState("open");
   const [lockMin, setLockMin] = useState(45);
+  const [uDur, setUDur] = useState("closed");
+  const [uMin, setUMin] = useState(45);
+  const [uUntil, setUUntil] = useState("19:30");
+  const [uDate, setUDate] = useState(() => todayISO("Europe/Berlin", 1));
+  const [uDateTime, setUDateTime] = useState("08:00");
   const [lockDate, setLockDate] = useState(() => todayISO("Europe/Berlin", 1));
   const [lockDateTime, setLockDateTime] = useState("08:00");
   const [lockRun, setLockRun] = useState("");
@@ -241,16 +246,51 @@ function ChildCard({ child }: { child: Child }) {
   }
 
   /** Geçici açma: saat gibi akan süre; bitince (ya da "Kaldığı yerden") telefon kilitlendiği sebebe döner */
-  async function tempUnlock(minutes: number) {
+  /** Belirli bir zamana kadar geçici aç: gün gün aralıklar (gece yarısını geçerse ertesi günlere bölünür) */
+  async function tempUntil(endIso: string) {
     const reason = taskLock ? `Görev: ${taskLock}` : (st?.lock_reason ?? "").replace("🔒", "").trim() || "Kilit";
-    const { minute } = nowBerlin();
-    const { error } = await supabase.from("time_grants").insert({
-      child_id: child.id, minutes, valid_on: todayISO(), source: "manual", note: `Geçici açma · ${reason}`,
-      window_start: hm(minute), window_end: hm(Math.min(minute + minutes, 1439)), use_mode: "clock", to_vault: false, vault: false,
-    });
+    const end = new Date(endIso);
+    const endDay = end.toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
+    const [eh, em] = end.toLocaleTimeString("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hour12: false }).split(":").map(Number);
+    const endMin = (eh % 24) * 60 + em;
+    const rows: Record<string, unknown>[] = [];
+    for (let i = 0; i < 31; i++) {
+      const d = todayISO("Europe/Berlin", i);
+      const last = d === endDay;
+      const s0 = i === 0 ? nowBerlin().minute : 0;
+      const e = last ? Math.min(endMin, 1439) : 1439;
+      if (e > s0) rows.push({ child_id: child.id, minutes: e - s0, valid_on: d, source: "manual", note: `Geçici açma · ${reason}`, window_start: hm(s0), window_end: hm(e), use_mode: "clock", to_vault: false, vault: false });
+      if (last || d > endDay) break;
+    }
+    if (!rows.length) throw new Error("Bitiş zamanı geçmiş");
+    const { error } = await supabase.from("time_grants").insert(rows);
     if (error) throw error;
+    await sendCommand(child.id, "resync", {});
     await loadExtras();
-    return `${minutesText(minutes)} geçici açıldı · sonra yine ${reason}`;
+    return `🔓 ${untilText(endIso)} açık · sonra yine ${reason}`;
+  }
+  useEffect(() => {
+    if (unlockOpen) setUDur(closed || !nextClosedStart ? "60" : "closed");
+  }, [unlockOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  function unlockPlan(): { end: string | null; text: string } {
+    const plus = (m: number) => new Date(Date.now() + m * 60000).toISOString();
+    switch (uDur) {
+      case "full": return { end: null, text: "Elle kilit biter, telefon programa döner (açık saatse açık, kapalı saatse kapalı)." };
+      case "closed": { const u = untilFrom("until", nextClosedStart ?? "00:00"); return { end: u, text: `🔓 ${untilText(u)} açık` }; }
+      case "midnight": { const u = untilFrom("until", "00:00"); return { end: u, text: `🔓 ${untilText(u)} açık` }; }
+      case "morning": { const u = untilFrom("until", "07:00"); return { end: u, text: `🔓 ${untilText(u)} açık` }; }
+      case "min": { const u = plus(uMin); return { end: u, text: `🔓 ${untilText(u)} açık` }; }
+      case "until": { const u = untilFrom("until", uUntil); return { end: u, text: `🔓 ${untilText(u)} açık` }; }
+      case "date": { const d = new Date(`${uDate}T${uDateTime}:00`); return isNaN(d.getTime()) ? { end: "", text: "Tarih seç" } : { end: d.toISOString(), text: `🔓 ${untilText(d.toISOString())} açık` }; }
+      default: { const u = plus(Number(uDur)); return { end: u, text: `🔓 ${untilText(u)} açık` }; }
+    }
+  }
+  function applyUnlock() {
+    const p = unlockPlan();
+    setUnlockOpen(false);
+    setPending({ kind: "open", at: Date.now() });
+    if (p.end === null) run("unlock", () => unlockNow(child.id), "");
+    else run("unlock", () => tempUntil(p.end!), (r) => String(r));
   }
   /** Süren geçici açmanın bitişini ileri alır (yeni açma eklemez) */
   async function extendTemp(add: number) {
@@ -270,7 +310,7 @@ function ChildCard({ child }: { child: Child }) {
     }
     if (!tempOpen) return "";
     const { error } = await supabase.from("time_grants").update({ minutes: 0, settled_at: new Date().toISOString() })
-      .eq("child_id", child.id).eq("source", "manual").eq("valid_on", todayISO()).like("note", "Geçici açma%").is("settled_at", null);
+      .eq("child_id", child.id).eq("source", "manual").gte("valid_on", todayISO()).like("note", "Geçici açma%").is("settled_at", null);
     if (error) throw error;
     await sendCommand(child.id, "resync", {});
     await loadExtras();
@@ -539,42 +579,54 @@ function ChildCard({ child }: { child: Child }) {
                 <p className="small" style={{ margin: 0 }}>
                   🔒 <b>Neden kilitli:</b> {taskLock ? `Görev: ${taskLock}` : (st?.lock_reason ?? "").replace("🔒", "").trim() || "Telefon kilitli"}
                 </p>
-                {!taskLock && (
-                  <>
-                    <button
-                      className="pill-btn primary"
-                      disabled={!!busy}
-                      onClick={() => {
-                        setUnlockOpen(false);
-                        setPending({ kind: "open", at: Date.now() });
-                        run("unlock", () => unlockNow(child.id), "");
-                      }}
-                    >
-                      🔓 Kilidi tamamen kaldır
-                    </button>
-                    <p className="muted small" style={{ margin: 0 }}>Elle kilit biter, telefon programa döner (açık saatse açık, kapalı saatse kapalı).</p>
-                  </>
-                )}
                 {tempOpen && (
                   <button className="pill-btn" onClick={() => { setUnlockOpen(false); setExtMin(30); setExtOpen(true); }}>
                     🔓 Geçici açık · {hm(Math.min(tempOpen.end, 1439))}'e kadar · ＋ Uzat
                   </button>
                 )}
-                <span className="pop-label">⏱ GEÇİCİ AÇ <Info>Telefon bu süre boyunca normal açık saat gibi çalışır. Süre dolunca (telefon kapalı ya da internetsiz olsa da) aynı sebepten yine kilitlenir (elle kilit dahil). Beklemeden kilitlemek için “Kilitle → Kaldığı yerden devam et”.</Info></span>
+                <span className="pop-label">NE KADAR AÇIK KALSIN <Info>Seçtiğin zamana kadar telefon normal açık saat gibi çalışır. Süre dolunca (telefon kapalı ya da internetsiz olsa da) aynı sebepten yine kilitlenir. Beklemeden kilitlemek için “Kilitle → Kaldığı yerden devam et”.</Info></span>
+                {(() => {
+                  const chip = (k: string, l: string) => (
+                    <button key={k} className={`chip-btn ${uDur === k ? "on" : ""}`} onClick={() => setUDur(k)}>{l}</button>
+                  );
+                  const p = unlockPlan();
+                  const reason = taskLock ? `Görev: ${taskLock}` : (st?.lock_reason ?? "").replace("🔒", "").trim() || "Kilit";
+                  return (
+                    <div className="stack-s">
+                      <span className="small muted">Hazır</span>
+                      <div className="chips">
+                        {!closed && nextClosedStart && chip("closed", `Açık saatler bitene kadar · ${nextClosedStart}`)}
+                        {chip("midnight", "Gece yarısına kadar")}
+                        {chip("morning", "Yarın sabaha kadar · 07:00")}
+                      </div>
+                      <span className="small muted">Süreyle</span>
+                      <div className="chips">
+                        {chip("5", "5 dk")}{chip("15", "15 dk")}{chip("30", "30 dk")}{chip("60", "1 sa")}{chip("120", "2 sa")}{chip("min", "Süre…")}
+                      </div>
+                      {uDur === "min" && <MinuteStepper value={uMin} onChange={setUMin} min={1} max={1440} step={5} label="Açık kalma süresi" />}
+                      <span className="small muted">Saatle</span>
+                      <div className="chips">{chip("until", "Saate kadar…")}{chip("date", "Tarih + saate kadar…")}</div>
+                      {uDur === "until" && <TimeField value={uUntil} onChange={setUUntil} label="Bitiş saati" />}
+                      {uDur === "date" && (
+                        <div className="row gap-s" style={{ alignItems: "center" }}>
+                          <input type="date" value={uDate} min={todayISO()} onChange={(e) => setUDate(e.target.value)} />
+                          <TimeField value={uDateTime} onChange={setUDateTime} label="Saat" />
+                        </div>
+                      )}
+                      {!taskLock && <div className="chips">{chip("full", "🔓 Tamamen kaldır")}</div>}
+                      <p className="small muted" style={{ margin: 0 }}>
+                        → {p.text}{p.end ? `, sonra yine 🔒 ${reason}` : ""}
+                      </p>
+                      <div className="pop-actions">
+                        <button className="pill-btn ghost" onClick={() => setUnlockOpen(false)}>Vazgeç</button>
+                        <button className="pill-btn primary" disabled={!!busy || p.end === ""} onClick={applyUnlock}>{uDur === "full" ? "Kilidi kaldır" : "Aç"}</button>
+                      </div>
+                    </div>
+                  );
+                })()}
+                <span className="pop-label">🛠 EBEVEYN MODU</span>
                 <div className="row gap-s" style={{ alignItems: "center" }}>
-                  <MinuteStepper value={parentMin} onChange={setParentMin} min={1} max={240} step={1} label="Geçici açma süresi" />
-                  <button
-                    className="pill-btn primary"
-                    disabled={!!busy}
-                    onClick={() => {
-                      setUnlockOpen(false);
-                      setPending({ kind: "open", at: Date.now() });
-                      run("unlock", () => tempUnlock(parentMin), (r) => String(r));
-                    }}
-                  >
-                    Aç
-                  </button>
-                </div>
+                  <MinuteStepper value={parentMin} onChange={setParentMin} min={1} max={240} step={1} label="Ebeveyn modu süresi" />
                 <button
                   className="pill-btn ghost"
                   disabled={!!busy}
@@ -587,11 +639,8 @@ function ChildCard({ child }: { child: Child }) {
                     }, (r) => String(r));
                   }}
                 >
-                  🛠 Ebeveyn modu ({minutesText(parentMin)})
+                  Ebeveyn modu ({minutesText(parentMin)})
                 </button>
-                <div className="pop-actions">
-                  <button className="pill-btn ghost" onClick={() => setUnlockOpen(false)}>Vazgeç</button>
-
                 </div>
               </div>
             </>,

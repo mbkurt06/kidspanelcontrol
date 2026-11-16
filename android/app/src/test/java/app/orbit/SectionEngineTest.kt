@@ -260,9 +260,9 @@ class SectionEngineTest {
         assertEquals(5 * 60L, e.snapshot(at(17, 10), u).remainingSeconds)
         // Aralık bitti: bölümden kalan 5 dk aynen durur
         assertEquals(5 * 60L, e.snapshot(at(17, 45), u).remainingSeconds)
-        // Aralıkta hiç kullanılmazsa süre düşer
+        // Aralıkta hiç kullanılmasa da verilen süre gün bitişine kadar geçerli (saatle düşmez)
         val u2 = use(e, DayUsage(day), "com.insta", at(16, 0), 50)
-        assertEquals(10 * 60L, e.snapshot(at(17, 45), u2).remainingSeconds)
+        assertEquals(30 * 60L, e.snapshot(at(17, 45), u2).remainingSeconds)
     }
 
     @Test

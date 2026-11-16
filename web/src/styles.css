@@ -2389,3 +2389,39 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .icon-pill.on { outline: 2px solid var(--accent, #6b5ce7); }
 
 .card-actions .lock-wrap { display: flex; flex-direction: row; align-items: center; gap: 6px; }
+
+/* Karttan hızlı mesaj: tek satır, yazdıkça aşağı uzar */
+.quick-msg {
+  flex: 1 1 0;
+  min-width: 0;
+  resize: none;
+  overflow: hidden;
+  min-height: 36px;
+  max-height: 160px;
+  padding: 8px 14px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+}
+.card-actions:has(.quick-msg) {
+  flex-wrap: nowrap;
+  align-items: flex-end;
+}
+.send-pill {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.batt {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.batt.low {
+  color: var(--bad);
+}
+.lock-wrap:empty { display: none; }

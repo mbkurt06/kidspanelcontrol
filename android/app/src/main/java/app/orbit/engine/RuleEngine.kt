@@ -276,7 +276,18 @@ class RuleEngine(private val rules: Rules) {
         sec.defaultRule == SecRule.TIMED || rules.sectionRules.any { it.sectionId == sec.id && it.rule == SecRule.TIMED }
 
     /** Şu an geçerli saat aralıklı süreler */
-    fun activeWindows(day: LocalDate, t: LocalTime): List<Grant> = dayWindows(day).filter { it.window!!.contains(t) && it.id !in spentWindows && it.minutes > 0 }
+    fun activeWindows(day: LocalDate, t: LocalTime): List<Grant> = dayWindows(day).filter { liveAt(it, t) && it.id !in spentWindows && it.minutes > 0 }
+
+    /** Geçici açma kendi aralığında; verilen süre başladıktan sonra gün sonuna kadar geçerli (aralık bitişi eski kayıtlar için) */
+    fun liveAt(g: Grant, t: LocalTime): Boolean {
+        val w = g.window ?: return false
+        if (isTempOpen(g)) return w.contains(t)
+        val de = rules.dayEndMin * 60
+        val st = w.start.toSecondOfDay()
+        val ts = t.toSecondOfDay()
+        // Gün bitişinden önceki gece saatleri: sadece o geceye yazılmış (gün bitişinden önce başlayan) süreler
+        return if (ts < de) st < de && ts >= st else st >= de && ts >= st
+    }
 
     /** Süresi tamamen kullanılmış saat aralıkları (kısıtlamayı artık kaldırmaz) */
     var spentWindows: Set<String> = emptySet()
@@ -475,11 +486,18 @@ class RuleEngine(private val rules: Rules) {
             val w0 = g.window!!
             val st = w0.start.toSecondOfDay()
             if (if (tSec < deSec) st >= deSec else st < deSec) continue
-            val endS = if (w0.end == LocalTime.of(23, 59) || w0.end <= w0.start) 86_400 else w0.end.toSecondOfDay()
             val sv = bucket(usage, "s:grant:${g.id}@$day")
             val w = bucket(usage, "w:${g.id}")
             val left = (g.minutes * 60L - sv - w).coerceAtLeast(0)
-            winAll += minOf(w, (g.minutes * 60L - sv).coerceAtLeast(0)) + if (tSec < endS) left else 0L
+            // Verilen süre gün bitişine kadar geçerli (henüz başlamamış olsa da bugünün hakkı)
+            winAll += minOf(w, (g.minutes * 60L - sv).coerceAtLeast(0)) + left
+        }
+        if (tSec < deSec) {
+            // Gece yarısından sonra: dünkü (devamı olmayan) verilen sürelerin kalanı da gün bitişine kadar bu günün hakkı
+            for (g in dayWindows(day.minusDays(1)).filter { !isTempOpen(it) && it.window!!.end != LocalTime.of(23, 59) && it.window!!.start.toSecondOfDay() >= deSec }) {
+                val used = bucket(usage, "w:${g.id}") + bucket(usage, "s:grant:${g.id}@${day.minusDays(1)}")
+                winAll += (g.minutes * 60L - used).coerceAtLeast(0)
+            }
         }
         val hakPool = (poolMin * 60L + winAll - poolUsed).coerceAtLeast(0)
         // Ebeveynin düşürdüğü süre (eksi düzeltme) havuzu aşarsa o anki bölümden / saat aralıklı süreden de düşer

@@ -279,7 +279,9 @@ class RuleEngine(private val rules: Rules) {
     var spentWindows: Set<String> = emptySet()
 
     /** Saat aralıklı sürede kullanılan saniye */
-    fun windowUsedSeconds(usage: DayUsage, g: Grant, day: LocalDate) = bucket(usage, "s:grant:${g.id}@$day") + bucket(usage, "w:${g.id}")
+    // Açık saatte aynı anda geçerli bütün aralıklara (w:) aynı kullanım yazılır; o yüzden "bitti" kararı sadece
+    // aralığın kendi (kapalı saat) sayacına bakar. Açık saatteki harcama havuzdan, kapalı saatte toplamdan düşülür.
+    fun windowUsedSeconds(usage: DayUsage, g: Grant, day: LocalDate) = bucket(usage, "s:grant:${g.id}@$day")
 
     fun refreshSpent(usage: DayUsage, day: LocalDate) {
         spentWindows = dayWindows(day).filter { windowUsedSeconds(usage, it, day) >= it.minutes * 60L }.map { it.id }.toSet()

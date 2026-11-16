@@ -68,6 +68,8 @@ data class Snapshot(
     val freeName: String? = null,
     /** Açık bölümde geçerli saat aralıklı süreler: kullanım bu sayaçlara da yazılır */
     val windowBuckets: List<String> = emptyList(),
+    /** Bugünkü (Orbit günü, gün bitişine kadar) kalan hak: kilitliyken de görünür; null = remainingSeconds */
+    val dayLeftSeconds: Long? = null,
 )
 
 /** "Sınırsız" kalan süre (bölüm süresi ve günlük sınır yok) */
@@ -465,6 +467,21 @@ class RuleEngine(private val rules: Rules) {
         }
         val poolRaw = poolMin * 60L + winCredit - poolUsed
         val poolLeft = if (virtualWin) 0L else poolRaw.coerceAtLeast(0)
+        // Gün hakkı (kilitliyken de): bu Orbit gününe ait, bitmemiş verilen sürelerin kalanı + havuz
+        val deSec = rules.dayEndMin * 60
+        val tSec = t.toSecondOfDay()
+        var winAll = 0L
+        for (g in dayWindows(day).filter { !isTempOpen(it) }) {
+            val w0 = g.window!!
+            val st = w0.start.toSecondOfDay()
+            if (if (tSec < deSec) st >= deSec else st < deSec) continue
+            val endS = if (w0.end == LocalTime.of(23, 59) || w0.end <= w0.start) 86_400 else w0.end.toSecondOfDay()
+            val sv = bucket(usage, "s:grant:${g.id}@$day")
+            val w = bucket(usage, "w:${g.id}")
+            val left = (g.minutes * 60L - sv - w).coerceAtLeast(0)
+            winAll += minOf(w, (g.minutes * 60L - sv).coerceAtLeast(0)) + if (tSec < endS) left else 0L
+        }
+        val hakPool = (poolMin * 60L + winAll - poolUsed).coerceAtLeast(0)
         // Ebeveynin düşürdüğü süre (eksi düzeltme) havuzu aşarsa o anki bölümden / saat aralıklı süreden de düşer
         val cut = if (virtualWin) (-(adjust + walletDebt) * 60L).coerceAtLeast(0) else (-poolRaw).coerceAtLeast(0).coerceAtMost((-(adjust + walletDebt) * 60L).coerceAtLeast(0))
         if (cut > 0 && curLeft != null) curLeft = (curLeft!! - cut).coerceAtLeast(0)
@@ -476,6 +493,8 @@ class RuleEngine(private val rules: Rules) {
         val sectionPart = if (!timedPossible) 0L else (curLeft ?: UNLIMITED_SECONDS)
         var remaining = if (openSection) UNLIMITED_SECONDS else if (!timedPossible) 0L else (sectionPart + poolLeft).coerceAtMost(UNLIMITED_SECONDS)
         if (capLeft != null) remaining = minOf(remaining, capLeft)
+        var dayLeft = if (openSection || timedPossible || virtualWin) remaining else hakPool
+        if (capLeft != null) dayLeft = minOf(dayLeft, capLeft)
 
         val allowance = when {
             cur != null && curLeft != null -> ((curEff / 60) + poolMin).toInt()
@@ -497,6 +516,7 @@ class RuleEngine(private val rules: Rules) {
                 overlay.filter { g -> g.minutes * 60L - bucket(usage, "s:grant:${g.id}@$day") - bucket(usage, "w:${g.id}") > 0 }
                     .minByOrNull { secsToEnd(it, t) }?.let { "w:${it.id}" }
             ),
+            dayLeftSeconds = dayLeft,
         )
     }
 

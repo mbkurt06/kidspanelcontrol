@@ -290,6 +290,8 @@ export type DeviceStatus = {
   used_minutes: number;
   allowance_minutes: number;
   remaining_minutes: number;
+  /** Gün bitişine kadar kalan hak (kilitliyken de) */
+  day_left_minutes?: number | null;
   grant_used?: Record<string, number> | null;
   /** Telefon canlı bağlantıda mı (değişiklikleri anında alır) */
   live?: boolean | null;

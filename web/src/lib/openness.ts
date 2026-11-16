@@ -11,26 +11,9 @@ import { untilFrom } from "../pages/Lock";
 
 /** Açık saatleri bugünlük uzat: bugünün süre aralıklarının bitişini ileri alır (kasaya geçiş de o saate kayar) */
 export async function extendOpenToday(childId: string, endHm: string, openEnd: string | null) {
-  const nowMin = nowBerlin().minute;
-  const { data, error } = await supabase.from("time_grants").select("id, window_start, window_end, orig_window_end, use_mode, note")
-    .eq("child_id", childId).eq("valid_on", todayISO()).eq("vault", false).gt("minutes", 0).is("settled_at", null).not("window_end", "is", null);
-  if (error) throw error;
-  let n = 0;
-  for (const g of (data ?? []) as { id: string; window_start: string; window_end: string; orig_window_end: string | null; use_mode: string | null; note: string | null }[]) {
-    if (g.use_mode === "clock" || g.note?.startsWith("Geçici açma")) continue;
-    if (mins(g.window_end) < nowMin) continue; // bitmiş aralık
-    // Sadece açık saatlerin bitişine bağlı süreler (ya da daha önce uzatılmış olanlar) kayar
-    const bound = g.orig_window_end != null || (openEnd != null && mins(g.window_end) === mins(openEnd));
-    if (!bound) continue;
-    if (mins(endHm) <= mins(g.window_start) || mins(endHm) === mins(g.window_end)) continue;
-    const orig = g.orig_window_end ?? g.window_end;
-    const back = mins(endHm) === mins(orig);
-    const { error: e2 } = await supabase.from("time_grants").update({ window_end: endHm, orig_window_end: back ? null : orig }).eq("id", g.id);
-    if (e2) throw e2;
-    n++;
-  }
-  if (n) await sendCommand(childId, "resync", {});
-  return n;
+  // Verilen süreler artık açıklığa bağlı değil: gün bitişine kadar geçerli, açıklık değişince kaymaz / kısalmaz
+  void childId; void endHm; void openEnd;
+  return 0;
 }
 export async function undoExtendOpen(childId: string) {
   const { data, error } = await supabase.from("time_grants").select("id, orig_window_end").eq("child_id", childId).eq("valid_on", todayISO()).not("orig_window_end", "is", null);

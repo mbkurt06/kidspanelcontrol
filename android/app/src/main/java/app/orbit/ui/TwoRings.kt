@@ -57,12 +57,13 @@ fun lockPassesDayEnd(o: Openness, s: Snapshot): Boolean {
 @Composable
 fun TwoRings(s: Snapshot, k: KioskNow?) {
     val o = openness(s, k)
-    val unlimited = s.remainingSeconds >= UNLIMITED_SECONDS
-    val hakMin = s.remainingSeconds / 60
+    val hak = s.dayLeftSeconds ?: s.remainingSeconds
+    val unlimited = hak >= UNLIMITED_SECONDS
+    val hakMin = hak / 60
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.Top) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            val frac = if (unlimited) 1f else if (s.allowanceMinutes > 0) s.remainingSeconds / (s.allowanceMinutes * 60f) else 0f
-            Ring(frac, if (unlimited || s.remainingSeconds > 600) C.blue else C.warn, 110.dp) {
+            val frac = if (unlimited) 1f else if (s.allowanceMinutes > 0) hak / (s.allowanceMinutes * 60f) else if (hak > 0) 1f else 0f
+            Ring(frac, if (unlimited || hak > 600) C.blue else C.warn, 110.dp) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(if (unlimited) "∞" else minutesText(hakMin), color = C.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Muted(if (unlimited) "sınırsız" else "kaldı", 12)
@@ -80,8 +81,8 @@ fun TwoRings(s: Snapshot, k: KioskNow?) {
                 }
             } else {
                 val left = o.openLeftSec
-                val short = left != null && !unlimited && left < s.remainingSeconds
-                val frac = if (left == null) 1f else if (unlimited) 1f else (left.toFloat() / maxOf(left, s.remainingSeconds).coerceAtLeast(1)).coerceIn(0f, 1f)
+                val short = left != null && !unlimited && left < hak
+                val frac = if (left == null) 1f else if (unlimited) 1f else (left.toFloat() / maxOf(left, hak).coerceAtLeast(1)).coerceIn(0f, 1f)
                 Ring(frac, if (short) C.warn else C.accent, 110.dp) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(left?.let { minutesText(it / 60) } ?: "açık", color = C.text, fontSize = 18.sp, fontWeight = FontWeight.Bold)
@@ -99,7 +100,7 @@ fun TwoRings(s: Snapshot, k: KioskNow?) {
                     (o.untilMs?.let { " Telefon ${hhmm(it)}'te açılınca yeni günün süresi başlar." } ?: "") +
                     " Bu ${minutesText(hakMin)}'yı ancak ebeveynin kilidi ${dayEndText()}'ten önce açarsa kullanabilirsin."
             o.locked -> "Süren bekliyor; telefon açılınca kullanabilirsin."
-            o.openLeftSec != null && o.openLeftSec < s.remainingSeconds ->
+            o.openLeftSec != null && o.openLeftSec < hak ->
                 "Telefon ${minutesText(o.openLeftSec / 60)} sonra kapanacak; kalan süren ${dayEndText()}'e kadar bekler, sonra kasaya geçer."
             else -> null
         }

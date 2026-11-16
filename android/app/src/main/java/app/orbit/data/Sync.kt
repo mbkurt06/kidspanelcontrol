@@ -197,6 +197,7 @@ object Sync {
                 .put("child_id", c.childId).put("device_id", c.deviceId).put("day", s.day.toString())
                 .put("used_minutes", s.usedMinutes).put("allowance_minutes", s.allowanceMinutes)
                 .put("remaining_minutes", (s.remainingSeconds / 60).toInt())
+                .put("day_left_minutes", ((s.dayLeftSeconds ?: s.remainingSeconds) / 60).toInt())
                 .put("current_mode_id", s.activeMode?.id ?: JSONObject.NULL)
                 .put("current_mode_name", s.activeMode?.name ?: s.section?.section?.name ?: JSONObject.NULL)
                 .put("locked", s.locked).put("lock_reason", lockReason ?: JSONObject.NULL)

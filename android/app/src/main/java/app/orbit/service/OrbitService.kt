@@ -567,7 +567,12 @@ class OrbitService : Service() {
             val w = g.window ?: continue
             if (!g.toVault || g.settled || g.vault || g.validOn == null || g.id in done) continue
             if (g.validOn == day) used.put(g.id, engine.windowUsedSeconds(usage, g, day))
-            val ended = g.validOn.isBefore(day) || (g.validOn == day && (if (w.end == java.time.LocalTime.of(23, 59)) false else !t.isBefore(w.end)))
+            // Kalan süre gün bitişinde (ör. 05:00) kasaya geçer; 23:59'da biten parça gece yarısı devam kaydına aktarılır
+            val de = Store.rules().dayEndMin
+            val ended = if (w.end == java.time.LocalTime.of(23, 59)) g.validOn.isBefore(day) else {
+                val lday = if (w.start.toSecondOfDay() < de * 60) g.validOn else g.validOn.plusDays(1)
+                !now.isBefore(lday.atStartOfDay(now.zone).plusMinutes(de.toLong()))
+            }
             if (!ended) continue
             val sec = used.optLong(g.id, 0)
             due += g.id to (g.minutes - ((sec + 59) / 60).toInt()).coerceAtLeast(0)

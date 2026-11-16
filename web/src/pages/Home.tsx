@@ -581,6 +581,9 @@ function ChildCard({ child }: { child: Child }) {
   const dayEndHm = (fam.family?.day_end ?? "05:00").slice(0, 5);
   const dayEndMs = nextAtMs(dayEndHm);
   const isLocked = kiosk || limited || closed;
+  // Sol halka: gün bitişine kadar kalan hak (telefon kilitliyken de bildirir; eski sürümde kalan süre)
+  const hak = st?.day_left_minutes ?? st?.remaining_minutes ?? 0;
+  const hakUnl = hak >= 1440;
   const lockEnd: { label: string; ms: number | null; task: boolean } | null = !st || !isLocked
     ? null
     : manualLock && kiosk && !manualLock.from
@@ -597,7 +600,7 @@ function ChildCard({ child }: { child: Child }) {
   const lockPastDayEnd = !!lockEnd && !lockEnd.task && (lockEnd.ms == null || lockEnd.ms >= dayEndMs);
   const openEndAbs = xMode === "temp" ? xBase : baseEnd;
   const openLeft = st && !isLocked && (sec || tempOpen || extWin) ? Math.max(0, openEndAbs - nowMin) : null;
-  const openShort = openLeft != null && !unlimited && openLeft < (st?.remaining_minutes ?? 0);
+  const openShort = openLeft != null && !hakUnl && openLeft < hak;
   const [ringMenu, setRingMenu] = [ringMenuOpen, setRingMenuOpen];
   const openLock = () => {
     setRingMenu(false); setUnlockOpen(false);
@@ -639,8 +642,8 @@ function ChildCard({ child }: { child: Child }) {
           aria-label="Süreyi çarkla ayarla"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (st) { setDial(0); setDialThen("none"); setDialOpen(true); } }}
         >
-          <Ring value={unlimited ? 1 : st?.remaining_minutes ?? 0} max={unlimited ? 1 : Math.max(st?.allowance_minutes ?? 0, (st?.remaining_minutes ?? 0) + (st?.used_minutes ?? 0), 1)} color={!unlimited && (st?.remaining_minutes ?? 0) <= 10 ? "var(--warn)" : child.color} size={66}>
-            {!st ? <b>—</b> : unlimited ? <span className="ring-state"><b>∞</b><small>süre</small></span> : <span className="ring-state"><b>{minutesText(st.remaining_minutes)}</b><small>süre</small></span>}
+          <Ring value={hakUnl ? 1 : hak} max={hakUnl ? 1 : Math.max(st?.allowance_minutes ?? 0, hak + (st?.used_minutes ?? 0), 1)} color={!hakUnl && hak <= 10 ? "var(--warn)" : child.color} size={66}>
+            {!st ? <b>—</b> : hakUnl ? <span className="ring-state"><b>∞</b><small>süre</small></span> : <span className="ring-state"><b>{minutesText(hak)}</b><small>süre</small></span>}
           </Ring>
         </span>
         <div className="grow">
@@ -670,9 +673,9 @@ function ChildCard({ child }: { child: Child }) {
 
                 </span>
               )}
-              {isLocked && st.remaining_minutes > 0 && !unlimited && (lockPastDayEnd
-                ? <span className="warn-text small">{minutesText(st.remaining_minutes)} {dayEndHm}'te kasaya gider</span>
-                : <span className="muted small">{minutesText(st.remaining_minutes)} telefon açılınca kullanılır</span>)}
+              {isLocked && hak > 0 && !hakUnl && (lockPastDayEnd
+                ? <span className="warn-text small">{minutesText(hak)} {dayEndHm}'te kasaya gider</span>
+                : <span className="muted small">{minutesText(hak)} telefon açılınca kullanılır</span>)}
               {openShort && openLeft != null && <span className="warn-text small">Telefon {minutesText(openLeft)} sonra kapanır · kalan süre {dayEndHm}'te kasaya</span>}
               <span className="muted small">Bugün {minutesText(st.used_minutes)} kullandı</span>
               {timer && (
@@ -702,7 +705,7 @@ function ChildCard({ child }: { child: Child }) {
                 <span className="ring-state bad"><Icon name="lock" size={18} /><small>{lockEnd?.label ?? "Kilitli"}</small></span>
               </Ring>
             ) : (
-              <Ring value={openLeft ?? 1} max={openLeft == null || unlimited ? 1 : Math.max(openLeft, st.remaining_minutes, 1)} color={openShort ? "var(--warn)" : "var(--accent)"} size={66}>
+              <Ring value={openLeft ?? 1} max={openLeft == null || unlimited ? 1 : Math.max(openLeft, hakUnl ? 1 : hak, 1)} color={openShort ? "var(--warn)" : "var(--accent)"} size={66}>
                 <span className="ring-state"><b>{openLeft == null ? "açık" : minutesText(openLeft)}</b><small>{openLeft == null ? "telefon" : `${hm(Math.min(openEndAbs % 1440, 1439))}'e`}</small></span>
               </Ring>
             )}

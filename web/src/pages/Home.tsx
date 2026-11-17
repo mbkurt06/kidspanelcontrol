@@ -689,13 +689,15 @@ function ChildCard({ child }: { child: Child }) {
   // Açıklamalar kartta yazmaz; ⓘ'ye basınca görünür
   const infoLines: string[] = [];
   if (st) {
+    infoLines.push(`${conn === "on" ? "🟢 Telefon bağlı" : conn === "idle" ? "🟡 Telefon birkaç dakikadır sessiz" : "⚪ Telefon bağlı değil"} · son bağlantı ${timeText(st.updated_at)} (${ago(st.updated_at)})`);
+    if (st.battery != null) infoLines.push(`🔋 Şarj %${st.battery}${st.battery <= 15 ? " · çok düşük, telefon kapanabilir" : ""}`);
     if (staleMin > 15) infoLines.push(`⚠ Telefon ${staleMin >= 60 ? `${Math.floor(staleMin / 60)} sa ${staleMin % 60} dk` : `${staleMin} dk`} süredir bağlanmadı (son bağlantı ${timeText(st.updated_at)})`);
     if (isLocked && hak > 0 && !hakUnl) infoLines.push(lockPastDayEnd
       ? `⏱ ${minutesText(hak)} süresi var; kilit gün bitişinden (${dayEndHm}) sonra kalkacağı için ${dayEndHm}'te kasaya geçer. Kilidi ${dayEndHm}'ten önce açarsan kullanabilir.`
       : `⏱ ${minutesText(hak)} süresi var; telefon açılınca kullanır.`);
     if (openShort && openLeft != null) infoLines.push(`⏰ Telefon ${minutesText(openLeft)} sonra kapanır; kullanmadığı süre ${dayEndHm}'te kasaya geçer.`);
     if (staleMin <= 15 && st.power_exempt === false) infoLines.push("🔋 Telefonda Orbit pil optimizasyonunda · ekran kapalıyken değişiklikler gecikebilir (telefonda Orbit'i açıp “İzin ver” de)");
-    if (staleMin <= 15 && st.power_exempt !== false && st.live === false) infoLines.push("Canlı bağlantı kapalı · değişiklikler 30 sn içinde gelir");
+    if (staleMin <= 15 && st.power_exempt !== false && st.live === false) infoLines.push("📡 Anlık bağlantı kopuk · telefon değişiklikleri en geç 30 sn içinde yoklayarak alır");
   }
   return (
     <div className="card child-card">
@@ -720,7 +722,7 @@ function ChildCard({ child }: { child: Child }) {
                   className="stat-chip"
                   aria-label={`${conn === "on" ? "Telefon bağlı" : conn === "idle" ? "Telefon birkaç dakikadır sessiz" : "Telefon bağlı değil"}${st?.battery != null ? ` · şarj yüzde ${st.battery}` : ""}`}
                   title={`Son bağlantı ${timeText(st!.updated_at)}`}
-                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowSeen(!showSeen); }}
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInfoOpen(true); }}
                 >
                   <span className={`chip-dot ${conn}`} />
                   {st?.battery != null && <Battery level={st.battery} />}

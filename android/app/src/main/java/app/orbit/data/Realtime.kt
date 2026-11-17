@@ -73,7 +73,7 @@ object Realtime {
                 // Bekleme sırasında ekran açılırsa (kick) hemen dene
                 var waited = 0L
                 while (isActive && waited < backoff && !kicked) { delay(1_000); waited += 1_000 }
-                backoff = if (kicked) 2_000L else (backoff * 2).coerceAtMost(60_000)
+                backoff = if (kicked) 2_000L else (backoff * 2).coerceAtMost(15_000)
             }
         }
     }

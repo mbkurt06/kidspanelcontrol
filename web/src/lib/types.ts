@@ -3,7 +3,7 @@ export type AppGroup = "always_open" | "unlimited" | "timed" | "blocked";
 export type Window = { start: string; end: string };
 
 export type ExtraTarget = "now" | "current" | "pool" | "wallet";
-export type Child = { id: string; family_id: string; name: string; color: string; sort_order: number; extra_default: ExtraTarget; wallet_daily_max?: number | null;
+export type Child = { id: string; family_id: string; name: string; color: string; sort_order: number; grade_level?: number | null; extra_default: ExtraTarget; wallet_daily_max?: number | null;
   closed_grant_mode?: "clock" | "usage" | "within"; closed_grant_within_minutes?: number | null; closed_grant_within_factor?: number | null;
   profile_nickname?: string | null; profile_avatar?: string | null;
   kiosk_settings?: KioskSettings; parent_pin_enabled?: boolean;
@@ -80,10 +80,11 @@ export type Section = {
   music?: boolean;
 };
 
-export type KioskScreen = "tasks" | "agenda" | "vocab" | "messages" | "music" | "timer" | "alarms" | "day" | "wallet" | "ask" | "vault" | "wifi" | "profile" | "about";
+export type KioskScreen = "tasks" | "agenda" | "grades" | "vocab" | "messages" | "music" | "timer" | "alarms" | "day" | "wallet" | "ask" | "vault" | "wifi" | "profile" | "about";
 export const KIOSK_SCREENS: [KioskScreen, string][] = [
   ["tasks", "✅ Görevler"],
   ["agenda", "🗓 Ajanda"],
+  ["grades", "📝 Notlarım"],
   ["vocab", "📚 Kelime kartları"],
   ["messages", "💬 Mesajlar"],
   ["music", "🎵 Müzik"],

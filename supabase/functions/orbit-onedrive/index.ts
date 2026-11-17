@@ -6,7 +6,7 @@
 // POST {action:"start"}        ebeveyn: Microsoft giriş adresi
 // POST {action:"disconnect"}   ebeveyn
 // POST {action:"urls"}         ebeveyn: kanıt yolları → oynatılabilir/görüntülenebilir geçici adresler
-// POST {action:"session"}      telefon: büyük dosya yükleme oturumu (parça parça, kaldığı yerden)
+// POST {action:"session"}      telefon: büyük dosya yükleme oturumu (parça parça, kaldığı yerden); folder verilirse o klasöre
 // POST {action:"delete"}       sunucu (x-orbit-hook): silinecek öğeler
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -151,7 +151,11 @@ Deno.serve(async (req) => {
       const token = await accessToken(d.family_id);
       const day = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Berlin" });
       const name = safe(String(body.name ?? `kanit-${Date.now()}`));
-      const rel = [safe(d.child_name ?? "Çocuk"), day, name].map(encodeURIComponent).join("/");
+      // İsteğe bağlı klasör (ör. notlar: "Notlar/7. sınıf/Matematik/2026-11-17 Sınav"); yoksa tarih klasörü
+      const folder = typeof body.folder === "string" && body.folder.trim()
+        ? String(body.folder).split("/").filter((x) => x.trim()).map((x) => safe(x)).slice(0, 6)
+        : [day];
+      const rel = [safe(d.child_name ?? "Çocuk"), ...folder, name].map(encodeURIComponent).join("/");
       const r = await fetch(`${GRAPH}/me/drive/special/approot:/${rel}:/createUploadSession`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },

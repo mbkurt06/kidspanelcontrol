@@ -26,9 +26,10 @@ object Cloud {
     val available get() = System.currentTimeMillis() > offUntil
 
     /** Yükleme oturumu adresi; OneDrive bağlı değilse null */
-    fun session(name: String): String? {
+    fun session(name: String, folder: String? = null): String? {
         if (!available) return null
-        val (code, txt) = runCatching { Api.function("orbit-onedrive", JSONObject().put("action", "session").put("name", name)) }
+        val body = JSONObject().put("action", "session").put("name", name).apply { if (folder != null) put("folder", folder) }
+        val (code, txt) = runCatching { Api.function("orbit-onedrive", body) }
             .getOrElse { throw it }
         if (code == 409 || code == 403) { offUntil = System.currentTimeMillis() + 10 * 60_000; return null }
         if (code !in 200..299) throw Api.ApiError(code, "OneDrive oturumu açılamadı: ${txt.take(160)}")
@@ -67,8 +68,8 @@ object Cloud {
         }
     }
 
-    fun uploadBytes(bytes: ByteArray, name: String, contentType: String): String? {
-        val url = session(name) ?: return null
+    fun uploadBytes(bytes: ByteArray, name: String, contentType: String, folder: String? = null): String? {
+        val url = session(name, folder) ?: return null
         val tmp = File.createTempFile("orbit-up", ".bin")
         return try {
             tmp.writeBytes(bytes)

@@ -106,7 +106,7 @@ class CaptureActivity : ComponentActivity() {
         val media = intent.getStringExtra("media") ?: "photo"
         val title = intent.getStringExtra("title") ?: "Kanıt"
         minPhotos = intent.getIntExtra("minPhotos", 1).coerceIn(1, 4)
-        maxPhotos = intent.getIntExtra("maxPhotos", 1).coerceIn(minPhotos, 4)
+        maxPhotos = intent.getIntExtra("maxPhotos", 1).coerceIn(minPhotos, 20)
         multiPhoto = media != "video" && maxPhotos > 1
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO), 1)

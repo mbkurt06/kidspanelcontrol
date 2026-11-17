@@ -2465,3 +2465,16 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .child-main .name-row { flex-wrap: wrap; justify-content: flex-start; gap: 4px 8px; }
 .child-main .grow { min-width: 0; }
 .stat-chip { gap: 6px; padding: 0 8px 0 4px; }
+/* Notlar tablosu */
+.grade-table { border-collapse: collapse; font-size: 14px; white-space: nowrap; }
+.grade-table th, .grade-table td { padding: 6px 6px; text-align: center; }
+.grade-table .gt-kind { font-size: 12px; font-weight: 500; color: var(--muted); border-bottom: 1px solid var(--line); }
+.grade-table .gt-num th { font-size: 11px; font-weight: 400; color: var(--muted); }
+.grade-table tbody tr { border-top: 1px solid var(--line); }
+.grade-table .gt-sub { text-align: left; position: sticky; left: 0; background: var(--surface); padding-right: 12px; font-weight: 500; z-index: 1; }
+.grade-table .gt-sub .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+.grade-table .gt-avg { position: sticky; right: 0; background: var(--surface); padding-left: 12px; }
+.grade-table .gt-total { border-top: 1px solid var(--muted); }
+.gt-cell { border: 0; background: none; color: inherit; font: inherit; padding: 2px 6px; border-radius: 999px; cursor: pointer; }
+.gt-cell.pending { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
+.grade-photos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }

@@ -15,10 +15,11 @@ import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
 import TimerTab from "./TimerTab";
+import GradesTab from "./GradesTab";
 import PhoneSettingsTab from "./PhoneSettingsTab";
 import { currentSectionFor, hm, mins, nowBerlin, suggestGroup, timedPossible } from "../lib/sections";
 
-type Tab = "apps" | "program" | "time" | "timer" | "alarms" | "report" | "phone" | "device";
+type Tab = "apps" | "program" | "time" | "timer" | "alarms" | "report" | "grades" | "phone" | "device";
 
 export default function ChildPage() {
   const { id } = useParams();
@@ -28,7 +29,7 @@ export default function ChildPage() {
   const [tab, setTab] = useState<Tab>(() => {
     let stored: string | null = null;
     try { stored = localStorage.getItem("orbit.childTab") ?? localStorage.getItem(`orbit.childTab.${id}`); } catch { /* yok */ }
-    return stored && ["apps", "program", "time", "timer", "alarms", "report", "phone", "device"].includes(stored) ? stored as Tab : "apps";
+    return stored && ["apps", "program", "time", "timer", "alarms", "report", "grades", "phone", "device"].includes(stored) ? stored as Tab : "apps";
   });
   // Çocuk değişince aynı sekme açık kalır
   useEffect(() => { try { localStorage.setItem("orbit.childTab", tab); } catch { /* yok */ } }, [tab]);
@@ -140,6 +141,7 @@ export default function ChildPage() {
             ["timer", "Sayaç"],
             ["alarms", "Hatırlatıcılar"],
             ["report", "Rapor"],
+            ["grades", "Notlar"],
             ["phone", "Telefon ayarları"],
             ["device", "Telefon"],
           ] as [Tab, string][]
@@ -155,6 +157,7 @@ export default function ChildPage() {
       {tab === "program" && <ProgramTab childId={child.id} />}
       {tab === "time" && <TimeTab childId={child.id} />}
       {tab === "report" && <ReportTab childId={child.id} />}
+      {tab === "grades" && <GradesTab childId={child.id} />}
       {tab === "timer" && <TimerTab childId={child.id} />}
       {tab === "alarms" && <TimerTab childId={child.id} only="alarms" />}
       {tab === "phone" && <PhoneSettingsTab childId={child.id} />}

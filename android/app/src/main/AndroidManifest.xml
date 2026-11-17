@@ -96,6 +96,10 @@
             android:name=".service.AlarmReceiver"
             android:exported="false" />
 
+        <receiver
+            android:name=".service.PlanReceiver"
+            android:exported="false" />
+
         <activity
             android:name=".ui.VaultActivity"
             android:exported="false"

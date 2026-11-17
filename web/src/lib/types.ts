@@ -84,9 +84,10 @@ export type Section = {
   music?: boolean;
 };
 
-export type KioskScreen = "tasks" | "agenda" | "grades" | "vocab" | "messages" | "music" | "timer" | "alarms" | "day" | "wallet" | "ask" | "vault" | "wifi" | "profile" | "about";
+export type KioskScreen = "tasks" | "plan" | "agenda" | "grades" | "vocab" | "messages" | "music" | "timer" | "alarms" | "day" | "wallet" | "ask" | "vault" | "wifi" | "profile" | "about";
 export const KIOSK_SCREENS: [KioskScreen, string][] = [
   ["tasks", "✅ Görevler"],
+  ["plan", "📋 Planım"],
   ["agenda", "🗓 Ajanda"],
   ["grades", "📝 Notlarım"],
   ["vocab", "📚 Kelime kartları"],

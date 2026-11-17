@@ -16,10 +16,11 @@ import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
 import TimerTab from "./TimerTab";
 import GradesTab from "./GradesTab";
+import PlanTab from "./PlanTab";
 import PhoneSettingsTab from "./PhoneSettingsTab";
 import { currentSectionFor, hm, mins, nowBerlin, suggestGroup, timedPossible } from "../lib/sections";
 
-type Tab = "apps" | "program" | "time" | "timer" | "alarms" | "report" | "grades" | "phone" | "device";
+type Tab = "apps" | "program" | "time" | "plan" | "timer" | "alarms" | "report" | "grades" | "phone" | "device";
 
 export default function ChildPage() {
   const { id } = useParams();
@@ -29,7 +30,7 @@ export default function ChildPage() {
   const [tab, setTab] = useState<Tab>(() => {
     let stored: string | null = null;
     try { stored = localStorage.getItem("orbit.childTab") ?? localStorage.getItem(`orbit.childTab.${id}`); } catch { /* yok */ }
-    return stored && ["apps", "program", "time", "timer", "alarms", "report", "grades", "phone", "device"].includes(stored) ? stored as Tab : "apps";
+    return stored && ["apps", "program", "time", "plan", "timer", "alarms", "report", "grades", "phone", "device"].includes(stored) ? stored as Tab : "apps";
   });
   // Çocuk değişince aynı sekme açık kalır
   useEffect(() => { try { localStorage.setItem("orbit.childTab", tab); } catch { /* yok */ } }, [tab]);
@@ -138,6 +139,7 @@ export default function ChildPage() {
             ["apps", "Uygulamalar"],
             ["program", "Program"],
             ["time", "Süre"],
+            ["plan", "Plan"],
             ["timer", "Sayaç"],
             ["alarms", "Hatırlatıcılar"],
             ["report", "Rapor"],
@@ -156,6 +158,7 @@ export default function ChildPage() {
       {tab === "apps" && <AppsTab childId={child.id} />}
       {tab === "program" && <ProgramTab childId={child.id} />}
       {tab === "time" && <TimeTab childId={child.id} />}
+      {tab === "plan" && <PlanTab childId={child.id} />}
       {tab === "report" && <ReportTab childId={child.id} />}
       {tab === "grades" && <GradesTab childId={child.id} />}
       {tab === "timer" && <TimerTab childId={child.id} />}

@@ -17,6 +17,7 @@ import kotlinx.coroutines.coroutineScope
 
 /** Sunucu ile alışveriş: kuralları çek, durumu ve kullanımı gönder, komutları onayla. */
 object Sync {
+    @Volatile private var planAt = 0L
     private const val TAG = "OrbitSync"
     private val extrasBusy = java.util.concurrent.atomic.AtomicBoolean(false)
     // Son gönderilen durum / kullanım: değişmeyen veri tekrar yazılmasın (sunucu disk yükü)
@@ -124,6 +125,8 @@ object Sync {
                         runCatching { Sounds.report(Store.appCtx) }
                         runCatching { TaskAlerts.onTasks(Tasks.current()) }
                         runCatching { Alarms.reschedule() }
+                        // Planım: 10 dk'da bir yenile (hatırlatmalar bunun üzerinden kurulur)
+                        if (System.currentTimeMillis() - planAt > 600_000) { planAt = System.currentTimeMillis(); runCatching { Plan.refresh() } }
                         runCatching { Messages.refresh() }
                     } finally {
                         extrasBusy.set(false)

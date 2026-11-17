@@ -9,6 +9,7 @@ import { Info } from "../components/Info";
 type AppRow = { package: string; label: string };
 const MENU_OPTIONS: [string, string][] = [
   ["tasks", "✅ Görevler"],
+  ["plan", "📋 Planım"],
   ["agenda", "🗓 Ajanda"],
   ["grades", "📝 Notlarım"],
   ["vocab", "📚 Kelime kartları"],

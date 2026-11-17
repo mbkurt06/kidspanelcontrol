@@ -69,6 +69,7 @@ import org.json.JSONObject
 enum class Screen(val icon: String, val title: String) {
     TODAY("🏠", "Bugün"),
     TASKS("✅", "Görevlerim"),
+    PLAN("📋", "Planım"),
     AGENDA("🗓", "Ajanda"),
     GRADES("📝", "Notlarım"),
     VOCAB("📚", "Kelime kartları"),
@@ -246,6 +247,7 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                     Screen.TASKS -> TasksCard(remember(live.lastSync, live.snapshot?.now?.minute) { Tasks.current().filter { !it.open || it.inWindow() } })
                     Screen.WALLET -> WalletScreen()
                     Screen.GRADES -> GradesScreen()
+                    Screen.PLAN -> PlanScreen()
                     Screen.ASK -> AskScreen()
                     Screen.PROFILE -> ProfileScreen()
                     Screen.ABOUT -> AboutScreen()

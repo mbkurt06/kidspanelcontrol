@@ -188,6 +188,7 @@ class OrbitService : Service() {
         else startForeground(1, n)
         app.orbit.data.Notifier.init(this)
         app.orbit.data.Alarms.init(this)
+        app.orbit.data.Plan.init(this)
         AlarmReceiver.channels(this)
         scope.launch(Dispatchers.IO) { runCatching { app.orbit.data.Alarms.reschedule(force = true) } }
         // Panelden gelen değişiklikleri anında almak için canlı bağlantı

@@ -120,6 +120,6 @@ class NightScenarioTest {
         // 01:28'de 48 dk düşüldü (önceki Orbit günü); 16:28'de görevden 30 dk kazanıldı: 30 dk görünmeli
         val cut = Command("c", CommandType.ADJUST, at(1, 28, next).toInstant().toEpochMilli(), null, null, -48, false, false)
         val e = RuleEngine(rules(listOf(g("t30", 30, next, w("16:28", "23:59")))).copy(commands = listOf(cut)))
-        assertEquals(30 * 60L, dayLeft(e, at(16, 30, next), DayUsage(next)))
+        assertEquals(30 * 60L, dayLeft(e, at(22, 0, next), DayUsage(next)))
     }
 }

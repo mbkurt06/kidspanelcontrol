@@ -729,11 +729,6 @@ function ChildCard({ child }: { child: Child }) {
                       <svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true"><path d="M2 1h10M2 15h10M3 1v2.5c0 2 4 3 4 4.5s-4 2.5-4 4.5V15M11 1v2.5c0 2-4 3-4 4.5s4 2.5 4 4.5V15" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>
                     </span>
                   )}
-                  {staleMin > 15 && (
-                    <span className="chip-ico warn" role="button" aria-label="Telefon bağlanmadı" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInfoOpen(true); }}>
-                      <svg width="16" height="15" viewBox="0 0 16 15" aria-hidden="true"><path d="M8 1.5 15 13.5H1z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /><path d="M8 6v3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /><circle cx="8" cy="11.4" r="0.85" fill="currentColor" /></svg>
-                    </span>
-                  )}
                   {infoLines.length > 0 && (
                     <span className="chip-ico info" role="button" aria-label="Açıklamalar" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInfoOpen(true); }}>
                       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.4" /><circle cx="8" cy="4.9" r="0.95" fill="currentColor" /><path d="M8 7.2v4.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></svg>

@@ -132,7 +132,7 @@ function ChildCard({ child }: { child: Child }) {
     return () => clearInterval(t);
   }, [child.id, st?.updated_at]); // eslint-disable-line react-hooks/exhaustive-deps
   // Telefona henüz ulaşmamış değişiklikler: telefonun son bildiriminden sonra verilen süreler + onaylanmamış komutlar
-  const [pend, setPend] = useState<{ give: number; kind: "kiosk" | "limit" | "open" | null; count: number }>({ give: 0, kind: null, count: 0 });
+  const [pend, setPend] = useState<{ give: number; kind: "kiosk" | "limit" | "open" | null; count: number; items: { text: string; at: string }[] }>({ give: 0, kind: null, count: 0, items: [] });
   const loadPend = async () => {
     if (!st) return;
     const [g, c] = await Promise.all([
@@ -143,25 +143,29 @@ function ChildCard({ child }: { child: Child }) {
     const rows = (g.data ?? []) as G[];
     const carry = new Set(rows.map((r) => r.carry_to).filter(Boolean));
     let give = 0, count = 0, kind: "kiosk" | "limit" | "open" | null = null, kAt = "";
+    const items: { text: string; at: string }[] = [];
     const nowM = nowBerlin().minute;
     for (const r of rows) {
       if (r.note?.startsWith("Geçici açma")) {
         const a = r.window_start ? mins(r.window_start) : 0, b = r.window_end ? (r.window_end.startsWith("23:59") ? 1440 : mins(r.window_end)) : 0;
-        if (r.valid_on === todayISO() && nowM >= a && nowM < b && r.created_at > kAt && !r.note.includes("uzatıldı")) { kind = "open"; kAt = r.created_at; count++; }
+        if (r.valid_on === todayISO() && nowM >= a && nowM < b && r.created_at > kAt && !r.note.includes("uzatıldı")) { kind = "open"; kAt = r.created_at; count++; items.push({ text: "🔓 Kilit açma", at: r.created_at }); }
         continue;
       }
       if (r.vault || carry.has(r.id) || r.minutes <= 0) continue;
       give += r.minutes;
       count++;
+      items.push({ text: `⏱ +${minutesText(r.minutes)} süre verildi`, at: r.created_at });
     }
     for (const x of (c.data ?? []) as { type: string; payload: { minutes?: number; reason?: string } | null; created_at: string }[]) {
       if (x.type === "resync") continue;
-      if (x.type === "adjust_minutes") { give += Number(x.payload?.minutes ?? 0); count++; continue; }
+      if (x.type === "adjust_minutes") { const m = Number(x.payload?.minutes ?? 0); give += m; count++; items.push({ text: `⏱ ${m >= 0 ? "+" : "−"}${minutesText(Math.abs(m))} süre ${m >= 0 ? "verildi" : "düşüldü"}`, at: x.created_at }); continue; }
       if (x.type === "kiosk_start" && x.payload?.reason === "shorten") continue;
       const k = x.type === "kiosk_start" ? "kiosk" : x.type === "lock" ? "limit" : x.type === "kiosk_end" || x.type === "unlock" ? "open" : null;
       if (k && x.created_at >= kAt) { kind = k; kAt = x.created_at; count++; }
+      if (k) items.push({ text: k === "kiosk" ? "🔒 Kilitleme" : k === "limit" ? "Sınırlama" : "🔓 Kilit açma", at: x.created_at });
     }
-    setPend({ give, kind, count });
+    items.sort((a, b) => a.at.localeCompare(b.at));
+    setPend({ give, kind, count, items });
   };
   useEffect(() => {
     loadPend();
@@ -174,6 +178,7 @@ function ChildCard({ child }: { child: Child }) {
   const [uDur, setUDur] = useState("closed");
   const [xOpen, setXOpen] = useState(false);
   const [ringMenuOpen, setRingMenuOpen] = useState(false);
+  const [pendOpen, setPendOpen] = useState(false);
   const [tempNext, setTempNext] = useState<string | null>(null);
   const [dialThen, setDialThen] = useState<"none" | "unlock" | "time" | "lock">("none");
   const [pendingGive, setPendingGive] = useState(0);
@@ -622,7 +627,6 @@ function ChildCard({ child }: { child: Child }) {
   const isLocked = kiosk || limited || closed;
   // Sol halka: gün bitişine kadar kalan hak (telefon kilitliyken de bildirir; eski sürümde kalan süre)
   const hak = Math.max(0, (st?.day_left_minutes ?? st?.remaining_minutes ?? 0) + (st && (st.day_left_minutes ?? st.remaining_minutes) < 1440 ? pend.give : 0));
-  const hakPending = pend.give !== 0;
   const hakUnl = hak >= 1440;
   const lockEnd: { label: string; ms: number | null; task: boolean } | null = !st || !isLocked
     ? null
@@ -682,7 +686,7 @@ function ChildCard({ child }: { child: Child }) {
           aria-label="Süreyi çarkla ayarla"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (st) { setDial(0); setDialThen("none"); setDialOpen(true); } }}
         >
-          <Ring value={hakUnl ? 1 : hak} max={hakUnl ? 1 : Math.max(st?.allowance_minutes ?? 0, hak + (st?.used_minutes ?? 0), 1)} color={!hakUnl && hak <= 10 ? "var(--warn)" : child.color} size={66} pending={hakPending}>
+          <Ring value={hakUnl ? 1 : hak} max={hakUnl ? 1 : Math.max(st?.allowance_minutes ?? 0, hak + (st?.used_minutes ?? 0), 1)} color={!hakUnl && hak <= 10 ? "var(--warn)" : child.color} size={66}>
             {!st ? <b>—</b> : hakUnl ? <span className="ring-state"><b>∞</b><small>süre</small></span> : <span className="ring-state"><b>{minutesText(hak)}</b><small>süre</small></span>}
           </Ring>
         </span>
@@ -700,12 +704,15 @@ function ChildCard({ child }: { child: Child }) {
                 >
                   <span className={`chip-dot ${conn}`} />
                   {st?.battery != null && <Battery level={st.battery} />}
+                  {pend.items.length > 0 && <span className="chip-pend" role="button" aria-label="Telefona iletilmeyen değişiklikler" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPendOpen(true); }}>⏳</span>}
                 </span>
               )}
             <Icon name="chevron" size={18} />
           </div>
           {showSeen && st && (
-            <span className="muted tiny">Son bağlantı {timeText(st.updated_at)} ({staleMin < 1 ? "az önce" : `${staleMin} dk önce`})</span>
+            <span className="seen-box tiny">
+              <span className="muted">Son bağlantı {timeText(st.updated_at)} ({ago(st.updated_at)}){st.battery != null ? ` · şarj %${st.battery}` : ""}</span>
+            </span>
           )}
           {st ? (
             <>
@@ -719,9 +726,6 @@ function ChildCard({ child }: { child: Child }) {
               {isLocked && hak > 0 && !hakUnl && (lockPastDayEnd
                 ? <span className="warn-text small">{minutesText(hak)} {dayEndHm}'te kasaya gider</span>
                 : <span className="muted small">{minutesText(hak)} telefon açılınca kullanılır</span>)}
-              {(hakPending || offKind) && (
-                <span className="pend-line small">⏳ {[hakPending ? `${pend.give > 0 ? "+" : "−"}${minutesText(Math.abs(pend.give))}` : null, offKind === "kiosk" ? "🔒 kilit" : offKind === "limit" ? "sınırlama" : offKind === "open" ? "🔓 açma" : null].filter(Boolean).join(" · ")} telefona iletilmedi · telefon açılınca uygulanır</span>
-              )}
               {openShort && openLeft != null && <span className="warn-text small">Telefon {minutesText(openLeft)} sonra kapanır · kalan süre {dayEndHm}'te kasaya</span>}
               <span className="muted small">Bugün {minutesText(st.used_minutes)} kullandı</span>
               {timer && (
@@ -747,11 +751,11 @@ function ChildCard({ child }: { child: Child }) {
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setRingMenu(true); }}
           >
             {isLocked ? (
-              <Ring value={1} max={1} color={limited || closed ? "var(--warn)" : "var(--bad)"} size={66} pending={!!offKind}>
+              <Ring value={1} max={1} color={limited || closed ? "var(--warn)" : "var(--bad)"} size={66}>
                 <span className="ring-state bad"><Icon name="lock" size={18} /><small>{lockEnd?.label ?? "Kilitli"}</small></span>
               </Ring>
             ) : (
-              <Ring pending={!!offKind} value={openLeft ?? 1} max={openLeft == null || unlimited ? 1 : Math.max(openLeft, hakUnl ? 1 : hak, 1)} color={openShort ? "var(--warn)" : "var(--accent)"} size={66}>
+              <Ring value={openLeft ?? 1} max={openLeft == null || unlimited ? 1 : Math.max(openLeft, hakUnl ? 1 : hak, 1)} color={openShort ? "var(--warn)" : "var(--accent)"} size={66}>
                 <span className="ring-state"><b>{openLeft == null ? "açık" : minutesText(openLeft)}</b><small>{openLeft == null ? "telefon" : `${hm(Math.min(openEndAbs % 1440, 1439))}'e`}</small></span>
               </Ring>
             )}
@@ -955,6 +959,24 @@ function ChildCard({ child }: { child: Child }) {
           )}
         </div>
       </div>
+      {pendOpen && createPortal(
+        <>
+          <div className="pop-backdrop sheet-like" onClick={() => setPendOpen(false)} />
+          <div className="lock-pop sheet-pop" role="dialog" aria-label="Telefona iletilmeyenler">
+            <b className="sheet-pop-title">⏳ {child.name} · telefona iletilmedi</b>
+            <p className="small muted" style={{ margin: 0 }}>Telefon son {st ? `${timeText(st.updated_at)}'de (${ago(st.updated_at)})` : "—"} bağlandı. Telefon bağlanınca uygulanır.</p>
+            <div className="stack-s">
+              {pend.items.length === 0 ? <span className="small">Bekleyen değişiklik yok.</span> : pend.items.map((it, n) => (
+                <div key={n} className="row between small"><span>{it.text}</span><span className="muted">{ago(it.at)}</span></div>
+              ))}
+            </div>
+            <div className="pop-actions">
+              <button className="pill-btn ghost" onClick={() => setPendOpen(false)}>Kapat</button>
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
       {ringMenu && createPortal(
         <>
           <div className="pop-backdrop sheet-like" onClick={() => setRingMenu(false)} />
@@ -1049,7 +1071,7 @@ function ChildCard({ child }: { child: Child }) {
         document.body
       )}
       {st && staleMin > 15 && (
-        <p className="small warn-text">⚠ Telefon {staleMin >= 60 ? `${Math.floor(staleMin / 60)} saattir` : `${staleMin} dakikadır`} bağlanmadı{pend.count > 0 ? ` · ${pend.count} değişiklik bekliyor` : ""}</p>
+        <p className="small warn-text">⚠ Telefon {staleMin >= 60 ? `${Math.floor(staleMin / 60)} saattir` : `${staleMin} dakikadır`} bağlanmadı</p>
       )}
       {st && staleMin <= 15 && st.power_exempt === false && (
         <p className="small warn-text">⚠ Telefonda Orbit pil optimizasyonunda · ekran kapalıyken değişiklikler gecikebilir (telefonda Orbit'i açıp “İzin ver” de)</p>
@@ -1231,4 +1253,12 @@ function Battery({ level }: { level: number }) {
       {v}%
     </span>
   );
+}
+
+/** "az önce" / "12 dk önce" / "1 sa 5 dk önce" */
+function ago(iso: string) {
+  const m = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+  if (m < 1) return "az önce";
+  if (m < 60) return `${m} dk önce`;
+  return `${Math.floor(m / 60)} sa${m % 60 ? ` ${m % 60} dk` : ""} önce`;
 }

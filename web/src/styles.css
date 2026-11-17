@@ -2449,3 +2449,6 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .chip-dot.idle { background: var(--warn); }
 .chip-dot.off { background: var(--muted); }
 .pend-line { color: var(--accent); }
+.chip-pend { font-size: 13px; line-height: 1; cursor: pointer; padding: 2px; margin: -2px; }
+.seen-box { display: flex; flex-direction: column; gap: 2px; }
+.seen-box .pend-title { color: var(--accent); font-weight: 600; }

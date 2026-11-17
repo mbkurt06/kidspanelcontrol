@@ -56,7 +56,7 @@ object Sync {
             // Bu istekler birbirinden bağımsız. Seri çekim telefonda her değişikliği 5–7 sn geciktiriyordu.
             val bundle = coroutineScope {
                 val timeRules = async(Dispatchers.IO) { runCatching { Api.get("time_rules?select=*") }.getOrElse { JSONArray() } }
-                val apps = async(Dispatchers.IO) { Api.get("child_apps?child_id=eq.$child&select=package,label,app_group,approved,daily_limit_minutes,usage_rule_id") }
+                val apps = async(Dispatchers.IO) { Api.get("child_apps?child_id=eq.$child&select=package,label,app_group,approved,daily_limit_minutes,usage_rule_id,kiosk,kiosk_windows") }
                 val usageRules = async(Dispatchers.IO) { runCatching { Api.get("app_usage_rules?select=id,mode,max_minutes,counts_toward_daily,start_time,end_time") }.getOrElse { JSONArray() } }
                 val profiles = async(Dispatchers.IO) { Api.get("rule_profiles?select=*") }
                 val modes = async(Dispatchers.IO) { Api.get("modes?select=*") }

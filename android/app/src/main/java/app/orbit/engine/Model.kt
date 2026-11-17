@@ -29,6 +29,10 @@ data class AppRule(
     val approved: Boolean,
     val dailyLimitMinutes: Int?,
     val usageRuleId: String? = null,
+    /** Kiosk: kilitliyken de Orbit ekranından açılır, hiçbir zaman süreden düşmez */
+    val kiosk: Boolean = false,
+    /** Kiosk saatleri; boş = her zaman */
+    val kioskWindows: List<TimeWindow> = emptyList(),
 )
 
 data class AppUsageRule(val id: String, val mode: String, val maxMinutes: Int?, val countsTowardDaily: Boolean, val window: TimeWindow? = null)

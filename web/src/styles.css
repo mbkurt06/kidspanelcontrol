@@ -2479,3 +2479,8 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .gt-cell.pending { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
 .grade-photos { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .used-hist { margin-top: 8px; } .used-hist > summary { cursor: pointer; padding: 6px 0; }
+
+/* Kiosk uygulama zaman aralıkları */
+.kiosk-wins { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.kiosk-wins .chip-lite { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; background: var(--soft, rgba(127,127,127,.12)); font-size: 13px; }
+.kiosk-wins .link-btn { background: none; border: 0; color: var(--accent); padding: 2px 4px; cursor: pointer; font: inherit; }

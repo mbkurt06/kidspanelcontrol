@@ -10,7 +10,7 @@ import { untilFrom } from "./Lock";
 import { childLockState, closedModeFor, closedModeOf, fromPatch, lockStateLabel, type LockState, giveNow, grantMinutes, insertGrant, nowPatch, sendCommand, type ClosedMode, type GrantPatch } from "../lib/actions";
 import { ClosedModePicker, closedModeLabel, sameClosedMode } from "../components/ClosedModePicker";
 import { dateText, dateTimeText, hhmm, minutesText, relTime, orbitTodayISO, todayISO } from "../lib/util";
-import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type DayOverride, type Device, type Section, type TimeGrant } from "../lib/types";
+import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type KioskWindow, type DayOverride, type Device, type Section, type TimeGrant } from "../lib/types";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
@@ -301,10 +301,42 @@ function ParentModeCard({ childId }: { childId: string }) {
 
 const GROUPS: AppGroup[] = ["always_open", "unlimited", "timed", "blocked"];
 
-type Mode3 = "rules" | "always_open" | "blocked";
-const MODE3_LABEL: Record<Mode3, string> = { rules: "Kurallara göre", always_open: "Her zaman açık", blocked: "Hep kapalı" };
-const mode3 = (g: AppGroup): Mode3 => (g === "always_open" ? "always_open" : g === "blocked" ? "blocked" : "rules");
-const fromMode3 = (m: Mode3): AppGroup => (m === "rules" ? "timed" : m);
+type Mode3 = "rules" | "always_open" | "kiosk" | "blocked";
+const MODES: Mode3[] = ["rules", "always_open", "kiosk", "blocked"];
+const MODE3_LABEL: Record<Mode3, string> = { rules: "Kurallara göre", always_open: "Her zaman açık", kiosk: "Kiosk", blocked: "Hep kapalı" };
+const mode3 = (a: Pick<ChildApp, "app_group" | "kiosk">): Mode3 =>
+  a.kiosk ? "kiosk" : a.app_group === "always_open" ? "always_open" : a.app_group === "blocked" ? "blocked" : "rules";
+/** Kiosk: kilitliyken Orbit ekranından açılır, hiçbir zaman süreden düşmez (always_open + kiosk). */
+const fromMode3 = (m: Mode3): Partial<ChildApp> =>
+  m === "kiosk" ? { app_group: "always_open", kiosk: true } : { app_group: m === "rules" ? "timed" : m, kiosk: false };
+
+function KioskWindows({ app, onSave }: { app: ChildApp; onSave: (w: KioskWindow[]) => void }) {
+  const wins = app.kiosk_windows ?? [];
+  const [add, setAdd] = useState<KioskWindow | null>(null);
+  return (
+    <div className="kiosk-wins">
+      <span className="muted tiny">Kiosk saatleri:</span>
+      {wins.length === 0 && <span className="chip-lite">Her zaman</span>}
+      {wins.map((w, i) => (
+        <span className="chip-lite" key={i}>
+          {w.start}–{w.end}
+          <button type="button" className="link-btn" aria-label="Aralığı sil" onClick={() => onSave(wins.filter((_, j) => j !== i))}>×</button>
+        </span>
+      ))}
+      {add ? (
+        <span className="row gap-s">
+          <TimeField value={add.start} onChange={(v) => setAdd({ ...add, start: v })} label="Başlangıç" />
+          <TimeField value={add.end} onChange={(v) => setAdd({ ...add, end: v })} label="Bitiş" />
+          <button type="button" className="btn small" disabled={!add.start || !add.end || add.start === add.end}
+            onClick={() => { onSave([...wins, add]); setAdd(null); }}>Ekle</button>
+          <button type="button" className="link-btn" onClick={() => setAdd(null)}>Vazgeç</button>
+        </span>
+      ) : (
+        <button type="button" className="link-btn" onClick={() => setAdd({ start: "07:00", end: "22:00" })}>+ Aralık</button>
+      )}
+    </div>
+  );
+}
 
 function AppsTab({ childId }: { childId: string }) {
   const fam = useFamily();
@@ -352,7 +384,7 @@ function AppsTab({ childId }: { childId: string }) {
   async function approve(a: ChildApp, how: Mode3) {
     const g = pendingGroup[a.package] ?? fam.members[a.package] ?? suggestedId(a);
     if (g && g !== fam.members[a.package]) await setGroup(a.package, g);
-    await update(a, { approved: true, app_group: fromMode3(how) });
+    await update(a, { approved: true, ...fromMode3(how) });
   }
 
   function suggestedId(a: ChildApp) {
@@ -398,7 +430,7 @@ function AppsTab({ childId }: { childId: string }) {
       <input className="search" placeholder="Uygulama ara" value={q} onChange={(e) => setQ(e.target.value)} />
       {pending.length > 0 && (
         <div className="card attention">
-          <h2>Onay bekleyen ({pending.length}) <Info>Grubunu seçip onayla. “Kurallara göre” uygulamalar grubunun bölüm kurallarına uyar.</Info></h2>
+          <h2>Onay bekleyen ({pending.length}) <Info>Grubunu seçip onayla. “Kurallara göre” uygulamalar grubunun bölüm kurallarına uyar. “Kiosk” uygulamalar telefon kilitliyken de Orbit ekranından açılır ve süreden düşmez.</Info></h2>
           {pending.map((a) => (
             <div className="app-setting-row" key={a.package}>
               <div className="app-setting-controls">
@@ -407,7 +439,7 @@ function AppsTab({ childId }: { childId: string }) {
                 )}
                 <select value="" onChange={(e) => e.target.value && approve(a, e.target.value as Mode3)} aria-label="Onayla">
                   <option value="">Onayla…</option>
-                  {(["rules", "always_open", "blocked"] as Mode3[]).map((m) => (
+                  {MODES.map((m) => (
                     <option key={m} value={m}>{MODE3_LABEL[m]}</option>
                   ))}
                 </select>
@@ -447,8 +479,8 @@ function AppsTab({ childId }: { childId: string }) {
                 </div>
                 <div className="app-setting-controls">
                   {groupSelect(fam.members[a.package] ?? "", (v) => setGroup(a.package, v))}
-                  <select value={mode3(a.app_group)} onChange={(e) => update(a, { app_group: fromMode3(e.target.value as Mode3) })} aria-label="Durum">
-                    {(["rules", "always_open", "blocked"] as Mode3[]).map((m) => (
+                  <select value={mode3(a)} onChange={(e) => update(a, fromMode3(e.target.value as Mode3))} aria-label="Durum">
+                    {MODES.map((m) => (
                       <option key={m} value={m}>{MODE3_LABEL[m]}</option>
                     ))}
                   </select>
@@ -456,7 +488,7 @@ function AppsTab({ childId }: { childId: string }) {
                     <option value="">Özel kural yok</option>
                     {fam.appUsageRules.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                   </select>
-                  {mode3(a.app_group) === "rules" && !a.usage_rule_id ? (
+                  {mode3(a) === "rules" && !a.usage_rule_id ? (
                     <input
                       className="mini"
                       type="number"
@@ -468,6 +500,7 @@ function AppsTab({ childId }: { childId: string }) {
                     />
                   ) : <span />}
                 </div>
+                {a.kiosk && <KioskWindows app={a} onSave={(w) => update(a, { kiosk_windows: w })} />}
               </div>
             ))}
           </div>

@@ -68,6 +68,8 @@ data class LiveState(
     /** Süre cüzdanı (çocuk kullanır) ve süre kasası (ebeveyn açar) bakiyesi, dk */
     val walletMinutes: Int = 0,
     val vaultMinutes: Int = 0,
+    /** Kilitliyken de açılabilen kiosk uygulamaları (paket → ad), saatleri içinde */
+    val kioskApps: List<Pair<String, String>> = emptyList(),
 )
 
 object Live {
@@ -402,10 +404,12 @@ class OrbitService : Service() {
             Policy.setLockedMediaControls(this, mediaLocked)
         }
         val captureOn = ScreenCaptureService.active(nowMs) || session != null
-        val kioskKey = if (kiosk != null) "on:$captureOn:${rules.kiosk.calls}:${rules.taskAllowedPackages.sorted().joinToString(",")}" else "off"
+        // Kiosk uygulamaları (kendi saatlerinde): tam kilitte de açılabilir
+        val kioskPkgs = if (snap.parentMode) emptyList() else runCatching { engine.kioskApps(snap.now).map { it.pkg } }.getOrDefault(emptyList())
+        val kioskKey = if (kiosk != null) "on:$captureOn:${rules.kiosk.calls}:${(rules.taskAllowedPackages + kioskPkgs).sorted().joinToString(",")}" else "off"
         if (kioskKey != lastKioskKey) {
             lastKioskKey = kioskKey
-            Policy.setKiosk(this, kiosk != null, rules.kiosk.calls == "all", rules.taskAllowedPackages)
+            Policy.setKiosk(this, kiosk != null, rules.kiosk.calls == "all", rules.taskAllowedPackages + kioskPkgs)
         }
         // Müzik: kurallar kapattıysa durdur
         // Orbit menüsünden "Müzik" kaldırıldıysa (tam kilit / kullanım profili / görev / odak ekranları) müzik de durur:
@@ -454,6 +458,7 @@ class OrbitService : Service() {
             val ok = mutableSetOf(packageName, "android", "com.android.systemui", "com.android.phone", "com.android.emergency", "com.android.server.telecom")
             ok += engine.raNow.keys.filter { engine.restrictedLeft(it, usage) }
             session?.let { ok += it.packages }
+            ok += kioskPkgs
             if (captureOn) ok += listOf("com.android.permissioncontroller", "com.google.android.permissioncontroller")
             if (rules.kiosk.calls == "all") runCatching { getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull()?.let { ok += it }
             if (interactive && fg != null && fg !in ok && nowMs - lastKioskFront > 2_000) {
@@ -517,7 +522,8 @@ class OrbitService : Service() {
         val today = nowZ.toLocalDate()
         val walletBal = rules.grants.filter { !it.vault && it.validOn == null && it.activatedOn == null && it.window == null && (it.expiresOn == null || !it.expiresOn.isBefore(today)) }.sumOf { it.minutes }
         val vaultBal = rules.grants.filter { it.vault }.sumOf { it.minutes }
-        Live.set(LiveState(snap, usage, allowed, lockReason, online, Store.lastSync, kiosk, pinUntil, kiosk != null && captureOn, locks, ready, walletBal.coerceAtLeast(0), vaultBal.coerceAtLeast(0)))
+        Live.set(LiveState(snap, usage, allowed, lockReason, online, Store.lastSync, kiosk, pinUntil, kiosk != null && captureOn, locks, ready, walletBal.coerceAtLeast(0), vaultBal.coerceAtLeast(0),
+            kioskPkgs.map { it to (rules.apps[it]?.label ?: it) }))
         updateNotification(snap)
 
         // 7) Durum gönder

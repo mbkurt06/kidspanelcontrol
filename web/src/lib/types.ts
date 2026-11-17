@@ -41,7 +41,11 @@ export type ChildApp = {
   first_seen_at: string;
   category: string | null;
   usage_rule_id?: string | null;
+  kiosk?: boolean;
+  kiosk_windows?: KioskWindow[];
 };
+
+export type KioskWindow = { start: string; end: string };
 
 export type AppUsageRule = {
   id: string;

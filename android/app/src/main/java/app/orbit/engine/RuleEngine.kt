@@ -603,6 +603,12 @@ class RuleEngine(private val rules: Rules) {
     private fun hasMandatoryBlock() = rules.mandatoryOpen.isNotEmpty()
     private fun mandatoryReason() = "Önce görevini yap: ${rules.mandatoryOpen.first()}"
 
+    /** Kiosk uygulaması şu an kilitliyken açılabilir mi (saat aralığı içinde) */
+    fun kioskOpen(app: AppRule, t: LocalTime): Boolean = app.kiosk && app.approved && (app.kioskWindows.isEmpty() || app.kioskWindows.any { it.contains(t) })
+
+    /** Orbit kilit ekranında kutucuk olarak gösterilecek kiosk uygulamaları */
+    fun kioskApps(t: LocalTime): List<AppRule> = rules.apps.values.filter { kioskOpen(it, t) }.sortedBy { it.label.lowercase() }
+
     private fun inWindows(ws: List<TimeWindow>, t: LocalTime) = ws.isEmpty() || ws.any { it.contains(t) }
 
     fun verdict(pkg: String, s: Snapshot, usage: DayUsage): AppVerdict {
@@ -611,6 +617,13 @@ class RuleEngine(private val rules: Rules) {
         if (pkg in sessionPackages) return AppVerdict(true)
         // Zorunlu görev kısıtlaması sürerken izin verilen uygulamalar (isteğe bağlı günlük dakika)
         if (raNow.containsKey(pkg) && restrictedLeft(pkg, usage)) return AppVerdict(true, buckets = listOf("ra:$pkg@$raDay"))
+        // Kiosk uygulaması: kendi saatlerinde her kilitte açık; saat dışında sadece telefon açıkken. Hiçbir zaman süreden düşmez.
+        rules.apps[pkg]?.takeIf { it.kiosk && it.approved }?.let { app ->
+            if (kioskOpen(app, s.now)) return AppVerdict(true)
+            val closed = s.locked || s.activeMode?.othersBlocked == true || (s.sectionMode && (s.section == null || s.sectionClosed)) ||
+                s.remainingSeconds <= 0 || hasMandatoryBlock()
+            return if (closed) AppVerdict(false, "Kiosk saatleri dışında") else AppVerdict(true)
+        }
         val v = baseVerdict(pkg, s, usage)
         if (s.parentMode || !v.allowed) return v
         // Sayaç odak modu: kuralların açtıklarından sadece odak profilindekiler açık kalır

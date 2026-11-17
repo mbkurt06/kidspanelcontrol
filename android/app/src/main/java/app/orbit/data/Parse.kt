@@ -86,7 +86,12 @@ object Parse {
     fun apps(a: JSONArray): Map<String, AppRule> = (0 until a.length()).associate {
         val o = a.getJSONObject(it)
         val p = o.getString("package")
-        p to AppRule(p, o.optString("label", p), Group.of(o.str("app_group")), o.optBoolean("approved"), o.intOrNull("daily_limit_minutes"), o.str("usage_rule_id"))
+        val kw = o.optJSONArray("kiosk_windows")
+        val wins = if (kw == null) emptyList() else (0 until kw.length()).mapNotNull { i ->
+            runCatching { val w = kw.getJSONObject(i); TimeWindow(time(w.getString("start")), time(w.getString("end"))) }.getOrNull()
+        }
+        p to AppRule(p, o.optString("label", p), Group.of(o.str("app_group")), o.optBoolean("approved"), o.intOrNull("daily_limit_minutes"), o.str("usage_rule_id"),
+            kiosk = o.optBoolean("kiosk"), kioskWindows = wins)
     }
 
     fun usageRules(a: JSONArray): Map<String, AppUsageRule> = (0 until a.length()).associate { val o = a.getJSONObject(it); val w = runCatching { if (o.isNull("start_time") || !o.has("start_time")) null else TimeWindow(time(o.getString("start_time")), time(o.getString("end_time"))) }.getOrNull(); o.getString("id") to AppUsageRule(o.getString("id"), o.optString("mode", "timed"), o.intOrNull("max_minutes"), o.optBoolean("counts_toward_daily", true), w) }

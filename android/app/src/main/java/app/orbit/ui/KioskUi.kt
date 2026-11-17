@@ -75,6 +75,14 @@ fun KioskToday(k: KioskNow, open: (Screen) -> Unit) {
             }
         }
     }
+    // Kiosk uygulamaları: kilitliyken de açılır; geri / ana ekran tuşu Orbit'e döner
+    if (live.kioskApps.isNotEmpty()) {
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        Muted("Uygulamalar", 14)
+        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            for ((pkg, label) in live.kioskApps) AppTile(pkg, label) { launch(ctx, pkg) }
+        }
+    }
     if (Store.rules().pinHash != null) {
         Text(
             "🔐 Ebeveyn",

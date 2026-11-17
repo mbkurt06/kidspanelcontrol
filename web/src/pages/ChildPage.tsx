@@ -740,6 +740,8 @@ function TimeTab({ childId }: { childId: string }) {
 
   // Hak edilmiş ama henüz kullanılamayan görev süreleri (bağlı görevler bitmedi): gün sonunda kullanılmazsa kasaya
   const [held, setHeld] = useState<Array<{ id: string; title: string; minutes: number; waits: string[] }>>([]);
+  const [heldAct, setHeldAct] = useState<string | null>(null);
+  const [heldBusy, setHeldBusy] = useState<string | null>(null);
   const load = useCallback(async () => {
     const { data } = await supabase
       .from("time_grants")
@@ -785,6 +787,34 @@ function TimeTab({ childId }: { childId: string }) {
   const sectionOptions = fam.sections.map((sec) => ({ id: sec.id, label: `${profName(sec.profile_id)} · ${sec.name} ${hhmm(sec.start_time)}–${hhmm(sec.end_time)}` }));
   const secName = (id: string | null) => (id ? fam.sections.find((x) => x.id === id)?.name ?? "bölüm" : null);
   const curOpen = !!cur && timedPossible(cur, fam.sectionRules);
+
+  async function releaseHeld(h: { id: string; title: string; minutes: number }, target: "use" | "wallet" | "vault" | "drop") {
+    setErr("");
+    setMsg("");
+    setHeldBusy(h.id);
+    try {
+      let zText = "";
+      if (target === "use" && zMode !== "none") {
+        const zAbs = mins(zEnd) > nowBerlin().minute ? mins(zEnd) : mins(zEnd) + 1440;
+        const zLabel = zAbs >= 1440 ? `yarın ${zEnd}` : zEnd;
+        const oe = await openEndOf(childId);
+        if (zMode === "unlock") { await openUntil(childId, untilFrom("until", zEnd)!, "Kilit", oe); zText = ` · 🔓 ${zLabel}'e kadar açık`; }
+        else if (oe) { await setOpenEnd(childId, zAbs, oe); zText = ` · ⏰ açık saatler ${zLabel}'e kadar`; }
+      }
+      const { error } = await supabase.rpc("parent_release_held", { p_run: h.id, p_target: target });
+      if (error) throw error;
+      await sendCommand(childId, "resync", {});
+      setMsg(`${h.title} · ${minutesText(h.minutes)} ${target === "use" ? "şimdi kullanılabilir" : target === "wallet" ? "cüzdana kondu" : target === "vault" ? "kasaya kondu" : "kaldırıldı"}${zText}`);
+      setHeldAct(null);
+      setZMode("none");
+      load();
+      fam.reload();
+    } catch (e) {
+      setErr(errorText(e));
+    } finally {
+      setHeldBusy(null);
+    }
+  }
 
   async function give() {
     setErr("");
@@ -1111,11 +1141,39 @@ function TimeTab({ childId }: { childId: string }) {
         <h2>Bekleyen görev süreleri <Info>Çocuk görevi yaptı ve süreyi hak etti, ama bağlı olduğu görevler bitmediği için henüz kullanamıyor. Koşul sağlanınca kendiliğinden açılır; gün sonuna kadar sağlanmazsa kasaya gider.</Info></h2>
         {!held.length && <p className="muted small">Bekleyen süre yok.</p>}
         {held.map((h) => (
-          <div className="grant-row" key={h.id}>
-            <div className="grow">
-              <b>⏳ {h.title} · {minutesText(h.minutes)}</b>
-              <div className="muted tiny">{h.waits.length ? `Bekliyor: ${h.waits.join(", ")}` : "Grup koşulu bekleniyor"} · gün sonunda kullanılmazsa kasaya</div>
+          <div key={h.id} className="stack-s" style={{ borderTop: "1px solid var(--line)", paddingTop: 8 }}>
+            <div className="grant-row">
+              <div className="grow">
+                <b>⏳ {h.title} · {minutesText(h.minutes)}</b>
+                <div className="muted tiny">{h.waits.length ? `Bekliyor: ${h.waits.join(", ")}` : "Grup koşulu bekleniyor"} · gün sonunda kullanılmazsa kasaya</div>
+              </div>
+              <button type="button" className="pill-btn" onClick={() => { setHeldAct(heldAct === h.id ? null : h.id); setZMode("none"); }}>{heldAct === h.id ? "Kapat" : "Düzenle"}</button>
             </div>
+            {heldAct === h.id && (
+              <div className="stack-s">
+                <div className="chips">
+                  <button type="button" className="chip-btn on" disabled={!!heldBusy} onClick={() => releaseHeld(h, "use")}>▶ Şimdi kullandır</button>
+                  <button type="button" className="chip-btn" disabled={!!heldBusy} onClick={() => releaseHeld(h, "wallet")}>👛 Cüzdana</button>
+                  <button type="button" className="chip-btn" disabled={!!heldBusy} onClick={() => releaseHeld(h, "vault")}>🏦 Kasaya</button>
+                  <button type="button" className="chip-btn" disabled={!!heldBusy} onClick={() => releaseHeld(h, "drop")}>🗑 Kaldır</button>
+                </div>
+                <span className="pop-label">KULLANDIRIRKEN TELEFON</span>
+                <div className="chips">
+                  {([["none", "Değiştirme"], ["unlock", "🔓 Kilidi aç"], ["time", "⏰ Açık saati uzat / kısalt"]] as const).map(([k, l]) => (
+                    <button key={k} type="button" className={`chip-btn ${zMode === k ? "on" : ""}`} onClick={() => setZMode(k)}>{l}</button>
+                  ))}
+                </div>
+                {zMode !== "none" && (
+                  <div className="row gap-s" style={{ alignItems: "center" }}>
+                    <span className="small muted">{zMode === "unlock" ? "Şu saate kadar açık:" : "Bugün açık saatler şu saate kadar:"}</span>
+                    <TimeField value={zEnd} onChange={setZEnd} label="Bitiş saati" />
+                  </div>
+                )}
+                <p className="muted tiny" style={{ margin: 0 }}>
+                  → Şimdi kullandır: süre bugünün süresine eklenir{zMode === "unlock" ? `; telefon ${zEnd}'e kadar açılır` : zMode === "time" ? `; açık saatler ${zEnd}'e kadar` : "; telefonun kilit durumu değişmez (görevin kilit ayarı geçerli)"}.
+                </p>
+              </div>
+            )}
           </div>
         ))}
         {held.length > 1 && <p className="small muted" style={{ margin: 0 }}>Toplam {minutesText(held.reduce((a, h) => a + h.minutes, 0))}</p>}

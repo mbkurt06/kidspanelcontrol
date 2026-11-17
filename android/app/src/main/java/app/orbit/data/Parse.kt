@@ -214,7 +214,7 @@ object Parse {
         grants = grants(b.optJSONArray("grants") ?: JSONArray()),
         commands = commands(b.optJSONArray("commands") ?: JSONArray()),
         agenda = Agenda.parse(b.optJSONArray("agenda")),
-        mandatoryOpen = Tasks.parse(b.optJSONArray("tasks")).filter { it.blocking }.map { it.title },
+        mandatoryOpen = Tasks.parse(b.optJSONArray("tasks")).filter { it.blocking && !hiddenNewDay(it, b) }.map { it.title },
         sections = sections(b.optJSONArray("sections") ?: JSONArray()),
         sectionRules = sectionRules(b.optJSONArray("section_rules") ?: JSONArray()),
         groupOf = (b.optJSONArray("group_members") ?: JSONArray()).let { m -> (0 until m.length()).associate { m.getJSONObject(it).let { o -> o.getString("package") to o.getString("group_id") } } },
@@ -267,4 +267,10 @@ object Parse {
             longMap(o.optJSONObject("buckets")),
         )
     }
+}
+
+/** Gece yarısı ile gün bitişi arası: yeni günün görevleri henüz geçerli değil (kilit / zorunlu görev uygulanmaz) */
+private fun hiddenNewDay(t: TaskItem, b: JSONObject): Boolean {
+    val now = java.time.ZonedDateTime.now(java.time.ZoneId.of(b.optString("timezone", "Europe/Berlin")))
+    return now.toLocalTime().toSecondOfDay() < b.optInt("day_end_min", 300) * 60 && t.day == now.toLocalDate().toString()
 }

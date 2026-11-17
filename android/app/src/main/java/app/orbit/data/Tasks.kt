@@ -219,5 +219,14 @@ object Tasks {
         )
     }
 
-    fun current(): List<TaskItem> = parse(Store.rulesJson?.let { runCatching { JSONObject(it).optJSONArray("tasks") }.getOrNull() })
+    fun current(): List<TaskItem> = visible(parse(Store.rulesJson?.let { runCatching { JSONObject(it).optJSONArray("tasks") }.getOrNull() }))
+
+    /** Görevler takvim gününe aittir (gece 00:00); yeni günün görevleri çocuğa gün bitişinde (ör. 05:00) görünür */
+    fun visible(list: List<TaskItem>): List<TaskItem> {
+        val r = Store.rules()
+        val now = java.time.ZonedDateTime.now(java.time.ZoneId.of(r.timezone))
+        if (now.toLocalTime().toSecondOfDay() >= r.dayEndMin * 60) return list
+        val today = now.toLocalDate().toString()
+        return list.filter { it.day != today }
+    }
 }

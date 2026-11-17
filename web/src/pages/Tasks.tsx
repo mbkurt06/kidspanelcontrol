@@ -5,6 +5,7 @@ import { ChildChips } from "../components/ChildChips";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { minutesText, relTime, todayISO } from "../lib/util";
+import { mins, nowBerlin } from "../lib/sections";
 import {
   PROOF_LABEL,
   STATUS_LABEL,
@@ -72,6 +73,13 @@ function taskSpan(t: Task, g: TaskGroup | null | undefined): Win | (Omit<Win, "e
   return eDate ? { sDate, sTime, eDate, eTime: hm(t.due_time) ?? "23:59" } : { sDate, sTime, eDate: null, eTime: null };
 }
 const spanText = (w: ReturnType<typeof taskSpan>) => (w.eDate ? winText(w as Win) : `${dShort(w.sDate)} ${w.sTime} – süresiz`);
+/** Bugün listesinde: tekrarlı görevlerde o günün tarihi, tek seferliklerde tüm süre */
+const dayLine = (t: Task, g: TaskGroup | null | undefined, day: string) => {
+  const rec = g ? g.recurrence !== "once" : t.recurrence === "days";
+  if (!rec) return spanText(taskSpan(t, g ?? null));
+  const w = taskWindow(t, g, day);
+  return `${dShort(day)} · ${w.eTime === "23:59" ? `${w.sTime}'dan itibaren` : `${w.sTime}–${w.eTime}`}`;
+};
 const winText = (w: Win) =>
   w.sDate === w.eDate ? `${dShort(w.sDate)} ${w.sTime}–${w.eTime}` : `${dShort(w.sDate)} ${w.sTime} – ${dShort(w.eDate)} ${w.eTime}`;
 const winEnded = (w: Win) => new Date(`${w.eDate}T${w.eTime}:00`).getTime() < Date.now();
@@ -144,6 +152,9 @@ export default function Tasks() {
   const childFilter = fam.selectedChildId;
   const [err, setErr] = useState("");
   const today = todayISO();
+  // Gece yarısından gün bitişine kadar: yeni günün görevleri henüz telefonda görünmez
+  const dayEndHm = (fam.family?.day_end ?? "05:00").slice(0, 5);
+  const early = nowBerlin().minute < mins(dayEndHm);
   const [historyView, setHistoryView] = useState<"day" | "week" | "month" | "range">("day");
   const [rangeFrom, setRangeFrom] = useState(todayISO("Europe/Berlin", -7));
   const [rangeTo, setRangeTo] = useState(today);
@@ -374,8 +385,9 @@ export default function Tasks() {
             </>
           ) : (
             <>
-              <div className="card">
-                <h2>Bugün</h2>
+              <div className="card" style={early ? { opacity: 0.6 } : undefined}>
+                <h2>{early ? `Bugün · ${dayEndHm}'te açılacak` : "Bugün"}</h2>
+                {early && <p className="muted small">Yeni günün görevleri çocuğun telefonunda {dayEndHm}'te görünür. Dünün görevleri gece yarısı geçmişe düştü.</p>}
                 {!todaysOpen.length && <p className="muted small">{todays.length ? "Bugünkü görevlerin hepsi bitti. Görev geçmişinde görünür." : "Bugün için görev yok."}</p>}
                 {fam.visibleChildren.filter((c) => childFilter === "all" || c.id === childFilter).map((c) => {
                   const list = todaysOpen.filter((r) => r.child_id === c.id);
@@ -399,7 +411,7 @@ export default function Tasks() {
                                 <div className="grow">
                                   <b>{t?.title}</b>
                                   <div className="muted tiny">
-                                    {t ? [!sub ? spanText(taskSpan(t, null)) : null, specText(t, tasks, fam.modes, doneOf(r))].filter(Boolean).join(" · ") : ""}
+                                    {t ? [!sub ? dayLine(t, null, r.day) : null, specText(t, tasks, fam.modes, doneOf(r))].filter(Boolean).join(" · ") : ""}
                                   </div>
                                 </div>
                                 {r.status !== "submitted" && proofBtn(r)}
@@ -427,7 +439,7 @@ export default function Tasks() {
                                 <div className="grow">
                                   <b>{g.name}</b>
                                   <div className="muted tiny">
-                                    {(() => { const t0 = taskById[rs[0].task_id]; return t0 ? spanText(taskSpan(t0, g)) : ""; })()} · {groupText(g, rs, pr)}
+                                    {(() => { const t0 = taskById[rs[0].task_id]; return t0 ? dayLine(t0, g, rs[0].day) : ""; })()} · {groupText(g, rs, pr)}
                                   </div>
                                 </div>
                                 {groupMeta(g, pr, groupStatus(pr, rs), open, rs)}

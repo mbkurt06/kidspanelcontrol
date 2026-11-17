@@ -2442,8 +2442,7 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--surface-2, var(--line)) 60%, transparent);
   cursor: pointer;
-  margin-left: auto;
-  margin-right: 6px;
+  max-width: 100%;
 }
 .chip-dot { width: 15px; height: 15px; border-radius: 50%; flex: none; }
 .chip-dot.on { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); }
@@ -2463,3 +2462,6 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .chip-ico { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 2px; margin: -2px; }
 .chip-ico.pend, .chip-ico.info { color: var(--accent); }
 .chip-ico.warn { color: var(--warn); }
+.child-main .name-row { flex-wrap: wrap; justify-content: flex-start; gap: 4px 8px; }
+.child-main .grow { min-width: 0; }
+.stat-chip { gap: 6px; padding: 0 8px 0 4px; }

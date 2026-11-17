@@ -761,6 +761,8 @@ function TimeTab({ childId }: { childId: string }) {
     [grants, today]
   );
   const vault = grants.filter((g) => g.vault);
+  // Telefonun açık kalma saatleri: kilidi açma / açık saat uzatma (süre değildir)
+  const openWins = grants.filter((g) => (g.note ?? "").startsWith("Geçici açma") && !g.settled_at && g.valid_on && g.valid_on >= today && g.window_start);
   const profName = (pid: string) => fam.profiles.find((p) => p.id === pid)?.name ?? "";
   const sectionOptions = fam.sections.map((sec) => ({ id: sec.id, label: `${profName(sec.profile_id)} · ${sec.name} ${hhmm(sec.start_time)}–${hhmm(sec.end_time)}` }));
   const secName = (id: string | null) => (id ? fam.sections.find((x) => x.id === id)?.name ?? "bölüm" : null);
@@ -1180,6 +1182,30 @@ function TimeTab({ childId }: { childId: string }) {
           </div>
         ))}
       </details>
+      <div className="card">
+        <h2>Telefonun açık kalma saatleri <Info>Kilidi açma ve açık saatleri uzatma kayıtları. Bunlar süre değildir: sadece telefonun hangi saatlerde açık olacağını belirler. Çocuk o saatlerde kendi süresini kullanır.</Info></h2>
+        {!openWins.length && <p className="muted small">Bugün için ekstra açık saat yok.</p>}
+        {openWins.map((g) => (
+          <div className="grant-row" key={g.id}>
+            <div className="grow">
+              <b>🔓 {hhmm(g.window_start!)}–{hhmm(g.window_end ?? "")}</b>
+              <div className="muted tiny">{dateText(g.valid_on!)} · {(g.note ?? "").replace("Geçici açma · ", "")}</div>
+            </div>
+            <button
+              className="icon-btn"
+              aria-label="Kaldır"
+              onClick={async () => {
+                await supabase.from("time_grants").update({ minutes: 0, settled_at: new Date().toISOString() }).eq("id", g.id);
+                await sendCommand(childId, "resync", {});
+                load();
+                fam.reload();
+              }}
+            >
+              <Icon name="trash" size={18} />
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

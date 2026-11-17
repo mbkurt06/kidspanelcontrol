@@ -456,6 +456,8 @@ export type Task = TaskTemplate & {
   /** Süre ne zaman kazanılır: boş = görev onaylanınca; dolu = bu görevler bitince (hepsi / herhangi biri / en az N) */
   earn_links?: string[];
   earn_mode?: "all" | "any" | "min";
+  unlock_mode?: "k0" | "k1" | "k2" | "k3";
+  unlock_until?: string | null;
   earn_min?: number;
   /** Göreve başlama: bu görevler onaylanınca başlayabilir */
   start_after?: string[];
@@ -640,3 +642,12 @@ export function clockText(sec: number) {
   const s = t % 60;
   return h > 0 ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
+
+/** Görevin telefon kilidi ayarları (K0–K3) */
+export const UNLOCK_TEXT: Record<string, string> = {
+  k1: "Onaylanınca telefon açılır; kazandığı süreyi açık saatler içinde istediği zaman kullanır. Süre bitince telefon tekrar kilitlenir.",
+  k0: "Süre hesaba yazılır; telefonu açmaz. Kilit başka yoldan kalkınca kullanılır.",
+  k2: "Onaylanınca görev kilitleri bugün açık saatler bitene kadar kalkar; süre bitse de geri gelmez.",
+  k3: "Görev kilitleri seçtiğin saate kadar kalkar; saat gelince yapılmamış görev varsa geri gelir.",
+};
+

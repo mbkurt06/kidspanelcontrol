@@ -316,10 +316,31 @@ class RuleEngine(private val rules: Rules) {
 
     /** Şu an kalkmamış bütün görev kısıtlamaları ("Açmak için" listesi) */
     fun liveTaskRestrictions(day: LocalDate, t: LocalTime): List<TaskRestriction> {
-        val wins = activeWindows(day, t).filter { it.source == "manual" || it.source == "task" }
-        fun lifts(g: Grant, r: TaskRestriction) = g.createdAtMs > r.createdAtMs && (
-            isTempOpen(g) || (r.groupId != null && g.taskRunId != null && rules.taskRunGroups[g.taskRunId] == r.groupId))
-        return taskRestrictionsNow(day, t).filter { r -> wins.none { lifts(it, r) } }
+        val wins = unlockers(day, t)
+        return taskRestrictionsNow(day, t).filter { r -> wins.none { lifts(it, r, t) } }
+    }
+
+    /**
+     * Görev kilidini kaldırabilecek süreler: geçici açma, kalanı olan görev / ebeveyn süreleri (K1),
+     * süresi bitmiş olsa da gün boyu (K2) ya da seçilen saate kadar (K3) açan görev süreleri.
+     */
+    private fun unlockers(day: LocalDate, t: LocalTime): List<Grant> {
+        val live = activeWindows(day, t).filter { it.source == "manual" || it.source == "task" }
+        val extra = dayWindows(day).filter { (it.unlock == "k2" || it.unlock == "k3") && liveAt(it, t) && it !in live }
+        return live + extra
+    }
+
+    /** Bu süre bu görev kilidini şu an kaldırıyor mu */
+    private fun lifts(g: Grant, r: TaskRestriction, t: LocalTime): Boolean {
+        if (g.createdAtMs <= r.createdAtMs) return false
+        if (isTempOpen(g)) return true
+        return when (g.unlock) {
+            "k0" -> false
+            "k1", "k2" -> true
+            "k3" -> g.unlockUntil?.let { t.isBefore(it) } ?: false
+            // Eski kayıtlar: görevden kazanılan süre sadece aynı grubun kilidini kaldırır
+            else -> r.groupId != null && g.taskRunId != null && rules.taskRunGroups[g.taskRunId] == r.groupId
+        }
     }
 
     /** Hazır süre: şu an geçerli, kullanılmamış ekstra / görev süreleri (dakika) */
@@ -330,12 +351,8 @@ class RuleEngine(private val rules: Rules) {
     fun taskRestrictionNow(day: LocalDate, t: LocalTime): TaskRestriction? {
         // Görevden sonra ebeveynin elle verdiği ya da görevden kazanılan süre sürerken kısıtlama kalkar;
         // süre bitince (kullanıldı / saat doldu) sıradaki zorunlu görevin kısıtlaması geri gelir
-        val wins = activeWindows(day, t).filter { it.source == "manual" || it.source == "task" }
-        fun lifts(g: Grant, r: TaskRestriction) = g.createdAtMs > r.createdAtMs && (
-            isTempOpen(g) ||
-                // Görevden kazanılan süre sadece aynı grubun kilidini kaldırır (tek görevin ya da başka grubun kilidi sürer)
-                (r.groupId != null && g.taskRunId != null && rules.taskRunGroups[g.taskRunId] == r.groupId))
-        return taskRestrictionsNow(day, t).filter { r -> wins.none { lifts(it, r) } }.maxByOrNull { it.rank }
+        val wins = unlockers(day, t)
+        return taskRestrictionsNow(day, t).filter { r -> wins.none { lifts(it, r, t) } }.maxByOrNull { it.rank }
     }
 
     /** Kısıtlıyken izinli uygulamalar: paket → günlük dakika sınırı */

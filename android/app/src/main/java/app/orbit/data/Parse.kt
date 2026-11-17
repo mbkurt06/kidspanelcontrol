@@ -137,7 +137,8 @@ object Parse {
             runCatching { if (o.isNull("window_start") || !o.has("window_start")) null else TimeWindow(time(o.getString("window_start")), time(o.getString("window_end"))) }.getOrNull(),
             toVault = o.optBoolean("to_vault"), settled = !o.isNull("settled_at") && o.has("settled_at"), source = o.str("source"),
             createdAtMs = runCatching { java.time.OffsetDateTime.parse(o.getString("created_at")).toInstant().toEpochMilli() }.getOrDefault(0L),
-            taskRunId = o.str("task_run_id"))
+            taskRunId = o.str("task_run_id"), unlock = o.str("unlock"),
+            unlockUntil = o.str("unlock_until")?.let { runCatching { time(it) }.getOrNull() })
     }
 
     private fun runGroups(tasks: JSONArray?): Map<String, String> = (0 until (tasks?.length() ?: 0)).mapNotNull { i ->

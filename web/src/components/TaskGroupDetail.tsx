@@ -1,3 +1,4 @@
+import { UNLOCK_TEXT } from "../lib/types";
 import { RestrictionSelect } from "./RestrictionSelect";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -432,6 +433,20 @@ function TaskRow(p: {
           <option value="vault">Kasaya</option>
         </select>
         {(v.reward_validity ?? "today") === "today" && <small className="muted">Kullandıkça düşer · açık saatler bitince kalanı kasaya</small>}
+      </div>
+
+      <div className="gt-cell">
+        <span className="pop-label">TELEFON KİLİDİ</span>
+        <select value={v.unlock_mode ?? "k1"} onChange={(e) => save({ unlock_mode: e.target.value as Task["unlock_mode"] }, 0)} aria-label="Telefon kilidi">
+          <option value="k1">K1 · Süresi bitene kadar açar</option>
+          <option value="k0">K0 · Dokunmaz</option>
+          <option value="k2">K2 · Gün boyu açar</option>
+          <option value="k3">K3 · Seçtiğim saate kadar açar</option>
+        </select>
+        {(v.unlock_mode ?? "k1") === "k3" && (
+          <input type="time" value={(v.unlock_until ?? "").slice(0, 5)} onChange={(e) => save({ unlock_until: e.target.value || null }, 0)} aria-label="Saate kadar" />
+        )}
+        <small className="muted">{UNLOCK_TEXT[v.unlock_mode ?? "k1"]}</small>
       </div>
 
       <div className="gt-cell">

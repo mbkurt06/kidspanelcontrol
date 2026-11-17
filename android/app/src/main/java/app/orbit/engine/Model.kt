@@ -95,6 +95,9 @@ data class Grant(
     val createdAtMs: Long = 0L,
     /** Görev ödülüyse hangi görev koşusundan geldiği */
     val taskRunId: String? = null,
+    /** Görevin telefon kilidi ayarı: k0 dokunmaz · k1 süresi bitene kadar · k2 gün boyu · k3 saate kadar; null = eski (aynı grup) */
+    val unlock: String? = null,
+    val unlockUntil: LocalTime? = null,
 )
 
 /** Bölüm kuralı: açık (süre saymaz) / süreli / kapalı */

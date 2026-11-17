@@ -10,6 +10,7 @@ import { repeatText } from "../lib/groups";
 import { DayPicker } from "../components/Windows";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
+import { UNLOCK_TEXT } from "../lib/types";
 import { MinuteStepper } from "../components/MinuteStepper";
 import { UseModePicker } from "../components/UseModePicker";
 
@@ -70,6 +71,8 @@ type Form = {
   earn_mode: "all" | "any" | "min";
   earn_min: number;
   start_after: string[];
+  unlock_mode: "k0" | "k1" | "k2" | "k3";
+  unlock_until: string;
   start_time: string;
 };
 
@@ -213,6 +216,8 @@ const empty = (childIds: string[], defaults?: { task_before_photo_min?: number; 
   earn_mode: "all",
   earn_min: 1,
   start_after: [],
+  unlock_mode: "k1",
+  unlock_until: "",
   start_time: "08:00",
 });
 
@@ -268,6 +273,14 @@ export default function TaskEdit() {
     if (!f.group_id) return setGroupTaskList([]);
     supabase.from("tasks").select("id,title,mandatory,group_order,created_at").eq("group_id", f.group_id).eq("active", true).order("group_order").order("created_at")
       .then(({ data }) => setGroupTaskList(((data ?? []) as Array<{ id: string; title: string; mandatory: boolean }>).filter((t) => t.id !== id)));
+  }, [f.group_id, id]);
+  // Grup dışı görev: gruptaki görevlere bağlanabilir (süresi onlar bitince kullanılır)
+  const [linkable, setLinkable] = useState<Array<{ id: string; title: string; mandatory: boolean; group: string }>>([]);
+  useEffect(() => {
+    if (f.group_id) return setLinkable([]);
+    supabase.from("tasks").select("id,title,mandatory,group_id,group_order,created_at,task_groups(name)").eq("active", true).not("group_id", "is", null).order("group_order").order("created_at")
+      .then(({ data }) => setLinkable(((data ?? []) as unknown as Array<{ id: string; title: string; mandatory: boolean; task_groups: { name: string } | null }>)
+        .filter((t) => t.id !== id).map((t) => ({ id: t.id, title: t.title, mandatory: t.mandatory, group: t.task_groups?.name ?? "Grup" }))));
   }, [f.group_id, id]);
   const toggleIn = (k: "earn_links" | "start_after", v: string) => setF((x) => ({ ...x, [k]: x[k].includes(v) ? x[k].filter((y) => y !== v) : [...x[k], v] }));
   const activeDefaults = (group?.defaults ?? fam.family?.task_defaults) || null;
@@ -365,6 +378,8 @@ export default function TaskEdit() {
             earn_mode: t.earn_mode ?? "all",
             earn_min: t.earn_min ?? 1,
             start_after: t.start_after ?? [],
+            unlock_mode: (t as { unlock_mode?: Form["unlock_mode"] }).unlock_mode ?? "k1",
+            unlock_until: ((t as { unlock_until?: string | null }).unlock_until ?? "").slice(0, 5),
             start_time: t.start_time?.slice(0, 5) ?? "",
           });
       } else {
@@ -477,7 +492,9 @@ export default function TaskEdit() {
       record_pause_max: f.record_pause === "limit" ? Math.max(1, Number(f.record_pause_max) || 10) : null,
       phone_restriction: f.phone_restriction,
       orbit_focus_profile_id: f.orbit_focus_profile_id || null,
-      earn_links: f.group_id ? f.earn_links.filter((x) => groupTaskList.some((t) => t.id === x) || x === id) : [],
+      earn_links: f.group_id ? f.earn_links.filter((x) => groupTaskList.some((t) => t.id === x) || x === id) : f.earn_links.filter((x) => linkable.some((t) => t.id === x)),
+      unlock_mode: f.unlock_mode,
+      unlock_until: f.unlock_mode === "k3" && f.unlock_until ? f.unlock_until : null,
       earn_mode: f.earn_mode,
       earn_min: Math.max(1, f.earn_min),
       start_after: f.group_id ? f.start_after.filter((x) => groupTaskList.some((t) => t.id === x)) : [],
@@ -560,6 +577,20 @@ export default function TaskEdit() {
   const toggleChild = (cid: string) =>
     set("child_ids", f.child_ids.includes(cid) ? f.child_ids.filter((x) => x !== cid) : [...f.child_ids, cid]);
   const legacyReward = f.reward_validity === "tomorrow" || f.reward_validity === "date";
+
+  const unlockField = (
+    <div className="field">
+      <span>Telefon kilidi <Info>Görev onaylanıp süresi kullanılabilir olunca diğer görevlerin “Önce görev” kilidine ne olur. Kapalı saatler ve elle 🔒 kilit açılmaz.</Info></span>
+      <select value={f.unlock_mode} onChange={(e) => set("unlock_mode", e.target.value as Form["unlock_mode"])}>
+        <option value="k1">K1 · Süresi bitene kadar açar</option>
+        <option value="k0">K0 · Dokunmaz</option>
+        <option value="k2">K2 · Gün boyu açar</option>
+        <option value="k3">K3 · Seçtiğim saate kadar açar</option>
+      </select>
+      <small className="muted">{UNLOCK_TEXT[f.unlock_mode]}</small>
+      {f.unlock_mode === "k3" && <TimeField value={f.unlock_until} onChange={(v) => set("unlock_until", v)} label="Saate kadar" />}
+    </div>
+  );
 
   return (
     <div className="page">
@@ -849,6 +880,38 @@ export default function TaskEdit() {
         />
       </div>
 
+      {!group && (
+        <div className="card">
+          <h2>Süre ve telefon</h2>
+          <div className="grid2">
+            <label className="field">
+              <span>Süre ne zaman kullanılır</span>
+              <select value={f.earn_links.length ? "linked" : "self"} onChange={(e) => set("earn_links", e.target.value === "linked" ? linkable.filter((t) => t.mandatory).slice(0, 1).map((t) => t.id) : [])}>
+                <option value="self">Bu görev onaylanınca</option>
+                <option value="linked" disabled={!linkable.length}>Gruptaki seçtiğim görevler bitince</option>
+              </select>
+            </label>
+            {unlockField}
+          </div>
+          {f.earn_links.length > 0 && (
+            <div className="gt-box">
+              {linkable.map((t) => (
+                <label key={t.id} className="check"><input type="checkbox" checked={f.earn_links.includes(t.id)} onChange={() => toggleIn("earn_links", t.id)} /> {t.group} · {t.title}{t.mandatory ? " · zorunlu" : ""}</label>
+              ))}
+              <div className="row gap-s wrap" style={{ alignItems: "center" }}>
+                <select value={f.earn_mode} onChange={(e) => set("earn_mode", e.target.value as Form["earn_mode"])} aria-label="Kaç tanesi" style={{ width: "auto" }}>
+                  <option value="all">Hepsi bitince</option>
+                  <option value="any">Herhangi biri bitince</option>
+                  <option value="min">En az … tanesi</option>
+                </select>
+                {f.earn_mode === "min" && <MinuteStepper value={f.earn_min} onChange={(v) => set("earn_min", v)} min={1} max={Math.max(1, f.earn_links.length)} unit="görev" label="En az kaç görev" />}
+              </div>
+              <small className="muted">Görev önce yapılırsa süresi bekler; işaretlenenler bitince kullanılır. Gün sonuna kadar bitmezse kasaya gider.</small>
+            </div>
+          )}
+        </div>
+      )}
+
       {group && (
         <div className="card">
           <h2>Çalışma şekli <Info>Grup ayarları tablosundaki satırın aynısı. Bitene kadar telefon için yukarıdaki “Kısıtlamalar”a bak.</Info></h2>
@@ -868,6 +931,7 @@ export default function TaskEdit() {
               </select>
             </label>
           </div>
+          {unlockField}
           {f.earn_links.length > 0 && (
             <div className="gt-box">
               {!isNew && id && (

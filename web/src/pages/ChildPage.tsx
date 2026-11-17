@@ -750,7 +750,7 @@ function TimeTab({ childId }: { childId: string }) {
   }, [load, childId, fam.sections]);
 
   const today = todayISO();
-  const wallet = grants.filter((g) => !g.vault && !g.valid_on && !g.activated_on && (!g.expires_on || g.expires_on >= today));
+  const wallet = grants.filter((g) => !g.vault && !g.valid_on && !g.activated_on && !g.window_start && !g.settled_at && g.minutes !== 0 && (!g.expires_on || g.expires_on >= today));
   const live = useMemo(
     // Gece yarısını geçen sürenin ertesi gün devamı ayrı satır olarak gösterilmez (ilk satırda yazar)
     () => grants.filter((g) => !g.vault && ((g.valid_on && g.valid_on >= today) || g.activated_on === today) && !grants.some((x) => x.carry_to === g.id)),
@@ -1088,7 +1088,7 @@ function TimeTab({ childId }: { childId: string }) {
         {!wallet.length && <p className="muted small">Cüzdanda süre yok.</p>}
         {wallet.length > 0 && (
           <p>
-            <b>Toplam {minutesText(wallet.reduce((a, g) => a + g.minutes, 0))}</b>
+            {(() => { const tot = wallet.reduce((a, g) => a + g.minutes, 0); return tot < 0 ? <b className="bad-text">Borç {minutesText(-tot)} · sonraki kazandığı süreden düşülür</b> : <b>Toplam {minutesText(tot)}</b>; })()}
           </p>
         )}
         {wallet.map((g) => grantRow(g, "wallet"))}

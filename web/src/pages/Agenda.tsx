@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { DateField, TimeField } from "../components/DateTime";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
-import { agendaDateText, orbitTodayISO, todayISO } from "../lib/util";
+import { agendaDateText, todayISO } from "../lib/util";
 import type { AgendaItem, Task, TaskRun } from "../lib/types";
 import { useNavigate } from "react-router-dom";
 import { Icon } from "../components/Icon";
@@ -28,7 +28,7 @@ export default function Agenda() {
   const [runs, setRuns] = useState<TaskRun[]>([]);
   const [histOpen, setHistOpen] = useState<Record<string, boolean>>(() => { try { return JSON.parse(sessionStorage.getItem("orbit.agendaHist") ?? "{}"); } catch { return {}; } });
   const toggleHist = (id: string) => setHistOpen((v) => { const n = { ...v, [id]: !v[id] }; try { sessionStorage.setItem("orbit.agendaHist", JSON.stringify(n)); } catch { /* */ } return n; });
-  const today = orbitTodayISO();
+  const today = todayISO();
   const load = useCallback(async () => {
     const { data, error } = await supabase.from("agenda_items").select("*").order("due_date").order("due_time");
     if (error) return setErr(errorText(error));
@@ -41,7 +41,7 @@ export default function Agenda() {
       setTasks(tmap);
       const rec = Object.values(tmap).filter((x) => x.recurrence === "days").map((x) => x.id);
       if (rec.length) {
-        const { data: r } = await supabase.from("task_runs").select("*").in("task_id", rec).gte("day", orbitTodayISO(-HIST_DAYS));
+        const { data: r } = await supabase.from("task_runs").select("*").in("task_id", rec).gte("day", todayISO("Europe/Berlin", -HIST_DAYS));
         setRuns((r ?? []) as TaskRun[]);
       } else setRuns([]);
     }

@@ -50,6 +50,8 @@ object Sync {
             // Orbit günü "gün bitişi"nde (varsayılan 05:00) değişir: gece 00:00–05:00 önceki güne sayılır
             val dayEndMin = runCatching { fam.optJSONObject(0)?.optString("day_end")?.takeIf { it.length >= 5 }?.let { it.substring(0, 2).toInt() * 60 + it.substring(3, 5).toInt() } }.getOrNull() ?: 300
             val today = java.time.ZonedDateTime.now(java.time.ZoneId.of(tz)).minusMinutes(dayEndMin.toLong()).toLocalDate().toString()
+            // Görevler takvim gününe göre (gece 00:00'da yenilenir); süre ve kasa gün bitişine (05:00) göre
+            val taskDay = java.time.LocalDate.now(java.time.ZoneId.of(tz)).toString()
 
             // Bu istekler birbirinden bağımsız. Seri çekim telefonda her değişikliği 5–7 sn geciktiriyordu.
             val bundle = coroutineScope {
@@ -72,7 +74,7 @@ object Sync {
                 val activities = async(Dispatchers.IO) { runCatching { Api.get("activities?select=*&order=sort_order") }.getOrElse { JSONArray() } }
                 val timerSessions = async(Dispatchers.IO) { runCatching { Api.get("timer_sessions?child_id=eq.$child&status=in.(running,paused)&select=*") }.getOrElse { JSONArray() } }
                 val alarms = async(Dispatchers.IO) { runCatching { Api.get("alarms?child_id=eq.$child&select=*&order=at_time") }.getOrElse { JSONArray() } }
-                val tasks = async(Dispatchers.IO) { runCatching { JSONArray(Api.rpc("device_tasks", JSONObject().put("p_day", today))) }.getOrElse { JSONArray() } }
+                val tasks = async(Dispatchers.IO) { runCatching { JSONArray(Api.rpc("device_tasks", JSONObject().put("p_day", taskDay))) }.getOrElse { JSONArray() } }
                 val deviceSettings = async(Dispatchers.IO) { runCatching { Api.get("device_settings?child_id=eq.$child&select=desired") }.getOrElse { JSONArray() } }
                 val agenda = async(Dispatchers.IO) { runCatching { Api.get("agenda_items?child_id=eq.$child&select=*&order=due_date.asc,due_time.asc,entered_at.desc") }.getOrElse { JSONArray() } }
 

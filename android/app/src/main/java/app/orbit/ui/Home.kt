@@ -537,7 +537,7 @@ private fun WalletScreen() {
             Muted("Cüzdanında süre yok. Görevlerini yaparak süre kazanabilirsin.")
         } else {
             Text(minutesText(walletTotal.toLong()), color = C.text, fontSize = 26.sp, fontWeight = FontWeight.Bold)
-            if (walletDebt > 0) Muted("Ceza borcu ${minutesText(walletDebt.toLong())} düşüldü")
+            if (walletDebt > 0) Text("Borç ${minutesText(walletDebt.toLong())} · sonraki kazandığın süreden düşülür", color = C.bad, fontSize = 13.sp)
             for (g in s.walletGrants) {
                 Muted("${minutesText(g.minutes.toLong())}" + listOfNotNull(g.note, g.expiresOn?.let { "son gün $it" }).joinToString(" · ", prefix = " · ").removeSuffix(" · "), 12)
             }

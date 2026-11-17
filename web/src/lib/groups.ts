@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { orbitTodayISO, todayISO } from "./util";
+import { todayISO } from "./util";
 import type { Task, TaskGroup, TaskGroupRun, TaskRun } from "./types";
 
 export const WEEKDAYS = [1, 2, 3, 4, 5];
@@ -29,7 +29,7 @@ export function repeatText(g: TaskGroup): string {
 
 /** Grubun bugünkü dönem günü: tekrarlıda bugün, tek seferlikte başlangıç günü. */
 export function groupDay(g: TaskGroup): string {
-  return g.recurrence === "once" ? g.start_date : orbitTodayISO();
+  return g.recurrence === "once" ? g.start_date : todayISO();
 }
 
 export type GroupProgress = {

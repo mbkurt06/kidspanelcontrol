@@ -9,7 +9,7 @@ import { EXT_NOTE, extendOpenToday, isoAtAbs, openUntil, setOpenEnd, setTempEnd,
 import { currentSectionFor, hm, mins, nowBerlin, timedPossible } from "../lib/sections";
 import { TimeField } from "../components/DateTime";
 import { timerElapsed, timerRemaining } from "../lib/types";
-import { hhmm, minutesText, orbitTodayISO, todayISO } from "../lib/util";
+import { hhmm, minutesText, todayISO } from "../lib/util";
 import { Ring } from "../components/Ring";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
@@ -277,7 +277,7 @@ function ChildCard({ child }: { child: Child }) {
   // Kilit penceresi açılınca bugünün bitmemiş görevleri
   useEffect(() => {
     if (!lockOpen) return;
-    supabase.from("task_runs").select("id, status, task:tasks(title, mandatory)").eq("child_id", child.id).eq("day", orbitTodayISO())
+    supabase.from("task_runs").select("id, status, task:tasks(title, mandatory)").eq("child_id", child.id).eq("day", todayISO())
       .in("status", ["open", "started", "submitted", "rejected"])
       .then(({ data }) => {
         const rs = ((data ?? []) as unknown as { id: string; task: { title: string; mandatory: boolean } | null }[])

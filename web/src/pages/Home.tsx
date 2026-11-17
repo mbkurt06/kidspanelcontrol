@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { useFamily } from "../lib/family";
@@ -102,7 +102,7 @@ function ChildCard({ child }: { child: Child }) {
   const [extOpen, setExtOpen] = useState(false);
   const [extMin, setExtMin] = useState(30);
   // Açık ebeveyn modu (geçici açma): bitiş saati ve erken kapatma
-  const [pmUntil, setPmUntil] = useState<Date | null>(null);
+  const [pmUntil, setPmUntil] = useCached<Date | null>(`${child.id}:pm`, null);
   const loadPm = async () => setPmUntil(await parentModeUntil(child.id));
   useEffect(() => {
     loadPm();
@@ -110,7 +110,7 @@ function ChildCard({ child }: { child: Child }) {
     return () => clearInterval(t);
   }, [child.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Şu an süren saat aralıklı ekstra süre (kilit saatinde verilen süre dahil)
-  const [extras, setExtras] = useState<{ id: string; minutes: number; window_start: string; window_end: string; use_mode: string | null; source: string | null; note: string | null; orig_window_end?: string | null }[]>([]);
+  const [extras, setExtras] = useCached<{ id: string; minutes: number; window_start: string; window_end: string; use_mode: string | null; source: string | null; note: string | null; orig_window_end?: string | null }[]>(`${child.id}:extras`, []);
   const loadExtras = async () => {
     const { data } = await supabase
       .from("time_grants")
@@ -132,7 +132,7 @@ function ChildCard({ child }: { child: Child }) {
     return () => clearInterval(t);
   }, [child.id, st?.updated_at]); // eslint-disable-line react-hooks/exhaustive-deps
   // Telefona henüz ulaşmamış değişiklikler: telefonun son bildiriminden sonra verilen süreler + onaylanmamış komutlar
-  const [pend, setPend] = useState<{ give: number; kind: "kiosk" | "limit" | "open" | null; count: number; items: { text: string; at: string }[] }>({ give: 0, kind: null, count: 0, items: [] });
+  const [pend, setPend] = useCached<{ give: number; kind: "kiosk" | "limit" | "open" | null; count: number; items: { text: string; at: string }[] }>(`${child.id}:pend`, { give: 0, kind: null, count: 0, items: [] });
   const loadPend = async () => {
     if (!st) return;
     const [g, c] = await Promise.all([
@@ -157,7 +157,11 @@ function ChildCard({ child }: { child: Child }) {
       items.push({ text: `⏱ +${minutesText(r.minutes)} süre verildi`, at: r.created_at });
     }
     for (const x of (c.data ?? []) as { type: string; payload: { minutes?: number; reason?: string } | null; created_at: string }[]) {
-      if (x.type === "resync") continue;
+      if (x.type === "resync") {
+        const r = Number((x.payload as { reduced?: number } | null)?.reduced ?? 0);
+        if (r > 0) { give -= r; count++; items.push({ text: `⏱ −${minutesText(r)} süre düşüldü`, at: x.created_at }); }
+        continue;
+      }
       if (x.type === "adjust_minutes") { const m = Number(x.payload?.minutes ?? 0); give += m; count++; items.push({ text: `⏱ ${m >= 0 ? "+" : "−"}${minutesText(Math.abs(m))} süre ${m >= 0 ? "verildi" : "düşüldü"}`, at: x.created_at }); continue; }
       if (x.type === "kiosk_start" && x.payload?.reason === "shorten") continue;
       const k = x.type === "kiosk_start" ? "kiosk" : x.type === "lock" ? "limit" : x.type === "kiosk_end" || x.type === "unlock" ? "open" : null;
@@ -180,7 +184,7 @@ function ChildCard({ child }: { child: Child }) {
   const [ringMenuOpen, setRingMenuOpen] = useState(false);
   const [pendOpen, setPendOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
-  const [tempNext, setTempNext] = useState<string | null>(null);
+  const [tempNext, setTempNext] = useCached<string | null>(`${child.id}:tempNext`, null);
   const [dialThen, setDialThen] = useState<"none" | "unlock" | "time" | "lock">("none");
   const [pendingGive, setPendingGive] = useState(0);
   const [xDur, setXDur] = useState("60");
@@ -196,11 +200,11 @@ function ChildCard({ child }: { child: Child }) {
   const [lockDateTime, setLockDateTime] = useState("08:00");
   const [lockRun, setLockRun] = useState("");
   const [openRuns, setOpenRuns] = useState<{ id: string; title: string; mandatory: boolean }[]>([]);
-  const [manualLock, setManualLock] = useState<{ id: string; until: string | null; runs: string[]; from: string | null } | null>(null);
+  const [manualLock, setManualLock] = useCached<{ id: string; until: string | null; runs: string[]; from: string | null } | null>(`${child.id}:manualLock`, null);
   const [lockUntil, setLockUntil] = useState("19:00");
   const [give, setGive] = useState(0);
   const [giveText, setGiveText] = useState<string | null>(null);
-  const [sec, setSec] = useState<Section | null>(null);
+  const [sec, setSec] = useCached<Section | null>(`${child.id}:sec`, null);
   const timer = fam.timers[child.id];
 
   useEffect(() => {
@@ -522,6 +526,8 @@ function ChildCard({ child }: { child: Child }) {
     if (error) throw error;
     const rest = Number(data ?? 0);
     if (rest > 0) await sendCommand(child.id, "adjust_minutes", { minutes: -rest });
+    // Sunucuda geri alınan kısım: telefon alana kadar panel ⏳ ile gösterir
+    if (m - rest > 0) await sendCommand(child.id, "resync", { reduced: m - rest });
     fam.reload();
     return rest === m ? "telefona iletildi" : rest > 0 ? `ekstra süre geri alındı · ${minutesText(rest)} telefona iletildi` : "ekstra süre geri alındı";
   }
@@ -1279,4 +1285,18 @@ function ago(iso: string) {
   if (m < 1) return "az önce";
   if (m < 60) return `${m} dk önce`;
   return `${Math.floor(m / 60)} sa${m % 60 ? ` ${m % 60} dk` : ""} önce`;
+}
+
+/** Sayfalar arası geçişte son bilinen değer hemen görünsün (eski sayı yanıp sönmesin) */
+const cardCache = new Map<string, unknown>();
+function useCached<T>(key: string, init: T): [T, (v: T | ((p: T) => T)) => void] {
+  const [v, setV] = useState<T>(() => (cardCache.has(key) ? (cardCache.get(key) as T) : init));
+  const set = useCallback((x: T | ((p: T) => T)) => {
+    setV((p) => {
+      const n = typeof x === "function" ? (x as (p: T) => T)(p) : x;
+      cardCache.set(key, n);
+      return n;
+    });
+  }, [key]);
+  return [v, set];
 }

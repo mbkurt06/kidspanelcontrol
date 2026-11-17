@@ -756,7 +756,8 @@ function TimeTab({ childId }: { childId: string }) {
   const wallet = grants.filter((g) => !g.vault && !g.valid_on && !g.activated_on && !g.window_start && !g.settled_at && g.minutes !== 0 && (!g.expires_on || g.expires_on >= today));
   const live = useMemo(
     // Gece yarısını geçen sürenin ertesi gün devamı ayrı satır olarak gösterilmez (ilk satırda yazar)
-    () => grants.filter((g) => !g.vault && ((g.valid_on && g.valid_on >= today) || g.activated_on === today) && !grants.some((x) => x.carry_to === g.id)),
+    // Geçici açma / açık saat uzatması süre değildir (sağ halkadan yönetilir); burada gösterilmez
+    () => grants.filter((g) => !g.vault && !(g.note ?? "").startsWith("Geçici açma") && ((g.valid_on && g.valid_on >= today) || g.activated_on === today) && !grants.some((x) => x.carry_to === g.id)),
     [grants, today]
   );
   const vault = grants.filter((g) => g.vault);

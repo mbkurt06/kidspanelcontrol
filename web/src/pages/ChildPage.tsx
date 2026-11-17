@@ -954,7 +954,7 @@ function TimeTab({ childId }: { childId: string }) {
   // Tamamen kullanılmış planlı süreler ayrı, kapalı bir 'geçmiş' altında
   const liveUsed = live.filter((g) => g.minutes > 0 && usedOf(g) >= g.minutes);
   const liveActive = live.filter((g) => !liveUsed.includes(g));
-  const grantRow = (g: TimeGrant) => (
+  const plannedRow = (g: TimeGrant) => (
           <div className="grant-row" key={g.id}>
             <div className="grow">
               {g.minutes > 0 && !g.settled_at ? <GrantMinutes g={g} used={usedOf(g)} onChanged={() => { load(); fam.reload(); }} /> : <b>{minutesText(g.minutes)}</b>}
@@ -1274,11 +1274,11 @@ function TimeTab({ childId }: { childId: string }) {
       <details className="card section-collapse-card" open>
         <summary className="section-collapse-head"><span>Planlanan süreler <Info>Bu liste kullanılmış süreler değil; cüzdandan veya görev ödülünden aktif plana ayrılmış, çocuğun kullanabileceği süreleri gösterir.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
         {!liveActive.length && <p className="muted small">Planlanmış ekstra süre yok.</p>}
-        {liveActive.map((g) => grantRow(g))}
+        {liveActive.map((g) => plannedRow(g))}
         {liveUsed.length > 0 && (
           <details className="used-hist">
             <summary className="small muted">Kullanılmış süreler ({liveUsed.length})</summary>
-            {liveUsed.map((g) => grantRow(g))}
+            {liveUsed.map((g) => plannedRow(g))}
           </details>
         )}
       </details>

@@ -2452,3 +2452,10 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .chip-pend { font-size: 13px; line-height: 1; cursor: pointer; padding: 2px; margin: -2px; }
 .seen-box { display: flex; flex-direction: column; gap: 2px; }
 .seen-box .pend-title { color: var(--accent); font-weight: 600; }
+.chip-warn { color: var(--warn); font-size: 13px; line-height: 1; }
+.info-dot {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; margin-left: 6px; border-radius: 50%;
+  border: 1px solid currentColor; font-size: 11px; font-weight: 700; font-style: italic;
+  font-family: Georgia, serif; cursor: pointer; vertical-align: middle; opacity: .85;
+}

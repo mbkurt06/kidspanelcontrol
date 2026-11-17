@@ -179,6 +179,7 @@ function ChildCard({ child }: { child: Child }) {
   const [xOpen, setXOpen] = useState(false);
   const [ringMenuOpen, setRingMenuOpen] = useState(false);
   const [pendOpen, setPendOpen] = useState(false);
+  const [infoOpen, setInfoOpen] = useState(false);
   const [tempNext, setTempNext] = useState<string | null>(null);
   const [dialThen, setDialThen] = useState<"none" | "unlock" | "time" | "lock">("none");
   const [pendingGive, setPendingGive] = useState(0);
@@ -679,6 +680,17 @@ function ChildCard({ child }: { child: Child }) {
             ? { cls: "warn", text: [sec && !timedPossible(sec, fam.sectionRules) ? `🔒 ${sec.name}` : st.current_mode_name ?? "Bugün", sec ? `${hhmm(sec.end_time)}'e kadar` : null].filter(Boolean).join(" · ") }
             : { cls: "good", text: [st.current_mode_name ?? "Açık", extWin || extended.length ? `${hm(Math.min(baseEnd, 1439))}'e kadar (bugün uzatıldı)` : shortenAt != null ? `${hm(shortenAt)}'e kadar (bugün kısaltıldı)` : sec && open ? `${hhmm(sec.end_time)}'e kadar` : null].filter(Boolean).join(" · ") };
 
+  // Açıklamalar kartta yazmaz; ⓘ'ye basınca görünür
+  const infoLines: string[] = [];
+  if (st) {
+    if (staleMin > 15) infoLines.push(`⚠ Telefon ${staleMin >= 60 ? `${Math.floor(staleMin / 60)} sa ${staleMin % 60} dk` : `${staleMin} dk`} süredir bağlanmadı (son bağlantı ${timeText(st.updated_at)})`);
+    if (isLocked && hak > 0 && !hakUnl) infoLines.push(lockPastDayEnd
+      ? `⏱ ${minutesText(hak)} süresi var; kilit gün bitişinden (${dayEndHm}) sonra kalkacağı için ${dayEndHm}'te kasaya geçer. Kilidi ${dayEndHm}'ten önce açarsan kullanabilir.`
+      : `⏱ ${minutesText(hak)} süresi var; telefon açılınca kullanır.`);
+    if (openShort && openLeft != null) infoLines.push(`⏰ Telefon ${minutesText(openLeft)} sonra kapanır; kullanmadığı süre ${dayEndHm}'te kasaya geçer.`);
+    if (staleMin <= 15 && st.power_exempt === false) infoLines.push("🔋 Telefonda Orbit pil optimizasyonunda · ekran kapalıyken değişiklikler gecikebilir (telefonda Orbit'i açıp “İzin ver” de)");
+    if (staleMin <= 15 && st.power_exempt !== false && st.live === false) infoLines.push("Canlı bağlantı kapalı · değişiklikler 30 sn içinde gelir");
+  }
   return (
     <div className="card child-card">
       <Link to={`/child/${child.id}`} className="child-main">
@@ -688,7 +700,7 @@ function ChildCard({ child }: { child: Child }) {
           aria-label="Süreyi çarkla ayarla"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (st) { setDial(0); setDialThen("none"); setDialOpen(true); } }}
         >
-          <Ring value={hakUnl ? 1 : hak} max={hakUnl ? 1 : Math.max(st?.allowance_minutes ?? 0, hak + (st?.used_minutes ?? 0), 1)} color={!hakUnl && hak <= 10 ? "var(--warn)" : child.color} size={66}>
+          <Ring value={hakUnl ? 1 : hak} max={hakUnl ? 1 : Math.max(st?.allowance_minutes ?? 0, hak + (st?.used_minutes ?? 0), 1)} color={!hakUnl && hak <= 10 ? "var(--warn)" : child.color} size={80}>
             {!st ? <b>—</b> : hakUnl ? <span className="ring-state"><b>∞</b><small>süre</small></span> : <span className="ring-state"><b>{minutesText(hak)}</b><small>süre</small></span>}
           </Ring>
         </span>
@@ -706,10 +718,10 @@ function ChildCard({ child }: { child: Child }) {
                 >
                   <span className={`chip-dot ${conn}`} />
                   {st?.battery != null && <Battery level={st.battery} />}
+                  {staleMin > 15 && <span className="chip-warn" aria-label="Telefon bağlanmadı">⚠</span>}
                   {pend.items.length > 0 && <span className="chip-pend" role="button" aria-label="Telefona iletilmeyen değişiklikler" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setPendOpen(true); }}>⏳</span>}
                 </span>
               )}
-            <Icon name="chevron" size={18} />
           </div>
           {showSeen && st && (
             <span className="seen-box tiny">
@@ -722,13 +734,11 @@ function ChildCard({ child }: { child: Child }) {
                 <span className={`state-line ${stateLine.cls}`}>
                   <span className="state-ico" aria-hidden>🕘</span>
                   {stateLine.text}
-
+                  {infoLines.length > 0 && (
+                    <span role="button" className="info-dot" aria-label="Açıklamalar" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInfoOpen(true); }}>i</span>
+                  )}
                 </span>
               )}
-              {isLocked && hak > 0 && !hakUnl && (lockPastDayEnd
-                ? <span className="warn-text small">{minutesText(hak)} {dayEndHm}'te kasaya gider</span>
-                : <span className="muted small">{minutesText(hak)} telefon açılınca kullanılır</span>)}
-              {openShort && openLeft != null && <span className="warn-text small">Telefon {minutesText(openLeft)} sonra kapanır · kalan süre {dayEndHm}'te kasaya</span>}
               <span className="muted small">Bugün {minutesText(st.used_minutes)} kullandı</span>
               {timer && (
                 <span className="pill accent">
@@ -753,11 +763,11 @@ function ChildCard({ child }: { child: Child }) {
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setRingMenu(true); }}
           >
             {isLocked ? (
-              <Ring value={1} max={1} color={limited || closed ? "var(--warn)" : "var(--bad)"} size={66}>
+              <Ring value={1} max={1} color={limited || closed ? "var(--warn)" : "var(--bad)"} size={80}>
                 <span className="ring-state bad"><Icon name="lock" size={18} /><small>{lockEnd?.label ?? "Kilitli"}</small></span>
               </Ring>
             ) : (
-              <Ring value={openLeft ?? 1} max={openLeft == null || unlimited ? 1 : Math.max(openLeft, hakUnl ? 1 : hak, 1)} color={openShort ? "var(--warn)" : "var(--accent)"} size={66}>
+              <Ring value={openLeft ?? 1} max={openLeft == null || unlimited ? 1 : Math.max(openLeft, hakUnl ? 1 : hak, 1)} color={openShort ? "var(--warn)" : "var(--accent)"} size={80}>
                 <span className="ring-state"><b>{openLeft == null ? "açık" : minutesText(openLeft)}</b><small>{openLeft == null ? "telefon" : `${hm(Math.min(openEndAbs % 1440, 1439))}'e`}</small></span>
               </Ring>
             )}
@@ -961,6 +971,21 @@ function ChildCard({ child }: { child: Child }) {
           )}
         </div>
       </div>
+      {infoOpen && createPortal(
+        <>
+          <div className="pop-backdrop sheet-like" onClick={() => setInfoOpen(false)} />
+          <div className="lock-pop sheet-pop" role="dialog" aria-label="Açıklamalar">
+            <b className="sheet-pop-title">{child.name}</b>
+            <div className="stack-s">
+              {infoLines.map((l, n) => <p key={n} className="small" style={{ margin: 0 }}>{l}</p>)}
+            </div>
+            <div className="pop-actions">
+              <button className="pill-btn ghost" onClick={() => setInfoOpen(false)}>Kapat</button>
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
       {pendOpen && createPortal(
         <>
           <div className="pop-backdrop sheet-like" onClick={() => setPendOpen(false)} />
@@ -1071,15 +1096,6 @@ function ChildCard({ child }: { child: Child }) {
           onApply={() => { setDialOpen(false); applyDial(); }}
         />,
         document.body
-      )}
-      {st && staleMin > 15 && (
-        <p className="small warn-text">⚠ Telefon {staleMin >= 60 ? `${Math.floor(staleMin / 60)} saattir` : `${staleMin} dakikadır`} bağlanmadı</p>
-      )}
-      {st && staleMin <= 15 && st.power_exempt === false && (
-        <p className="small warn-text">⚠ Telefonda Orbit pil optimizasyonunda · ekran kapalıyken değişiklikler gecikebilir (telefonda Orbit'i açıp “İzin ver” de)</p>
-      )}
-      {st && staleMin <= 15 && st.power_exempt !== false && st.live === false && (
-        <p className="small muted">Canlı bağlantı kapalı · değişiklikler 30 sn içinde gelir</p>
       )}
       {msg && <p className="small muted center">{msg}</p>}
     </div>

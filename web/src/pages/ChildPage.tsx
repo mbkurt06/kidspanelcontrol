@@ -951,6 +951,56 @@ function TimeTab({ childId }: { childId: string }) {
                 : `O gün ${start}'den itibaren ${mText} dk; kullandıkça düşer, ${fromEnd}'e kadar kullanmalı.`;
 
   const usedOf = (g: TimeGrant) => fam.statuses[childId]?.grant_used?.[g.id] ?? 0;
+  // Tamamen kullanılmış planlı süreler ayrı, kapalı bir 'geçmiş' altında
+  const liveUsed = live.filter((g) => g.minutes > 0 && usedOf(g) >= g.minutes);
+  const liveActive = live.filter((g) => !liveUsed.includes(g));
+  const grantRow = (g: TimeGrant) => (
+          <div className="grant-row" key={g.id}>
+            <div className="grow">
+              {g.minutes > 0 && !g.settled_at ? <GrantMinutes g={g} used={usedOf(g)} onChanged={() => { load(); fam.reload(); }} /> : <b>{minutesText(g.minutes)}</b>}
+              <div className="muted tiny">
+                {g.activated_on && !g.valid_on ? `cüzdandan · ${dateText(g.activated_on)}` : dateText(g.valid_on!)}
+                {g.window_start ? ` · ${hhmm(g.window_start)}–${hhmm(g.window_end ?? "")} arası` : g.section_id ? ` · ${secName(g.section_id)}` : " · gün boyu"}
+                {g.note ? ` · ${g.note}` : ""}
+                {(() => {
+                  const next = g.carry_to ? grants.find((x) => x.id === g.carry_to) : null;
+                  return next?.window_end ? ` · kullanılmayan kısmı gece ${hhmm(next.window_end)}'e kadar sürer` : "";
+                })()}
+              </div>
+            </div>
+            {!g.activated_on && (
+              <>
+                <select
+                  value={g.window_start ? "window" : g.section_id ?? "pool"}
+                  onChange={(e) => (e.target.value === "window" ? setPlan({ g, where: "window" }) : retarget(g, e.target.value))}
+                  aria-label="Nereye"
+                >
+                  <option value="pool">Gün boyu</option>
+                  <option value="window">Saat aralığı…</option>
+                  <option value="wallet">Süre cüzdanına</option>
+                  <option value="vault">Süre kasasına geri al</option>
+                  {sectionOptions.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="icon-btn"
+                  aria-label="Geri al"
+                  onClick={async () => {
+                    await supabase.from("time_grants").delete().eq("id", g.id);
+                    if (g.carry_to) await supabase.from("time_grants").delete().eq("id", g.carry_to);
+                    load();
+                    fam.reload();
+                  }}
+                >
+                  <Icon name="trash" size={18} />
+                </button>
+              </>
+            )}
+          </div>
+  );
   const grantRow = (g: TimeGrant, kind: "wallet" | "vault") => (
     <div className="grant-row" key={g.id}>
       <div className="grow">
@@ -1223,54 +1273,14 @@ function TimeTab({ childId }: { childId: string }) {
       )}
       <details className="card section-collapse-card" open>
         <summary className="section-collapse-head"><span>Planlanan süreler <Info>Bu liste kullanılmış süreler değil; cüzdandan veya görev ödülünden aktif plana ayrılmış, çocuğun kullanabileceği süreleri gösterir.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>
-        {!live.length && <p className="muted small">Planlanmış ekstra süre yok.</p>}
-        {live.map((g) => (
-          <div className="grant-row" key={g.id}>
-            <div className="grow">
-              {g.minutes > 0 && !g.settled_at ? <GrantMinutes g={g} used={usedOf(g)} onChanged={() => { load(); fam.reload(); }} /> : <b>{minutesText(g.minutes)}</b>}
-              <div className="muted tiny">
-                {g.activated_on && !g.valid_on ? `cüzdandan · ${dateText(g.activated_on)}` : dateText(g.valid_on!)}
-                {g.window_start ? ` · ${hhmm(g.window_start)}–${hhmm(g.window_end ?? "")} arası` : g.section_id ? ` · ${secName(g.section_id)}` : " · gün boyu"}
-                {g.note ? ` · ${g.note}` : ""}
-                {(() => {
-                  const next = g.carry_to ? grants.find((x) => x.id === g.carry_to) : null;
-                  return next?.window_end ? ` · kullanılmayan kısmı gece ${hhmm(next.window_end)}'e kadar sürer` : "";
-                })()}
-              </div>
-            </div>
-            {!g.activated_on && (
-              <>
-                <select
-                  value={g.window_start ? "window" : g.section_id ?? "pool"}
-                  onChange={(e) => (e.target.value === "window" ? setPlan({ g, where: "window" }) : retarget(g, e.target.value))}
-                  aria-label="Nereye"
-                >
-                  <option value="pool">Gün boyu</option>
-                  <option value="window">Saat aralığı…</option>
-                  <option value="wallet">Süre cüzdanına</option>
-                  <option value="vault">Süre kasasına geri al</option>
-                  {sectionOptions.map((o) => (
-                    <option key={o.id} value={o.id}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className="icon-btn"
-                  aria-label="Geri al"
-                  onClick={async () => {
-                    await supabase.from("time_grants").delete().eq("id", g.id);
-                    if (g.carry_to) await supabase.from("time_grants").delete().eq("id", g.carry_to);
-                    load();
-                    fam.reload();
-                  }}
-                >
-                  <Icon name="trash" size={18} />
-                </button>
-              </>
-            )}
-          </div>
-        ))}
+        {!liveActive.length && <p className="muted small">Planlanmış ekstra süre yok.</p>}
+        {liveActive.map((g) => grantRow(g))}
+        {liveUsed.length > 0 && (
+          <details className="used-hist">
+            <summary className="small muted">Kullanılmış süreler ({liveUsed.length})</summary>
+            {liveUsed.map((g) => grantRow(g))}
+          </details>
+        )}
       </details>
       <div className="card">
         <h2>Telefonun açık kalma saatleri <Info>Kilidi açma ve açık saatleri uzatma kayıtları. Bunlar süre değildir: sadece telefonun hangi saatlerde açık olacağını belirler. Çocuk o saatlerde kendi süresini kullanır.</Info></h2>

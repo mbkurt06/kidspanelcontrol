@@ -131,6 +131,43 @@ function ChildCard({ child }: { child: Child }) {
     const t = setInterval(loadExtras, 30000);
     return () => clearInterval(t);
   }, [child.id, st?.updated_at]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Telefona henüz ulaşmamış değişiklikler: telefonun son bildiriminden sonra verilen süreler + onaylanmamış komutlar
+  const [pend, setPend] = useState<{ give: number; kind: "kiosk" | "limit" | "open" | null; count: number }>({ give: 0, kind: null, count: 0 });
+  const loadPend = async () => {
+    if (!st) return;
+    const [g, c] = await Promise.all([
+      supabase.from("time_grants").select("id,minutes,carry_to,note,vault,window_start,window_end,valid_on,created_at").eq("child_id", child.id).gt("created_at", st.updated_at).is("settled_at", null),
+      supabase.from("commands").select("type,payload,created_at").eq("child_id", child.id).is("acked_at", null).is("cancelled_at", null).gt("created_at", new Date(Date.now() - 36 * 3600e3).toISOString()).order("created_at"),
+    ]);
+    type G = { id: string; minutes: number; carry_to: string | null; note: string | null; vault: boolean; window_start: string | null; window_end: string | null; valid_on: string | null; created_at: string };
+    const rows = (g.data ?? []) as G[];
+    const carry = new Set(rows.map((r) => r.carry_to).filter(Boolean));
+    let give = 0, count = 0, kind: "kiosk" | "limit" | "open" | null = null, kAt = "";
+    const nowM = nowBerlin().minute;
+    for (const r of rows) {
+      if (r.note?.startsWith("Geçici açma")) {
+        const a = r.window_start ? mins(r.window_start) : 0, b = r.window_end ? (r.window_end.startsWith("23:59") ? 1440 : mins(r.window_end)) : 0;
+        if (r.valid_on === todayISO() && nowM >= a && nowM < b && r.created_at > kAt && !r.note.includes("uzatıldı")) { kind = "open"; kAt = r.created_at; count++; }
+        continue;
+      }
+      if (r.vault || carry.has(r.id) || r.minutes <= 0) continue;
+      give += r.minutes;
+      count++;
+    }
+    for (const x of (c.data ?? []) as { type: string; payload: { minutes?: number; reason?: string } | null; created_at: string }[]) {
+      if (x.type === "resync") continue;
+      if (x.type === "adjust_minutes") { give += Number(x.payload?.minutes ?? 0); count++; continue; }
+      if (x.type === "kiosk_start" && x.payload?.reason === "shorten") continue;
+      const k = x.type === "kiosk_start" ? "kiosk" : x.type === "lock" ? "limit" : x.type === "kiosk_end" || x.type === "unlock" ? "open" : null;
+      if (k && x.created_at >= kAt) { kind = k; kAt = x.created_at; count++; }
+    }
+    setPend({ give, kind, count });
+  };
+  useEffect(() => {
+    loadPend();
+    const t = setInterval(loadPend, 20000);
+    return () => clearInterval(t);
+  }, [child.id, st?.updated_at, busy]); // eslint-disable-line react-hooks/exhaustive-deps
   const [lockKind, setLockKind] = useState<LockKind>("kiosk");
   const [lockDur, setLockDur] = useState("open");
   const [lockMin, setLockMin] = useState(45);
@@ -191,9 +228,11 @@ function ChildCard({ child }: { child: Child }) {
     }, 1500);
     return () => window.clearInterval(iv);
   }, [pending, realKind]); // eslint-disable-line react-hooks/exhaustive-deps
-  const kiosk = pending ? pending.kind === "kiosk" : realKiosk;
-  const limited = pending ? pending.kind === "limit" : realLimited;
-  const waiting = !!pending;
+  // Telefon kapalıyken yapılan kilit / açma: panel hemen yeni durumu gösterir (⏳ iletilmedi)
+  const offKind = pend.kind && pend.kind !== realKind ? pend.kind : null;
+  const kiosk = pending ? pending.kind === "kiosk" : offKind ? offKind === "kiosk" : realKiosk;
+  const limited = pending ? pending.kind === "limit" : offKind ? offKind === "limit" : realLimited;
+  const waiting = !!pending || !!offKind;
   const unlimited = !!st && st.remaining_minutes >= 1440;
   const closed = !!st && !kiosk && !limited && st.remaining_minutes === 0 && st.allowance_minutes >= 1440;
   const finished = !!st && !kiosk && !limited && !closed && st.remaining_minutes === 0;
@@ -582,7 +621,8 @@ function ChildCard({ child }: { child: Child }) {
   const dayEndMs = nextAtMs(dayEndHm);
   const isLocked = kiosk || limited || closed;
   // Sol halka: gün bitişine kadar kalan hak (telefon kilitliyken de bildirir; eski sürümde kalan süre)
-  const hak = st?.day_left_minutes ?? st?.remaining_minutes ?? 0;
+  const hak = Math.max(0, (st?.day_left_minutes ?? st?.remaining_minutes ?? 0) + (st && (st.day_left_minutes ?? st.remaining_minutes) < 1440 ? pend.give : 0));
+  const hakPending = pend.give !== 0;
   const hakUnl = hak >= 1440;
   const lockEnd: { label: string; ms: number | null; task: boolean } | null = !st || !isLocked
     ? null
@@ -642,7 +682,7 @@ function ChildCard({ child }: { child: Child }) {
           aria-label="Süreyi çarkla ayarla"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (st) { setDial(0); setDialThen("none"); setDialOpen(true); } }}
         >
-          <Ring value={hakUnl ? 1 : hak} max={hakUnl ? 1 : Math.max(st?.allowance_minutes ?? 0, hak + (st?.used_minutes ?? 0), 1)} color={!hakUnl && hak <= 10 ? "var(--warn)" : child.color} size={66}>
+          <Ring value={hakUnl ? 1 : hak} max={hakUnl ? 1 : Math.max(st?.allowance_minutes ?? 0, hak + (st?.used_minutes ?? 0), 1)} color={!hakUnl && hak <= 10 ? "var(--warn)" : child.color} size={66} pending={hakPending}>
             {!st ? <b>—</b> : hakUnl ? <span className="ring-state"><b>∞</b><small>süre</small></span> : <span className="ring-state"><b>{minutesText(hak)}</b><small>süre</small></span>}
           </Ring>
         </span>
@@ -653,15 +693,15 @@ function ChildCard({ child }: { child: Child }) {
                 <span
                   role="button"
                   tabIndex={0}
-                  className={`conn-dot ${conn}`}
-                  aria-label={conn === "on" ? "Telefon bağlı" : conn === "idle" ? "Telefon birkaç dakikadır sessiz" : "Telefon bağlı değil"}
+                  className="stat-chip"
+                  aria-label={`${conn === "on" ? "Telefon bağlı" : conn === "idle" ? "Telefon birkaç dakikadır sessiz" : "Telefon bağlı değil"}${st?.battery != null ? ` · şarj yüzde ${st.battery}` : ""}`}
                   title={`Son bağlantı ${timeText(st!.updated_at)}`}
                   onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowSeen(!showSeen); }}
-                />
+                >
+                  <span className={`chip-dot ${conn}`} />
+                  {st?.battery != null && <Battery level={st.battery} />}
+                </span>
               )}
-            {st?.battery != null && (
-              <Battery level={st.battery} />
-            )}
             <Icon name="chevron" size={18} />
           </div>
           {showSeen && st && (
@@ -679,6 +719,9 @@ function ChildCard({ child }: { child: Child }) {
               {isLocked && hak > 0 && !hakUnl && (lockPastDayEnd
                 ? <span className="warn-text small">{minutesText(hak)} {dayEndHm}'te kasaya gider</span>
                 : <span className="muted small">{minutesText(hak)} telefon açılınca kullanılır</span>)}
+              {(hakPending || offKind) && (
+                <span className="pend-line small">⏳ {[hakPending ? `${pend.give > 0 ? "+" : "−"}${minutesText(Math.abs(pend.give))}` : null, offKind === "kiosk" ? "🔒 kilit" : offKind === "limit" ? "sınırlama" : offKind === "open" ? "🔓 açma" : null].filter(Boolean).join(" · ")} telefona iletilmedi · telefon açılınca uygulanır</span>
+              )}
               {openShort && openLeft != null && <span className="warn-text small">Telefon {minutesText(openLeft)} sonra kapanır · kalan süre {dayEndHm}'te kasaya</span>}
               <span className="muted small">Bugün {minutesText(st.used_minutes)} kullandı</span>
               {timer && (
@@ -704,11 +747,11 @@ function ChildCard({ child }: { child: Child }) {
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); setRingMenu(true); }}
           >
             {isLocked ? (
-              <Ring value={1} max={1} color={limited || closed ? "var(--warn)" : "var(--bad)"} size={66}>
+              <Ring value={1} max={1} color={limited || closed ? "var(--warn)" : "var(--bad)"} size={66} pending={!!offKind}>
                 <span className="ring-state bad"><Icon name="lock" size={18} /><small>{lockEnd?.label ?? "Kilitli"}</small></span>
               </Ring>
             ) : (
-              <Ring value={openLeft ?? 1} max={openLeft == null || unlimited ? 1 : Math.max(openLeft, hakUnl ? 1 : hak, 1)} color={openShort ? "var(--warn)" : "var(--accent)"} size={66}>
+              <Ring pending={!!offKind} value={openLeft ?? 1} max={openLeft == null || unlimited ? 1 : Math.max(openLeft, hakUnl ? 1 : hak, 1)} color={openShort ? "var(--warn)" : "var(--accent)"} size={66}>
                 <span className="ring-state"><b>{openLeft == null ? "açık" : minutesText(openLeft)}</b><small>{openLeft == null ? "telefon" : `${hm(Math.min(openEndAbs % 1440, 1439))}'e`}</small></span>
               </Ring>
             )}
@@ -1006,7 +1049,7 @@ function ChildCard({ child }: { child: Child }) {
         document.body
       )}
       {st && staleMin > 15 && (
-        <p className="small warn-text">⚠ Telefon {staleMin >= 60 ? `${Math.floor(staleMin / 60)} saattir` : `${staleMin} dakikadır`} bağlanmadı</p>
+        <p className="small warn-text">⚠ Telefon {staleMin >= 60 ? `${Math.floor(staleMin / 60)} saattir` : `${staleMin} dakikadır`} bağlanmadı{pend.count > 0 ? ` · ${pend.count} değişiklik bekliyor` : ""}</p>
       )}
       {st && staleMin <= 15 && st.power_exempt === false && (
         <p className="small warn-text">⚠ Telefonda Orbit pil optimizasyonunda · ekran kapalıyken değişiklikler gecikebilir (telefonda Orbit'i açıp “İzin ver” de)</p>
@@ -1174,18 +1217,18 @@ function Onboarding() {
   );
 }
 
-/** Telefonun şarjı: dolulukla dolan küçük pil + yüzde (≤%15 kırmızı, ≤%30 sarı) */
+/** Telefonun şarjı: ince çerçeveli pil, doluluk rengi (≤%15 kırmızı, ≤%30 sarı) + yüzde */
 function Battery({ level }: { level: number }) {
   const v = Math.max(0, Math.min(100, level));
   const color = v <= 15 ? "var(--bad)" : v <= 30 ? "var(--warn)" : "var(--good)";
   return (
-    <span className="batt" title={`Şarj %${v}`} aria-label={`Şarj yüzde ${v}`} style={{ color: v <= 15 ? "var(--bad)" : undefined }}>
-      <svg width="22" height="12" viewBox="0 0 22 12" aria-hidden="true">
-        <rect x="0.75" y="0.75" width="18.5" height="10.5" rx="2.5" fill="none" stroke="currentColor" strokeOpacity="0.55" strokeWidth="1.5" />
-        <rect x="20" y="3.5" width="1.6" height="5" rx="0.8" fill="currentColor" fillOpacity="0.55" />
-        <rect x="2.5" y="2.5" width={Math.max(1, (15 * v) / 100)} height="7" rx="1.2" fill={color} />
+    <span className="batt" style={{ color: v <= 15 ? "var(--bad)" : undefined }}>
+      <svg width="20" height="11" viewBox="0 0 20 11" aria-hidden="true">
+        <rect x="0.6" y="0.6" width="16.8" height="9.8" rx="2.4" fill="none" stroke="currentColor" strokeOpacity="0.6" strokeWidth="1.2" />
+        <rect x="18.2" y="3.5" width="1.4" height="4" rx="0.7" fill="currentColor" fillOpacity="0.6" />
+        <rect x="2" y="2" width={Math.max(1.2, (14 * v) / 100)} height="7" rx="1.2" fill={color} />
       </svg>
-      %{v}
+      {v}%
     </span>
   );
 }

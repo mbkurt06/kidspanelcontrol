@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { ChildChips } from "../components/ChildChips";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
-import { minutesText, relTime, todayISO } from "../lib/util";
+import { minutesText, relTime, orbitTodayISO, todayISO } from "../lib/util";
 import {
   PROOF_LABEL,
   STATUS_LABEL,
@@ -143,9 +143,9 @@ export default function Tasks() {
   // Çocuk seçimi menüdeki seçimle aynı (ayrı tutulunca menüde başka çocuk seçiliyken görevler "bugün olmayan" görünüyordu)
   const childFilter = fam.selectedChildId;
   const [err, setErr] = useState("");
-  const today = todayISO();
+  const today = orbitTodayISO();
   const [historyView, setHistoryView] = useState<"day" | "week" | "month" | "range">("day");
-  const [rangeFrom, setRangeFrom] = useState(todayISO("Europe/Berlin", -7));
+  const [rangeFrom, setRangeFrom] = useState(orbitTodayISO(-7));
   const [rangeTo, setRangeTo] = useState(today);
   const monthStart = `${today.slice(0, 7)}-01`;
   const selectedId = params.get("group");
@@ -158,7 +158,7 @@ export default function Tasks() {
       supabase.from("task_runs").select("*").order("day", { ascending: false }).limit(400),
       supabase.from("task_templates").select("*").order("title"),
       supabase.from("task_groups").select("*").order("sort").order("created_at"),
-      supabase.from("task_group_runs").select("*").gte("day", todayISO("Europe/Berlin", -40)),
+      supabase.from("task_group_runs").select("*").gte("day", orbitTodayISO(-40)),
     ]);
     if (t.error) setErr(errorText(t.error));
     setTasks((t.data ?? []) as Task[]);
@@ -192,7 +192,7 @@ export default function Tasks() {
   const rewards = runs.filter((r) => r.status === "approved" && r.reward_text && !r.reward_delivered_at && visibleChildIds.has(r.child_id));
   const history = runs.filter((r) => {
     if (!visibleChildIds.has(r.child_id) || (childFilter !== "all" && r.child_id !== childFilter)) return false;
-    const from = historyView === "range" ? rangeFrom : historyView === "month" ? monthStart : historyView === "week" ? todayISO("Europe/Berlin", -6) : today;
+    const from = historyView === "range" ? rangeFrom : historyView === "month" ? monthStart : historyView === "week" ? orbitTodayISO(-6) : today;
     const to = historyView === "range" ? rangeTo : today;
     // Biten görev, bittiği güne göre de görünür (ör. birkaç gün süren grupta bugün onaylanan görev)
     const fin = FINAL.has(r.status);

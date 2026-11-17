@@ -9,7 +9,7 @@ import { openEndOf, openUntil, setOpenEnd } from "../lib/openness";
 import { untilFrom } from "./Lock";
 import { childLockState, closedModeFor, closedModeOf, fromPatch, lockStateLabel, type LockState, giveNow, grantMinutes, insertGrant, nowPatch, sendCommand, type ClosedMode, type GrantPatch } from "../lib/actions";
 import { ClosedModePicker, closedModeLabel, sameClosedMode } from "../components/ClosedModePicker";
-import { dateText, dateTimeText, hhmm, minutesText, relTime, todayISO } from "../lib/util";
+import { dateText, dateTimeText, hhmm, minutesText, relTime, orbitTodayISO, todayISO } from "../lib/util";
 import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type DayOverride, type Device, type Section, type TimeGrant } from "../lib/types";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
@@ -1541,7 +1541,7 @@ function ReportTab({ childId }: { childId: string }) {
       sessionStorage.setItem("orbit.report.to", to);
     } catch { /* yok */ }
   }, [range, from, to]);
-  const [day, setDay] = useState(todayISO());
+  const [day, setDay] = useState(orbitTodayISO());
 
   useEffect(() => {
     (async () => {
@@ -1560,7 +1560,7 @@ function ReportTab({ childId }: { childId: string }) {
     d.setUTCDate(d.getUTCDate() + amount);
     return d.toISOString().slice(0, 10);
   };
-  const today = todayISO();
+  const today = orbitTodayISO();
   const isoDow = (v: string) => ((new Date(`${v}T12:00:00Z`).getUTCDay() + 6) % 7); // 0 = Pzt
   // Gün / hafta / ay: ‹ › ile geriye gidilir (gelecek yok)
   const [offset, setOffset] = useState(0);

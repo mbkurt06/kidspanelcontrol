@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { supabase } from "./supabase";
+import { setDayEnd } from "./util";
 import type { ActivityDef, FocusProfile, TimerSession, AppGroupDef, AppUsageRule, Child, DeviceStatus, GroupLimit, GroupMember, Mode, ModeSlot, OrbitEvent, Profile, Section, SectionRule, TimeRule, FamilySettings } from "./types";
 
 type FamilyData = {
@@ -93,6 +94,7 @@ export function FamilyProvider({ children: kids }: { children: React.ReactNode }
     for (const m of (gm.data ?? []) as GroupMember[]) members[m.package] = m.group_id;
     const statuses: Record<string, DeviceStatus> = {};
     for (const s of (st.data ?? []) as DeviceStatus[]) statuses[s.child_id] = s;
+    setDayEnd((fam.data as FamilySettings | null)?.day_end ?? null);
     setState({
       familyId: (fam.data as { id: string } | null)?.id ?? null,
       family: (fam.data as FamilySettings | null) ?? null,

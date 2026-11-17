@@ -3,6 +3,18 @@ export function todayISO(tz = "Europe/Berlin", offsetDays = 0) {
   return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
 
+/** Orbit günü: gün bitişinden (varsayılan 05:00) önceki gece saatleri önceki güne sayılır (telefon ve sunucuyla aynı) */
+let dayEndMin = 300;
+export function setDayEnd(hm?: string | null) {
+  if (!hm) return;
+  const [h, m] = hm.split(":").map(Number);
+  if (Number.isFinite(h)) dayEndMin = h * 60 + (m || 0);
+}
+export function orbitTodayISO(offsetDays = 0) {
+  const d = new Date(Date.now() - dayEndMin * 60000 + offsetDays * 86400000);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Berlin", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+}
+
 export function minutesText(m: number | null | undefined) {
   if (m == null) return "—";
   const sign = m < 0 ? "-" : "";

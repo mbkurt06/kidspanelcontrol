@@ -503,7 +503,9 @@ function ChildCard({ child }: { child: Child }) {
   // Halkaya dokununca büyük çark açılır; çevirerek süre eklenir / düşülür, "Uygula" ile onaylanır
   const [dialOpen, setDialOpen] = useState(false);
   const [dial, setDial] = useState(0);
-  const remainingNow = st && open && !unlimited ? st.remaining_minutes : 0;
+  // Çarkta düşülebilecek en fazla: gün bitişine kadar kalan hak (kilitliyken de), iletilmemiş değişiklikler dahil
+  const hakNow = st ? (st.day_left_minutes ?? st.remaining_minutes) : 0;
+  const remainingNow = !st ? 0 : hakNow >= 1440 ? 600 : Math.max(0, hakNow + pend.give);
   /** Çarktan "süre + zaman": önce zaman penceresi açılır, uygulanınca süre de verilir */
   async function giveAfter(note: string) {
     const g = pendingGive;
@@ -1060,7 +1062,7 @@ function ChildCard({ child }: { child: Child }) {
         <DialSheet
           name={child.name}
           remaining={remainingNow}
-          showRemaining={open && !unlimited}
+          showRemaining={!!st && hakNow < 1440}
           value={dial}
           onChange={setDial}
           then={dialThen}

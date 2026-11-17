@@ -738,6 +738,8 @@ function TimeTab({ childId }: { childId: string }) {
   const [cur, setCur] = useState<Section | null>(null);
   const [walletMax, setWalletMax] = useState(child.wallet_daily_max != null ? String(child.wallet_daily_max) : "");
 
+  // Hak edilmiş ama henüz kullanılamayan görev süreleri (bağlı görevler bitmedi): gün sonunda kullanılmazsa kasaya
+  const [held, setHeld] = useState<Array<{ id: string; title: string; minutes: number; waits: string[] }>>([]);
   const load = useCallback(async () => {
     const { data } = await supabase
       .from("time_grants")
@@ -746,6 +748,22 @@ function TimeTab({ childId }: { childId: string }) {
       .order("created_at", { ascending: false })
       .limit(60);
     setGrants((data ?? []) as TimeGrant[]);
+    const day = todayISO();
+    const { data: runs } = await supabase.from("task_runs")
+      .select("id,status,grant_id,granted_minutes,task_id,tasks(title,reward_minutes,group_id,earn_links,earn_mode,earn_min)")
+      .eq("child_id", childId).eq("day", day);
+    type R = { id: string; status: string; grant_id: string | null; granted_minutes: number | null; task_id: string; tasks: { title: string; reward_minutes: number | null; group_id: string | null; earn_links: string[] | null; earn_mode: string | null; earn_min: number | null } | null };
+    const rs = (runs ?? []) as unknown as R[];
+    const done = new Set(rs.filter((r) => r.status === "approved").map((r) => r.task_id));
+    const titleOf = new Map(rs.map((r) => [r.task_id, r.tasks?.title ?? ""]));
+    setHeld(rs.filter((r) => {
+      const t = r.tasks;
+      const m = Math.max(r.granted_minutes ?? t?.reward_minutes ?? 0, 0);
+      return r.status === "approved" && !r.grant_id && m > 0 && t && (t.group_id || (t.earn_links ?? []).length > 0);
+    }).map((r) => {
+      const links = (r.tasks!.earn_links ?? []).filter((x) => x !== r.task_id);
+      return { id: r.id, title: r.tasks!.title, minutes: Math.max(r.granted_minutes ?? r.tasks!.reward_minutes ?? 0, 0), waits: links.filter((x) => !done.has(x)).map((x) => titleOf.get(x) ?? "").filter(Boolean) };
+    }));
   }, [childId]);
   useEffect(() => {
     load();
@@ -1088,6 +1106,20 @@ function TimeTab({ childId }: { childId: string }) {
           </button>
         </div>
       </details>
+
+      <div className="card">
+        <h2>Bekleyen görev süreleri <Info>Çocuk görevi yaptı ve süreyi hak etti, ama bağlı olduğu görevler bitmediği için henüz kullanamıyor. Koşul sağlanınca kendiliğinden açılır; gün sonuna kadar sağlanmazsa kasaya gider.</Info></h2>
+        {!held.length && <p className="muted small">Bekleyen süre yok.</p>}
+        {held.map((h) => (
+          <div className="grant-row" key={h.id}>
+            <div className="grow">
+              <b>⏳ {h.title} · {minutesText(h.minutes)}</b>
+              <div className="muted tiny">{h.waits.length ? `Bekliyor: ${h.waits.join(", ")}` : "Grup koşulu bekleniyor"} · gün sonunda kullanılmazsa kasaya</div>
+            </div>
+          </div>
+        ))}
+        {held.length > 1 && <p className="small muted" style={{ margin: 0 }}>Toplam {minutesText(held.reduce((a, h) => a + h.minutes, 0))}</p>}
+      </div>
 
       <details className="card section-collapse-card" open>
         <summary className="section-collapse-head"><span>Süre cüzdanı <Info>Çocuk bu süreyi kendisi açabilir; yalnızca izin verilen saatlerde kullanılır.</Info></span><span className="collapse-arrow" aria-hidden="true" /></summary>

@@ -163,12 +163,21 @@ class RuleEngine(private val rules: Rules) {
         return manualMode(nowMs)?.first ?: scheduledModes(day, t).maxByOrNull { it.first.priority }?.first
     }
 
+    /** Orbit günü [gün bitişi, ertesi gün bitişi): t gün bitişinden önceyse önceki günün */
+    fun orbitDayMs(day: LocalDate, t: LocalTime): Pair<Long, Long> {
+        val d0 = if (t.toSecondOfDay() < rules.dayEndMin * 60) day.minusDays(1) else day
+        val a = d0.atStartOfDay(zone).plusMinutes(rules.dayEndMin.toLong()).toInstant().toEpochMilli()
+        val b = d0.plusDays(1).atStartOfDay(zone).plusMinutes(rules.dayEndMin.toLong()).toInstant().toEpochMilli()
+        return a to b
+    }
+
     fun extraMinutes(day: LocalDate, dayStartMs: Long, dayEndMs: Long): Int {
         val grants = rules.grants.filter { !it.vault && it.window == null && (it.validOn == day || it.activatedOn == day) }.sumOf { it.minutes }
         // Cüzdana yazılan ceza (borç) sadece cüzdan bakiyesinden düşer; günlük / verilen süreye dokunmaz
         val walletDebt = 0
+        val deMs = rules.dayEndMin * 60_000L
         val adjust = rules.commands
-            .filter { !it.cancelled && it.type == CommandType.ADJUST && it.createdAt in dayStartMs until dayEndMs }
+            .filter { !it.cancelled && it.type == CommandType.ADJUST && it.createdAt in (dayStartMs + deMs) until (dayEndMs + deMs) }
             .sumOf { it.minutes ?: 0 }
         return grants + walletDebt + adjust
     }
@@ -423,8 +432,10 @@ class RuleEngine(private val rules: Rules) {
         val todayIds = todaySections.map { it.id }.toSet()
         val dayGrants = rules.grants.filter { !it.vault && it.window == null && (it.validOn == day || it.activatedOn == day) }
         fun sectionExtra(id: String) = dayGrants.filter { it.sectionId == id && it.activatedOn == null }.sumOf { it.minutes }
+        // Süre ekle / düş komutları verildiği Orbit gününe sayılır (gece 01:00'de düşülen süre ertesi günün süresinden düşmez)
+        val (adjFrom, adjTo) = orbitDayMs(day, t)
         val adjust = rules.commands
-            .filter { !it.cancelled && it.type == CommandType.ADJUST && it.createdAt in dayStart until dayEnd }
+            .filter { !it.cancelled && it.type == CommandType.ADJUST && it.createdAt in adjFrom until adjTo }
             .sumOf { it.minutes ?: 0 }
         // Cüzdana yazılan ceza (borç) sadece cüzdan bakiyesinden düşer; günlük / verilen süreye dokunmaz
         val walletDebt = 0

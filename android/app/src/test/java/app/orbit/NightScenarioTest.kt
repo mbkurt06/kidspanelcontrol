@@ -45,6 +45,12 @@ class NightScenarioTest {
     private fun g(id: String, min: Int, on: LocalDate, win: TimeWindow, note: String? = null) =
         Grant(id, min, on, null, null, note, window = win, toVault = note == null, source = "manual")
 
+    private fun use(e: RuleEngine, u: DayUsage, z: ZonedDateTime, minutes: Int): DayUsage {
+        val v = e.verdict("com.insta", e.snapshot(z, u), u)
+        org.junit.Assert.assertTrue("kullanılabilmeli", v.allowed)
+        return e.account(u, "com.insta", v, minutes * 60L)
+    }
+
     private fun dayLeft(e: RuleEngine, z: ZonedDateTime, u: DayUsage = DayUsage(day)) = e.snapshot(z, u).let { it.dayLeftSeconds ?: it.remainingSeconds }
 
     @Test
@@ -80,9 +86,11 @@ class NightScenarioTest {
 
     @Test
     fun oldRangeGrantLeftoverStaysUntilDayEnd() {
-        // Eski tip aralıklı süre (21:21–22:22, 61 dk), 31 dk kullanıldı: kalan 30 dk 05:00'e kadar hakta
-        val e = RuleEngine(rules(listOf(g("old", 61, day, w("21:21", "22:22")))))
-        val u = DayUsage(day, buckets = mapOf("w:old" to 31 * 60L))
+        // Eski tip aralıklı süre (16:30–17:00, 40 dk): bölüm süresi bitince 10 dk'sı kullanıldı, kalan 30 dk 05:00'e kadar hakta
+        val e = RuleEngine(rules(listOf(g("old", 40, day, w("16:30", "17:00")))))
+        var u = use(e, DayUsage(day), at(16), 60)
+        u = use(e, u, at(16, 40), 10)
+        assertEquals(30 * 60L, e.snapshot(at(18), u).remainingSeconds)
         assertEquals(30 * 60L, dayLeft(e, at(23, 30), u))
         assertEquals(30 * 60L, dayLeft(e, at(0, 30, next), u))
     }

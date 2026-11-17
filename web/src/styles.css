@@ -2435,8 +2435,9 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 22px;
-  padding: 0 8px;
+  height: 26px;
+  padding: 0 9px 0 5px;
+  gap: 7px;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: color-mix(in srgb, var(--surface-2, var(--line)) 60%, transparent);
@@ -2444,8 +2445,8 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
   margin-left: auto;
   margin-right: 6px;
 }
-.chip-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-.chip-dot.on { background: var(--good); }
+.chip-dot { width: 15px; height: 15px; border-radius: 50%; flex: none; }
+.chip-dot.on { background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 25%, transparent); }
 .chip-dot.idle { background: var(--warn); }
 .chip-dot.off { background: var(--muted); }
 .pend-line { color: var(--accent); }
@@ -2459,3 +2460,6 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
   border: 1px solid currentColor; font-size: 11px; font-weight: 700; font-style: italic;
   font-family: Georgia, serif; cursor: pointer; vertical-align: middle; opacity: .85;
 }
+.chip-ico { display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 2px; margin: -2px; }
+.chip-ico.pend, .chip-ico.info { color: var(--accent); }
+.chip-ico.warn { color: var(--warn); }

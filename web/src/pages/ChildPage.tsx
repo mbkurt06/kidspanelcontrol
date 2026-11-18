@@ -10,7 +10,7 @@ import { untilFrom } from "./Lock";
 import { childLockState, closedModeFor, closedModeOf, fromPatch, lockStateLabel, type LockState, giveNow, grantMinutes, insertGrant, nowPatch, sendCommand, type ClosedMode, type GrantPatch } from "../lib/actions";
 import { ClosedModePicker, closedModeLabel, sameClosedMode } from "../components/ClosedModePicker";
 import { dateText, dateTimeText, hhmm, minutesText, relTime, orbitTodayISO, todayISO } from "../lib/util";
-import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type KioskWindow, type DayOverride, type Device, type Section, type TimeGrant } from "../lib/types";
+import { GROUP_HINT, GROUP_LABEL, WEEKDAYS_LONG, type AppGroup, type Assignment, type ChildApp, type DayOverride, type Device, type Section, type TimeGrant } from "../lib/types";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
@@ -18,10 +18,12 @@ import TimerTab from "./TimerTab";
 import GradesTab from "./GradesTab";
 import PlanTab from "./PlanTab";
 import WebAppsCard from "./WebAppsCard";
+import VideosTab from "./VideosTab";
+import { KioskWindows, MODE3_LABEL, MODES, fromMode3, mode3, type Mode3 } from "../components/AppModes";
 import PhoneSettingsTab from "./PhoneSettingsTab";
 import { currentSectionFor, hm, mins, nowBerlin, suggestGroup, timedPossible } from "../lib/sections";
 
-type Tab = "apps" | "program" | "time" | "plan" | "timer" | "alarms" | "report" | "grades" | "phone" | "device";
+type Tab = "apps" | "program" | "time" | "videos" | "plan" | "timer" | "alarms" | "report" | "grades" | "phone" | "device";
 
 export default function ChildPage() {
   const { id } = useParams();
@@ -31,7 +33,7 @@ export default function ChildPage() {
   const [tab, setTab] = useState<Tab>(() => {
     let stored: string | null = null;
     try { stored = localStorage.getItem("orbit.childTab") ?? localStorage.getItem(`orbit.childTab.${id}`); } catch { /* yok */ }
-    return stored && ["apps", "program", "time", "plan", "timer", "alarms", "report", "grades", "phone", "device"].includes(stored) ? stored as Tab : "apps";
+    return stored && ["apps", "program", "time", "videos", "plan", "timer", "alarms", "report", "grades", "phone", "device"].includes(stored) ? stored as Tab : "apps";
   });
   // Çocuk değişince aynı sekme açık kalır
   useEffect(() => { try { localStorage.setItem("orbit.childTab", tab); } catch { /* yok */ } }, [tab]);
@@ -140,6 +142,7 @@ export default function ChildPage() {
             ["apps", "Uygulamalar"],
             ["program", "Program"],
             ["time", "Süre"],
+            ["videos", "Videolar"],
             ["plan", "Plan"],
             ["timer", "Sayaç"],
             ["alarms", "Hatırlatıcılar"],
@@ -159,6 +162,7 @@ export default function ChildPage() {
       {tab === "apps" && <AppsTab childId={child.id} />}
       {tab === "program" && <ProgramTab childId={child.id} />}
       {tab === "time" && <TimeTab childId={child.id} />}
+      {tab === "videos" && <VideosTab childId={child.id} />}
       {tab === "plan" && <PlanTab childId={child.id} />}
       {tab === "report" && <ReportTab childId={child.id} />}
       {tab === "grades" && <GradesTab childId={child.id} />}
@@ -304,43 +308,6 @@ function ParentModeCard({ childId }: { childId: string }) {
 // ---------------------------------------------------------------------------
 
 const GROUPS: AppGroup[] = ["always_open", "unlimited", "timed", "blocked"];
-
-type Mode3 = "rules" | "always_open" | "kiosk" | "blocked";
-const MODES: Mode3[] = ["rules", "always_open", "kiosk", "blocked"];
-const MODE3_LABEL: Record<Mode3, string> = { rules: "Kurallara göre", always_open: "Her zaman açık", kiosk: "Kiosk", blocked: "Hep kapalı" };
-const mode3 = (a: Pick<ChildApp, "app_group" | "kiosk">): Mode3 =>
-  a.kiosk ? "kiosk" : a.app_group === "always_open" ? "always_open" : a.app_group === "blocked" ? "blocked" : "rules";
-/** Kiosk: kilitliyken Orbit ekranından açılır, hiçbir zaman süreden düşmez (always_open + kiosk). */
-const fromMode3 = (m: Mode3): Partial<ChildApp> =>
-  m === "kiosk" ? { app_group: "always_open", kiosk: true } : { app_group: m === "rules" ? "timed" : m, kiosk: false };
-
-function KioskWindows({ app, onSave }: { app: ChildApp; onSave: (w: KioskWindow[]) => void }) {
-  const wins = app.kiosk_windows ?? [];
-  const [add, setAdd] = useState<KioskWindow | null>(null);
-  return (
-    <div className="kiosk-wins">
-      <span className="muted tiny">Kiosk saatleri:</span>
-      {wins.length === 0 && <span className="chip-lite">Her zaman</span>}
-      {wins.map((w, i) => (
-        <span className="chip-lite" key={i}>
-          {w.start}–{w.end}
-          <button type="button" className="link-btn" aria-label="Aralığı sil" onClick={() => onSave(wins.filter((_, j) => j !== i))}>×</button>
-        </span>
-      ))}
-      {add ? (
-        <span className="row gap-s">
-          <TimeField value={add.start} onChange={(v) => setAdd({ ...add, start: v })} label="Başlangıç" />
-          <TimeField value={add.end} onChange={(v) => setAdd({ ...add, end: v })} label="Bitiş" />
-          <button type="button" className="btn small" disabled={!add.start || !add.end || add.start === add.end}
-            onClick={() => { onSave([...wins, add]); setAdd(null); }}>Ekle</button>
-          <button type="button" className="link-btn" onClick={() => setAdd(null)}>Vazgeç</button>
-        </span>
-      ) : (
-        <button type="button" className="link-btn" onClick={() => setAdd({ start: "07:00", end: "22:00" })}>+ Aralık</button>
-      )}
-    </div>
-  );
-}
 
 function AppsTab({ childId }: { childId: string }) {
   const fam = useFamily();

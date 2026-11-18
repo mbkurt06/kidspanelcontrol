@@ -108,8 +108,8 @@ fun Ring(remaining: Float, color: Color, size: Dp, content: @Composable () -> Un
 @Composable
 fun AppIcon(pkg: String, size: Dp) {
     val ctx = LocalContext.current
-    if (pkg.startsWith(app.orbit.data.WebApps.PREFIX)) {
-        val video = app.orbit.data.WebApps.byPkg(pkg)?.isVideos == true
+    if (pkg.startsWith(app.orbit.data.WebApps.PREFIX) || pkg.startsWith(app.orbit.data.Videos.PREFIX)) {
+        val video = pkg.startsWith(app.orbit.data.Videos.PREFIX) || app.orbit.data.WebApps.byPkg(pkg)?.isVideos == true
         Box(Modifier.size(size).clip(RoundedCornerShape(12.dp)).background(if (video) Color(0xFFE53935) else C.blue), contentAlignment = Alignment.Center) {
             Text(if (video) "▶" else "🌐", color = Color.White, fontSize = (size.value * 0.45f).sp)
         }
@@ -154,14 +154,21 @@ fun Info(text: String) {
 
 fun launch(ctx: Context, pkg: String): Boolean {
     if (pkg.startsWith(app.orbit.data.WebApps.PREFIX)) return openWebApp(ctx, pkg)
+    if (pkg.startsWith(app.orbit.data.Videos.PREFIX)) return openVideoList(ctx, pkg.removePrefix(app.orbit.data.Videos.PREFIX), null)
     val i = ctx.packageManager.getLaunchIntentForPackage(pkg) ?: return false
     i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     return runCatching { ctx.startActivity(i); true }.getOrDefault(false)
 }
 
-/** Web uygulamasını aç (Orbit içi tarayıcı; Gecko'suz derlemede yoksa false) */
+/** Web uygulamasını aç (Orbit içi tarayıcı) */
 fun openWebApp(ctx: Context, pkg: String): Boolean = runCatching {
-    ctx.startActivity(Intent().setClassName(ctx, "app.orbit.ui.WebActivity").putExtra("id", pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    ctx.startActivity(Intent(ctx, WebActivity::class.java).putExtra("id", pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    true
+}.getOrDefault(false)
+
+/** Video listesini oynatıcıda aç (videoId verilmezse ilk izlenmemiş) */
+fun openVideoList(ctx: Context, listId: String, videoId: String?): Boolean = runCatching {
+    ctx.startActivity(Intent(ctx, VideoPlayerActivity::class.java).putExtra("list", listId).putExtra("video", videoId).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     true
 }.getOrDefault(false)
 

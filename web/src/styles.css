@@ -2516,3 +2516,10 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .web-visit { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; padding: 6px 0; border-top: 1px solid var(--line); word-break: break-all; }
 .web-visit.blocked .small { color: var(--bad, #FF5D6C); }
 .app-setting-name .link-btn { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; padding: 2px 0; }
+
+/* Videolar */
+.video-list { border-top: 1px solid var(--line); padding: 10px 0; display: flex; flex-direction: column; gap: 8px; }
+.video-list > .row { cursor: pointer; }
+.video-items { display: flex; flex-direction: column; gap: 6px; }
+.upload-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.upload-row progress { flex: 1 1 120px; }

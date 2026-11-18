@@ -81,6 +81,18 @@ object Sync {
                 val agenda = async(Dispatchers.IO) { runCatching { Api.get("agenda_items?child_id=eq.$child&select=*&order=due_date.asc,due_time.asc,entered_at.desc") }.getOrElse { JSONArray() } }
                 // Web sayfaları / video listeleri (Orbit içinde uygulama gibi açılır)
                 launch(Dispatchers.IO) { runCatching { WebApps.store(Api.get("web_apps?select=*")) } }
+                // Videolarım: listeler, videolar, bu çocuğun ayarları ve ilerlemesi; sonra arka planda indirme
+                launch(Dispatchers.IO) {
+                    runCatching {
+                        Videos.store(
+                            Api.get("video_lists?select=id,name,emoji,sort&order=sort.asc,created_at.asc"),
+                            Api.get("videos?select=id,list_id,title,size_bytes,duration_sec,thumb,sort,status,created_at&order=sort.asc,created_at.asc"),
+                            Api.get("child_video_settings?child_id=eq.$child&select=*"),
+                            Api.get("video_progress?child_id=eq.$child&select=video_id,position_sec,duration_sec,watched,removed,updated_at"),
+                        )
+                        Thread { Videos.sync() }.start()
+                    }
+                }
 
                 JSONObject()
                     .put("timezone", tz)

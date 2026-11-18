@@ -83,7 +83,6 @@ export default function WebAppsCard({ childId, onChanged, editId, onEditDone }: 
       ))}
       <div className="row gap-s" style={{ marginTop: 10, flexWrap: "wrap" }}>
         <button className="btn small" onClick={() => setEdit(blank("site"))}>＋ Web sayfası</button>
-        <button className="btn small" onClick={() => setEdit(blank("videos"))}>＋ YouTube video listesi</button>
       </div>
       {edit && (
         <WebAppDialog

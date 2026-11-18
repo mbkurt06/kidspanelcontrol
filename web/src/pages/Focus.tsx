@@ -10,6 +10,7 @@ type AppRow = { package: string; label: string };
 const MENU_OPTIONS: [string, string][] = [
   ["tasks", "✅ Görevler"],
   ["plan", "📋 Planım"],
+  ["videos", "🎬 Videolarım"],
   ["agenda", "🗓 Ajanda"],
   ["grades", "📝 Notlarım"],
   ["vocab", "📚 Kelime kartları"],

@@ -77,6 +77,7 @@ enum class Screen(val icon: String, val title: String) {
     TIMER("⏱", "Sayaç"),
     ALARMS("⏰", "Alarmlarım"),
     MUSIC("🎵", "Müzik"),
+    VIDEOS("🎬", "Videolarım"),
     WALLET("⏳", "Süre cüzdanı"),
     ASK("🙋", "Ebeveynden iste"),
     PROFILE("👤", "Profil"),
@@ -256,6 +257,7 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
                     Screen.MESSAGES -> Unit
                     Screen.TIMER -> TimerScreen()
                     Screen.MUSIC -> MusicScreen()
+                    Screen.VIDEOS -> VideosScreen()
                     Screen.VOCAB -> VocabScreen()
                     Screen.AGENDA -> Unit
                     Screen.ALARMS -> Unit

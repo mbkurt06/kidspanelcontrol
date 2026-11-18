@@ -6,8 +6,6 @@ plugins {
 
 // Sürüm numarası GitHub derlemesinden gelir (her derleme bir artar)
 val orbitVersionCode: Int = (System.getenv("ORBIT_VERSION_CODE") ?: "1").toInt()
-// Gecko (Orbit içi tarayıcı) olmadan küçük derleme: app/no-gecko dosyası varsa (eski sürümlerin güncellemesi için köprü)
-val geckoOn: Boolean = !file("no-gecko").exists()
 val keystoreFile: File? = System.getenv("ORBIT_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
 
 android {
@@ -37,22 +35,7 @@ android {
         }
     }
 
-    // Telefonlara göre ayrı APK: 64-bit (arm64-v8a) ve 32-bit (armeabi-v7a, ör. Redmi 13C). Gecko her ikisini de içerir.
-    // Sadece sürüm derlemesinde; hata ayıklama derlemesi tek APK (emülatör testi için x86_64 dahil).
-    val releaseBuild = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
-    splits {
-        abi {
-            isEnable = releaseBuild
-            reset()
-            include("armeabi-v7a", "arm64-v8a")
-            isUniversalApk = false
-        }
-    }
-
     buildTypes {
-        debug {
-            if (!releaseBuild) ndk { abiFilters += listOf("x86_64", "arm64-v8a") }
-        }
         release {
             isMinifyEnabled = false
             signingConfig = if (keystoreFile != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
@@ -70,19 +53,16 @@ android {
         compose = true
         buildConfig = true
     }
-    // Gecko'nun getirdiği yeni lifecycle kütüphanesindeki lint kuralı bu AGP sürümünde çöküyor: sürüm derlemesinde lint atlanır
+    // Sürüm derlemesinde lint atlanır (bazı kütüphane kuralları bu AGP sürümünde çökebiliyor)
     lint {
         checkReleaseBuilds = false
         abortOnError = false
     }
-    if (geckoOn) sourceSets.getByName("main").java.srcDir("src/gecko/java")
     testOptions {
         unitTests.isReturnDefaultValues = true
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        // Gecko motorunun yerel kütüphaneleri sıkıştırılsın (APK ~100 MB daha küçük; güncelleme indirmesi kısalır)
-        jniLibs.useLegacyPackaging = true
     }
 }
 
@@ -108,9 +88,8 @@ dependencies {
     implementation("androidx.camera:camera-video:$camerax")
     implementation("androidx.camera:camera-view:$camerax")
     implementation("com.google.zxing:core:3.5.3")
-    // Web sayfaları / YouTube için Gecko motoru (Google girişi kabul edilir); çocuk telefonları arm64
-    // Tüm işlemci türlerini içeren paket; ABI bölmesi her APK'ya yalnız kendi kütüphanelerini koyar
-    if (geckoOn) implementation("org.mozilla.geckoview:geckoview:140.0.20250707120347")
+    // Videolarım: oynatıcı ekranı
+    implementation("androidx.media3:media3-ui:1.4.1")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

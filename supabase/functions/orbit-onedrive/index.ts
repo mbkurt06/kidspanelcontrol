@@ -8,6 +8,9 @@
 // POST {action:"urls"}         ebeveyn: kanıt yolları → oynatılabilir/görüntülenebilir geçici adresler
 // POST {action:"session"}      telefon: büyük dosya yükleme oturumu (parça parça, kaldığı yerden); folder verilirse o klasöre
 // POST {action:"delete"}       sunucu (x-orbit-hook): silinecek öğeler
+// POST {action:"video_session"} ebeveyn: video yükleme oturumu (Videolar/<liste>/<dosya>); tarayıcı parça parça yükler
+// POST {action:"video_url"}    telefon: videonun geçici indirme adresi (ailesinin videosu)
+// POST {action:"video_delete"} ebeveyn: videoyu OneDrive'dan sil
 import { createClient } from "npm:@supabase/supabase-js@2";
 
 const SB = Deno.env.get("SUPABASE_URL")!;
@@ -164,6 +167,42 @@ Deno.serve(async (req) => {
       const j = await r.json();
       if (!r.ok) throw new HttpErr(502, `session_failed: ${j.error?.message ?? r.status}`);
       return json({ upload_url: j.uploadUrl, family_id: d.family_id });
+    }
+    if (action === "video_session") {
+      const fam = await parentFamily(req);
+      const token = await accessToken(fam);
+      const { data: list } = await admin.from("video_lists").select("name,family_id").eq("id", String(body.list_id ?? "")).maybeSingle();
+      if (!list || list.family_id !== fam) throw new HttpErr(404, "list_not_found");
+      const name = safe(String(body.name ?? `video-${Date.now()}.mp4`));
+      const rel = ["Videolar", safe(list.name), name].map(encodeURIComponent).join("/");
+      const r = await fetch(`${GRAPH}/me/drive/special/approot:/${rel}:/createUploadSession`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": "rename" } }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new HttpErr(502, `session_failed: ${j.error?.message ?? r.status}`);
+      return json({ upload_url: j.uploadUrl });
+    }
+    if (action === "video_url") {
+      const d = await device(req);
+      const { data: v } = await admin.from("videos").select("item_id,family_id").eq("id", String(body.video_id ?? "")).maybeSingle();
+      if (!v || v.family_id !== d.family_id || !v.item_id) throw new HttpErr(404, "video_not_found");
+      const token = await accessToken(d.family_id);
+      const r = await fetch(`${GRAPH}/me/drive/items/${encodeURIComponent(v.item_id)}?$select=id,size,@microsoft.graph.downloadUrl`, { headers: { Authorization: `Bearer ${token}` } });
+      const j = await r.json();
+      if (!r.ok) throw new HttpErr(502, `item_failed: ${j.error?.message ?? r.status}`);
+      return json({ url: j["@microsoft.graph.downloadUrl"], size: j.size });
+    }
+    if (action === "video_delete") {
+      const fam = await parentFamily(req);
+      const id = String(body.item_id ?? "");
+      if (!id) throw new HttpErr(400, "no_item");
+      const { data: v } = await admin.from("videos").select("family_id").eq("item_id", id).maybeSingle();
+      if (v && v.family_id !== fam) throw new HttpErr(403, "forbidden");
+      const token = await accessToken(fam);
+      const r = await fetch(`${GRAPH}/me/drive/items/${encodeURIComponent(id)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+      return json({ ok: r.ok || r.status === 404 });
     }
     if (action === "delete") {
       const { data: cfg } = await admin.rpc("server_config");

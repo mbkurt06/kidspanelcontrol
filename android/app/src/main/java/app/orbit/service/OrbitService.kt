@@ -194,6 +194,7 @@ class OrbitService : Service() {
         app.orbit.data.Notifier.init(this)
         app.orbit.data.Alarms.init(this)
         app.orbit.data.Plan.init(this)
+        app.orbit.data.Videos.init(this)
         AlarmReceiver.channels(this)
         scope.launch(Dispatchers.IO) { runCatching { app.orbit.data.Alarms.reschedule(force = true) } }
         // Panelden gelen değişiklikleri anında almak için canlı bağlantı
@@ -445,7 +446,9 @@ class OrbitService : Service() {
         }
         // Web sayfaları ve video listeleri: uygulama gibi kutucuk
         for ((pkg, a) in rules.apps) {
-            if (!pkg.startsWith(app.orbit.data.WebApps.PREFIX) || !a.approved || app.orbit.data.WebApps.byPkg(pkg) == null) continue
+            val virtual = (pkg.startsWith(app.orbit.data.WebApps.PREFIX) && app.orbit.data.WebApps.byPkg(pkg) != null) ||
+                (pkg.startsWith(app.orbit.data.Videos.PREFIX) && app.orbit.data.Videos.byPkg(pkg) != null)
+            if (!virtual || !a.approved) continue
             val v = engine.verdict(pkg, snap, usage)
             verdicts[pkg] = v
             if (v.allowed) allowed += pkg to a.label
@@ -475,7 +478,7 @@ class OrbitService : Service() {
             ok += kioskPkgs
             if (captureOn) ok += listOf("com.android.permissioncontroller", "com.google.android.permissioncontroller")
             if (rules.kiosk.calls == "all") runCatching { getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull()?.let { ok += it }
-            if (fg != null && fg.startsWith(app.orbit.data.WebApps.PREFIX) && fg !in ok) app.orbit.data.WebApps.requestClose(fg, "Telefon kilitli")
+            if (fg != null && isVirtual(fg) && fg !in ok) app.orbit.data.WebApps.requestClose(fg, "Telefon kilitli")
             if (interactive && fg != null && fg !in ok && nowMs - lastKioskFront > 2_000) {
                 lastKioskFront = nowMs
                 runCatching {
@@ -516,10 +519,10 @@ class OrbitService : Service() {
             val v = verdicts[fg] ?: engine.verdict(fg, snap, usage)
             if (!v.allowed) {
                 lockReason = v.reason ?: lockReason
-                if (fg.startsWith(app.orbit.data.WebApps.PREFIX)) app.orbit.data.WebApps.requestClose(fg, v.reason ?: "")
+                if (isVirtual(fg)) app.orbit.data.WebApps.requestClose(fg, v.reason ?: "")
                 showLock(v.reason ?: "Bu uygulama şu an kapalı", fg, nowMs)
                 // Listede olmayan (ana ekranda simgesi olmayan) uygulama açıldı: panelin uygulama listesine ekle
-                if (rules.apps[fg] == null && !fg.startsWith(app.orbit.data.WebApps.PREFIX)) {
+                if (rules.apps[fg] == null && !isVirtual(fg)) {
                     val seen = Store.prefs().getStringSet("seenPkgs", emptySet())!!
                     if (fg !in seen) {
                         Store.prefs().edit().putStringSet("seenPkgs", seen + fg).apply()
@@ -728,6 +731,9 @@ class OrbitService : Service() {
             lastEventTs = maxOf(lastEventTs, e.timeStamp)
         }
     }
+
+    /** Orbit içindeki sanal uygulamalar: web sayfası ve video listesi */
+    private fun isVirtual(pkg: String) = pkg.startsWith(app.orbit.data.WebApps.PREFIX) || pkg.startsWith(app.orbit.data.Videos.PREFIX)
 
     private fun showLock(reason: String, pkg: String, nowMs: Long) {
         // Aynı uygulama için en fazla 1,5 sn'de bir aç

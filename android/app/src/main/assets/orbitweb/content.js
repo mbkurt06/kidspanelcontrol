@@ -1,6 +1,9 @@
-/* Orbit Web: YouTube sadeleştirme, izinsiz bağlantı engeli, kasadan giriş. Uygulama ile "orbit" kanalından konuşur. */
+/* Orbit Web: izinsiz bağlantı engeli, kasadan giriş. Orbit WebView'i her sayfaya ekler; OrbitBridge ile konuşur. */
 (() => {
-  const send = (m) => browser.runtime.sendNativeMessage("orbit", m).catch(() => null);
+  if (window.__orbitWeb) return;
+  window.__orbitWeb = true;
+  // Orbit köprüsü (Android WebView addJavascriptInterface): senkron, JSON metin döner
+  const send = (m) => { try { const r = window.OrbitBridge && window.OrbitBridge.call(JSON.stringify(m)); return Promise.resolve(r ? JSON.parse(r) : null); } catch (e) { return Promise.resolve(null); } };
   let cfg = null;
 
   const css = (text) => {
@@ -56,12 +59,11 @@
 
   // window.open ile yeni pencere: izinliyse aynı sayfada aç
   try {
-    const page = window.wrappedJSObject;
-    exportFunction(function (url) {
+    window.open = function (url) {
       if (url && allowedHref(String(url))) location.href = new URL(String(url), location.href).href;
       else if (url) send({ t: "blocked", url: String(url) });
       return null;
-    }, page, { defineAs: "open" });
+    };
   } catch (e) {}
 
   // --- Video bitti / sıradaki ---

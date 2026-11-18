@@ -94,7 +94,11 @@ jobs:
             curl -sS -f -X POST "https://pwxbrkbljcknstjbccwu.supabase.co/storage/v1/object/orbit-install/orbit.apk" \
               -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" \
               -H "x-upsert: true" -H "Content-Type: application/vnd.android.package-archive" -H "Cache-Control: no-cache" \
-              --data-binary "@orbit-$ORBIT_VERSION_CODE.apk" > /dev/null
+              --data-binary "@orbit-$ORBIT_VERSION_CODE.apk" > /dev/null || {
+              # Ücretsiz planda dosya sınırı 50 MB: büyük APK yedek depoya sığmazsa GitHub sürümünü göster
+              echo "Supabase yuklemesi basarisiz (boyut?): yedek adres GitHub surumu" >&2
+              URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/orbit-v$ORBIT_VERSION_CODE/orbit-$ORBIT_VERSION_CODE.apk"
+            }
           fi
           python3 - <<PY
           import json, os

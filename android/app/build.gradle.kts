@@ -58,6 +58,8 @@ android {
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        // Gecko motorunun yerel kütüphaneleri sıkıştırılsın (APK ~100 MB daha küçük; güncelleme indirmesi kısalır)
+        jniLibs.useLegacyPackaging = true
     }
 }
 
@@ -83,6 +85,8 @@ dependencies {
     implementation("androidx.camera:camera-video:$camerax")
     implementation("androidx.camera:camera-view:$camerax")
     implementation("com.google.zxing:core:3.5.3")
+    // Web sayfaları / YouTube için Gecko motoru (Google girişi kabul edilir); çocuk telefonları arm64
+    implementation("org.mozilla.geckoview:geckoview-arm64-v8a:140.0.20250707120347")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

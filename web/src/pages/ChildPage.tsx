@@ -17,6 +17,7 @@ import { MinuteStepper } from "../components/MinuteStepper";
 import TimerTab from "./TimerTab";
 import GradesTab from "./GradesTab";
 import PlanTab from "./PlanTab";
+import WebAppsCard from "./WebAppsCard";
 import PhoneSettingsTab from "./PhoneSettingsTab";
 import { currentSectionFor, hm, mins, nowBerlin, suggestGroup, timedPossible } from "../lib/sections";
 
@@ -353,6 +354,8 @@ function AppsTab({ childId }: { childId: string }) {
   useEffect(() => { try { sessionStorage.setItem("orbit.appGroupsOpen", JSON.stringify(openGroups)); } catch { /* yok */ } }, [openGroups]);
   const [err, setErr] = useState("");
   const [pendingGroup, setPendingGroup] = useState<Record<string, string>>({});
+  const [webEdit, setWebEdit] = useState<string | null>(null);
+  const webDone = useCallback(() => setWebEdit(null), []);
 
   const load = useCallback(async () => {
     const { data, error } = await supabase.from("child_apps").select("*").eq("child_id", childId).order("label");
@@ -431,6 +434,7 @@ function AppsTab({ childId }: { childId: string }) {
     <div className="stack">
       {err && <p className="error">{err}</p>}
       <input className="search" placeholder="Uygulama ara" value={q} onChange={(e) => setQ(e.target.value)} />
+      <WebAppsCard childId={childId} onChanged={() => { load(); fam.reload(); }} editId={webEdit} onEditDone={webDone} />
       {pending.length > 0 && (
         <div className="card attention">
           <h2>Onay bekleyen ({pending.length}) <Info>Grubunu seçip onayla. “Kurallara göre” uygulamalar grubunun bölüm kurallarına uyar. “Kiosk” uygulamalar telefon kilitliyken de Orbit ekranından açılır ve süreden düşmez.</Info></h2>
@@ -477,8 +481,10 @@ function AppsTab({ childId }: { childId: string }) {
             {(openGroups[g.id] ?? false) && list.map((a) => (
               <div className="app-setting-row" key={a.package}>
                 <div className="app-setting-name">
-                  <b>{a.label}</b>
-                  <div className="muted tiny">{a.package}</div>
+                  <b>{a.package.startsWith("web:") ? "🌐 " : ""}{a.label}</b>
+                  {a.package.startsWith("web:")
+                    ? <button className="link-btn tiny" onClick={() => setWebEdit(a.package)}>⚙ Site ayarları</button>
+                    : <div className="muted tiny">{a.package}</div>}
                 </div>
                 <div className="app-setting-controls">
                   {groupSelect(fam.members[a.package] ?? "", (v) => setGroup(a.package, v))}

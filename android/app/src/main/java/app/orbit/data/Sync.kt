@@ -14,6 +14,7 @@ import java.time.Instant
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 
 /** Sunucu ile alışveriş: kuralları çek, durumu ve kullanımı gönder, komutları onayla. */
 object Sync {
@@ -78,6 +79,8 @@ object Sync {
                 val tasks = async(Dispatchers.IO) { runCatching { JSONArray(Api.rpc("device_tasks", JSONObject().put("p_day", taskDay))) }.getOrElse { JSONArray() } }
                 val deviceSettings = async(Dispatchers.IO) { runCatching { Api.get("device_settings?child_id=eq.$child&select=desired") }.getOrElse { JSONArray() } }
                 val agenda = async(Dispatchers.IO) { runCatching { Api.get("agenda_items?child_id=eq.$child&select=*&order=due_date.asc,due_time.asc,entered_at.desc") }.getOrElse { JSONArray() } }
+                // Web sayfaları / video listeleri (Orbit içinde uygulama gibi açılır)
+                launch(Dispatchers.IO) { runCatching { WebApps.store(Api.get("web_apps?child_id=eq.$child&select=*")) } }
 
                 JSONObject()
                     .put("timezone", tz)

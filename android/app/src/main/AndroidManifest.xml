@@ -106,6 +106,15 @@
             android:excludeFromRecents="true"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- Orbit içi web sayfası / video listesi (adres çubuğu yok) -->
+        <activity
+            android:name=".ui.WebActivity"
+            android:exported="false"
+            android:taskAffinity="app.orbit.web"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode|density"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.Orbit" />
+
         <activity
             android:name=".ui.CaptureActivity"
             android:exported="false"

@@ -347,7 +347,22 @@ function ChildCard({ child }: { child: Child }) {
     const [h, m] = new Date(manualLock.from!).toLocaleTimeString("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hour12: false }).split(":").map(Number);
     return (h % 24) * 60 + m;
   })() : null;
-  const baseEnd = extWin ? (extWin.window_end.startsWith("23:59") ? 1439 : mins(extWin.window_end)) : shortenAt != null ? shortenAt : openEndToday ? mins(openEndToday) : sec ? mins(sec.end_time) : nowBerlin().minute;
+  // Şu an açık bir bölümdeyse telefon, arka arkaya gelen açık bölümlerin sonunda kapanır
+  // (ör. 06:40–06:50 Serbest, sonra kapalı: 21:00 değil 06:50)
+  const runEnd = (() => {
+    if (!sec || !(timedPossible(sec, fam.sectionRules) || sec.default_rule === "open")) return null;
+    const same = fam.sections.filter((x) => x.profile_id === sec.profile_id);
+    let end = mins(sec.end_time);
+    if (end <= mins(sec.start_time)) return null;
+    for (let guard = 0; guard < 24; guard++) {
+      const next = same.find((x) => mins(x.start_time) === end && mins(x.end_time) > end && (timedPossible(x, fam.sectionRules) || x.default_rule === "open"));
+      if (!next) break;
+      end = mins(next.end_time);
+    }
+    return end;
+  })();
+  const dayOpenEnd = openEndToday ? (runEnd != null && runEnd < mins(openEndToday) ? runEnd : mins(openEndToday)) : null;
+  const baseEnd = extWin ? (extWin.window_end.startsWith("23:59") ? 1439 : mins(extWin.window_end)) : shortenAt != null ? shortenAt : dayOpenEnd != null ? dayOpenEnd : sec ? mins(sec.end_time) : nowBerlin().minute;
   /** ⏰ hedef bitiş: bugünün 00:00'ından dakika (1440+ = yarın) */
   function extendPlan(): { end: string | null; abs: number; text: string } {
     const now = nowBerlin().minute;

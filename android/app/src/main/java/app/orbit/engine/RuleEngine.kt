@@ -540,7 +540,8 @@ class RuleEngine(private val rules: Rules) {
         val sectionPart = if (!timedPossible) 0L else (curLeft ?: UNLIMITED_SECONDS)
         var remaining = if (openSection) UNLIMITED_SECONDS else if (!timedPossible) 0L else (sectionPart + poolLeft).coerceAtMost(UNLIMITED_SECONDS)
         if (capLeft != null) remaining = minOf(remaining, capLeft)
-        var dayLeft = if (openSection || timedPossible || virtualWin) remaining else hakPool
+        // Serbest ("açık") bölüm süre saymaz: sol halka yine günün hakkını göstersin, sınırsız değil
+        var dayLeft = if (timedPossible || virtualWin) remaining else hakPool
         if (capLeft != null) dayLeft = minOf(dayLeft, capLeft)
 
         val allowance = when {

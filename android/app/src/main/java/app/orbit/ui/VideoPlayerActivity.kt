@@ -92,7 +92,7 @@ class VideoPlayerActivity : ComponentActivity() {
         })
 
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() { if (full) setFull(false) else finish() }
+            override fun handleOnBackPressed() { if (full) goFull(false) else finish() }
         })
 
         lifecycleScope.launch {
@@ -118,7 +118,7 @@ class VideoPlayerActivity : ComponentActivity() {
                                 player = this@VideoPlayerActivity.player
                                 setShowNextButton(false)
                                 setShowPreviousButton(false)
-                                setFullscreenButtonClickListener { setFull(it) }
+                                setFullscreenButtonClickListener { goFull(it) }
                             }
                         }, modifier = Modifier.fillMaxSize())
                     }
@@ -149,7 +149,7 @@ class VideoPlayerActivity : ComponentActivity() {
         player.playWhenReady = play
     }
 
-    private fun setFull(on: Boolean) {
+    private fun goFull(on: Boolean) {
         full = on
         val c = WindowInsetsControllerCompat(window, window.decorView)
         if (on) {

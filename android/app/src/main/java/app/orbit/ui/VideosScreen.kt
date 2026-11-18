@@ -81,6 +81,7 @@ fun VideosScreen() {
         return
     }
     st.note?.let { Muted("ⓘ $it", 13) }
+    Muted(if (Videos.onSdCard) "💾 Videolar hafıza kartında" else "📱 Videolar telefon hafızasında (hafıza kartı yok)", 12)
     for (l in lists) {
         val snap = live.snapshot
         val usage = live.usage

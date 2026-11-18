@@ -57,7 +57,39 @@ object Videos {
         }
     }
 
-    private fun dir(): File = File(ctx!!.filesDir, "videos").apply { mkdirs() }
+    /**
+     * Videoların yeri: takılıysa hafıza kartı (SD), yoksa telefonun kendi hafızası.
+     * Hafıza kartında uygulamaya ait klasör (Android/data/app.orbit/files/videos) izin istemez.
+     */
+    @Volatile private var cachedDir: File? = null
+    @Volatile var onSdCard = false
+        private set
+
+    private fun dir(): File {
+        cachedDir?.let { if (it.exists() || it.mkdirs()) return it }
+        val c = ctx!!
+        val sd = runCatching {
+            c.getExternalFilesDirs(null).filterNotNull().firstOrNull { d ->
+                android.os.Environment.isExternalStorageRemovable(d) && android.os.Environment.getExternalStorageState(d) == android.os.Environment.MEDIA_MOUNTED
+            }
+        }.getOrNull()
+        val d = (sd?.let { File(it, "videos") } ?: File(c.filesDir, "videos")).apply { mkdirs() }
+        onSdCard = sd != null && d.exists()
+        if (!d.exists()) return File(c.filesDir, "videos").apply { mkdirs() }.also { cachedDir = it; onSdCard = false }
+        // Önceden telefon hafızasına inmiş videoları karta taşı
+        if (onSdCard) runCatching {
+            val old = File(c.filesDir, "videos")
+            old.listFiles()?.filter { it.name.endsWith(".mp4") }?.forEach { f ->
+                val to = File(d, f.name)
+                if (!to.exists()) { f.copyTo(to); f.delete() } else f.delete()
+            }
+        }
+        cachedDir = d
+        return d
+    }
+
+    /** Kart takılıp çıkarılınca yeniden seçilsin */
+    fun resetDir() { cachedDir = null }
     fun file(id: String): File = File(dir(), "$id.mp4")
     private fun scanLocal(): Set<String> = (dir().listFiles() ?: emptyArray()).filter { it.name.endsWith(".mp4") }.map { it.name.removeSuffix(".mp4") }.toSet()
 
@@ -163,6 +195,7 @@ object Videos {
     fun sync() {
         if (ctx == null || !busy.compareAndSet(false, true)) return
         try {
+            resetDir()
             val s = _state.value
             val visible = visibleLists()
             val wanted = visible.flatMap { it.videos }.filter { s.progress[it.id]?.removed != true }
@@ -186,7 +219,7 @@ object Videos {
                 if (file(v.id).exists()) continue
                 val used = (dir().listFiles() ?: emptyArray()).sumOf { it.length() }
                 if (used + v.size > maxBytes) { _state.value = _state.value.copy(note = "Yer sınırı doldu (${"%.1f".format(s.settings.maxGb)} GB)"); break }
-                if (dir().usableSpace < v.size + 300L * 1_048_576) { _state.value = _state.value.copy(note = "Telefonda yer yok"); break }
+                if (dir().usableSpace < v.size + 300L * 1_048_576) { _state.value = _state.value.copy(note = if (onSdCard) "Hafıza kartında yer yok" else "Telefonda yer yok"); break }
                 if (s.settings.wifiOnly && !onWifi()) break
                 download(v)
             }

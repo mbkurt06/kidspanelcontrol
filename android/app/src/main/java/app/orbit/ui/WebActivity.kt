@@ -236,6 +236,8 @@ class WebActivity : ComponentActivity() {
         return u.buildUpon().appendQueryParameter(key, value).build().toString()
     }
 
+    private val blockedSubs = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
     private fun blocked(uri: String) {
         thread { WebApps.visit(app, uri, null, true) }
         runOnUiThread { Toast.makeText(this, "🚫 Bu sayfa izinli değil", Toast.LENGTH_SHORT).show() }
@@ -259,6 +261,8 @@ class WebActivity : ComponentActivity() {
             if (request.isForMainFrame || parent()) return null
             val u = request.url.toString()
             if (app.allowsSub(u)) return null
+            // Engellenen her yeni adres bir kez kaydedilir: panelde "＋ izin ver" ile açılabilir
+            request.url.host?.lowercase()?.let { h -> if (blockedSubs.add(h)) thread { WebApps.visit(app, "https://$h/", "Sıkı mod engelledi (sayfa parçası)", true) } }
             return WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), ByteArrayInputStream(ByteArray(0)))
         }
 

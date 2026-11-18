@@ -72,13 +72,26 @@ object LoginTester {
         var lastPage = began
         var done = false
         val web = WebView(ctx)
+        val subBlocked = ConcurrentHashMap.newKeySet<String>()
+        // Görünmez bir pencereye takılır: telefon sayfayı gerçekten çizer (yoksa bazı siteler formu hiç göstermez)
+        val wm = ctx.getSystemService(android.content.Context.WINDOW_SERVICE) as android.view.WindowManager
+        val attached = runCatching {
+            if (!android.provider.Settings.canDrawOverlays(ctx)) error("izin yok")
+            val lp = android.view.WindowManager.LayoutParams(720, 1280,
+                if (android.os.Build.VERSION.SDK_INT >= 26) android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY else @Suppress("DEPRECATION") android.view.WindowManager.LayoutParams.TYPE_PHONE,
+                android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                android.graphics.PixelFormat.TRANSLUCENT).apply { alpha = 0f }
+            wm.addView(web, lp)
+        }.isSuccess
         fun end(status: String, msg: String) {
             if (done) return
             done = true
             val url = web.url
+            val extra = if (subBlocked.isEmpty()) "" else " · Sıkı mod şunları engelledi: ${subBlocked.take(5).joinToString(", ")} (panelde Son ziyaretler → ＋ izin ver)"
+            if (attached) runCatching { wm.removeView(web) }
             runCatching { web.stopLoading(); web.destroy() }
             busy = false
-            Thread { finish(id, status, url, msg) }.start()
+            Thread { finish(id, status, url, msg + extra) }.start()
         }
         web.settings.javaScriptEnabled = true
         web.settings.domStorageEnabled = true
@@ -99,15 +112,20 @@ object LoginTester {
         web.webViewClient = object : WebViewClient() {
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean =
                 request.isForMainFrame && !app.allows(request.url.toString())
+            override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): android.webkit.WebResourceResponse? {
+                // Çocuğun telefonundaki gibi: sıkı modda başka sitelerden parça yüklenmez
+                if (request.isForMainFrame || app.allowsSub(request.url.toString())) return null
+                request.url.host?.lowercase()?.let { subBlocked.add(it) }
+                return android.webkit.WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0)))
+            }
             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) { lastPage = System.currentTimeMillis() }
             override fun onPageFinished(view: WebView, url: String?) {
                 lastPage = System.currentTimeMillis()
                 if (script.isNotEmpty()) view.evaluateJavascript(script, null)
             }
         }
-        // Görünmez ama boyutlu: sayfa düzeni (görünür alanlar) hesaplansın
-        web.measure(View.MeasureSpec.makeMeasureSpec(720, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(1280, View.MeasureSpec.EXACTLY))
-        web.layout(0, 0, 720, 1280)
+        if (!attached) web.measure(View.MeasureSpec.makeMeasureSpec(720, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(1280, View.MeasureSpec.EXACTLY))
+        if (!attached) web.layout(0, 0, 720, 1280)
         web.loadUrl(start)
 
         val check = object : Runnable {

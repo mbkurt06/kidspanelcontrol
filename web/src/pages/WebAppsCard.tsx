@@ -253,8 +253,8 @@ function WebAppDialog({ childId, value, onClose, onSaved }: { childId: string; v
           {value.id && !isVideos && w.login_mode !== "off" && <WebLogins webAppId={value.id} siteUrl={w.url ?? ""} title={w.title ?? ""} />}
 
           {visits && visits.length > 0 && (
-            <details className="web-more">
-              <summary><b>Son ziyaretler ({visits.length})</b></summary>
+            <details className="web-more" open={visits.some((v) => v.blocked) || undefined}>
+              <summary><b>Son ziyaretler ({visits.length})</b>{visits.some((v) => v.blocked) && <span className="error tiny"> · 🚫 engellenen adres var</span>}</summary>
               <div className="web-visits">
                 {visits.map((v) => (
                   <div key={v.id} className={`web-visit${v.blocked ? " blocked" : ""}`}>

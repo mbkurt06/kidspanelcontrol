@@ -35,6 +35,7 @@ object WebApps {
         val safeSearch: Boolean,
         val rememberLogin: Boolean,
         val loginMode: String,
+        val loginUrl: String = "",
     ) {
         val pkg get() = PREFIX + id
         val isVideos get() = kind == "videos"
@@ -120,6 +121,7 @@ object WebApps {
                 o.optBoolean("autoplay", true), o.optBoolean("loop"), o.optBoolean("strict", true), o.optBoolean("history", true),
                 o.optBoolean("downloads"), o.optBoolean("media"), o.optBoolean("fullscreen", true), o.optBoolean("safe_search", true),
                 o.optBoolean("remember_login", true), o.optString("login_mode", "auto"),
+                o.optString("login_url").takeIf { !o.isNull("login_url") } ?: "",
             )
         }.getOrNull()
     }.associateBy { it.id }
@@ -145,9 +147,27 @@ object WebApps {
         }.onFailure { Log.w(TAG, "ziyaret kaydedilemedi", it) }
     }
 
+    /** Panelde bu çocuk için seçilen giriş: web_app_id → (mode: auto|entry|off, entry_id) */
+    private val logins = MutableStateFlow<Map<String, Pair<String, String?>>>(emptyMap())
+
+    fun storeLogins(arr: JSONArray) {
+        logins.value = (0 until arr.length()).associate { i ->
+            val o = arr.getJSONObject(i)
+            o.optString("web_app_id") to (o.optString("mode", "auto") to o.optString("entry_id").takeIf { !o.isNull("entry_id") && it.isNotBlank() })
+        }
+        runCatching { Store.prefs().edit().putString("web.logins", arr.toString()).apply() }
+    }
+
+    private fun login(appId: String): Pair<String, String?> {
+        if (logins.value.isEmpty()) runCatching { Store.prefs().getString("web.logins", null)?.let { storeLogins(JSONArray(it)) } }
+        return logins.value[appId] ?: ("auto" to null)
+    }
+
     /** Kasadan bu siteye ait giriş bilgisi (kullanıcı adı, şifre) */
     fun credentials(app: App, host: String): Pair<String, String>? {
         if (app.loginMode == "off") return null
+        val (mode, entryId) = login(app.id)
+        if (mode == "off") return null
         val h = host.lowercase().removePrefix("www.")
         if (app.hosts().none { h == it || h.endsWith(".$it") }) return null
         val st = runCatching { Vault.open() }.getOrNull() as? Vault.State.Open ?: return null
@@ -156,6 +176,7 @@ object WebApps {
             val eh = hostOf(e.url) ?: return false
             return h == eh || h.endsWith(".$eh") || eh.endsWith(".$h")
         }
+        if (mode == "entry" && entryId != null) list.firstOrNull { it.id == entryId }?.let { return it.username to it.password }
         val e = list.firstOrNull { match(it) }
             ?: list.firstOrNull { e -> app.hosts().any { site -> hostOf(e.url)?.let { it == site || it.endsWith(".$site") } == true } }
             ?: return null

@@ -92,5 +92,5 @@ object Grades {
         return if (w > 0) sum / w else ok.sumOf { it.value } / ok.size
     }
 
-    fun show(g: String) = g.replace("-", "−")
+    fun show(g: String) = if (g.length == 3) g.replace("-", "–") else g.replace("-", "−")
 }

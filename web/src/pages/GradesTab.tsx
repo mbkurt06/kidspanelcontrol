@@ -15,7 +15,7 @@ type Grade = {
   note: string | null; photos: string[]; status: "pending" | "approved" | "rejected"; reject_note: string | null; created_at: string;
 };
 const COLORS = ["#378ADD", "#D85A30", "#1D9E75", "#7F77DD", "#D4537E", "#BA7517", "#639922", "#888780"];
-const show = (g: string) => g.replace("-", "−");
+const show = (g: string) => (g.length === 3 ? g.replace("-", "–") : g.replace("-", "−"));
 const dShort = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
 const fmt = (v: number | null) => (v == null ? "—" : v.toFixed(1).replace(".", ","));
 

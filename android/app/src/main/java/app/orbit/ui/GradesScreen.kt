@@ -187,7 +187,7 @@ private fun GradeForm(st: Grades.State, edit: Grades.Grade?, onClose: (String?) 
     var subject by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(edit?.subjectId) }
     var kind by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(edit?.kind) }
     var digit by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(edit?.grade?.take(1)?.toIntOrNull()) }
-    var mod by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(edit?.grade?.drop(1) ?: "") }
+    var mod by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(edit?.grade?.let { if (it.length == 3) "ara" else it.drop(1) } ?: "") }
     var dateText by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf((edit?.takenOn?.let { LocalDate.parse(it) } ?: today).toString()) }
     val date = LocalDate.parse(dateText)
     var note by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(edit?.note ?: "") }
@@ -220,13 +220,15 @@ private fun GradeForm(st: Grades.State, edit: Grades.Grade?, onClose: (String?) 
         }
         Muted("Not", 13)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            (1..6).forEach { d -> Box(Modifier.weight(1f)) { chip("$d", digit == d) { digit = d } } }
+            (1..6).forEach { d -> Box(Modifier.weight(1f)) { chip("$d", digit == d) { digit = d; if (d == 6 && mod == "ara") mod = "" } } }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             chip("+", mod == "+") { mod = "+" }
             chip("tam", mod == "") { mod = "" }
             chip("−", mod == "-") { mod = "-" }
-            digit?.let { Text("  →  ${Grades.show("$it$mod")}", color = C.text, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.align(Alignment.CenterVertically)) }
+            // Ara not: 1–2, 2–3 … (6 için yok)
+            chip(digit?.takeIf { it < 6 }?.let { "$it–${it + 1}" } ?: "ara", mod == "ara") { if ((digit ?: 1) < 6) mod = "ara" }
+            digit?.let { Text("  →  ${Grades.show(gradeText(it, mod))}", color = C.text, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.align(Alignment.CenterVertically)) }
         }
         Muted("Tarih", 13)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -269,7 +271,7 @@ private fun GradeForm(st: Grades.State, edit: Grades.Grade?, onClose: (String?) 
                                     val f = File(p)
                                     Grades.uploadPhoto(f.readBytes(), lvl, s!!.name, date.toString(), k!!, start + i).also { f.delete() }
                                 }
-                                Grades.save(edit?.id, s!!.id, k!!, "$d$mod", date.toString(), note.trim().ifBlank { null }, paths)
+                                Grades.save(edit?.id, s!!.id, k!!, gradeText(d, mod), date.toString(), note.trim().ifBlank { null }, paths)
                                 Grades.refresh()
                             }
                         }
@@ -285,3 +287,6 @@ private fun GradeForm(st: Grades.State, edit: Grades.Grade?, onClose: (String?) 
         }
     }
 }
+
+/** Seçilen rakam + ek → kayıt metni: "2", "2+", "2-", ara not "2-3" */
+private fun gradeText(d: Int, mod: String): String = if (mod == "ara") (if (d < 6) "$d-${d + 1}" else "$d") else "$d$mod"

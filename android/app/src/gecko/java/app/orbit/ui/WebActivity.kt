@@ -305,7 +305,7 @@ class WebActivity : ComponentActivity() {
 
     private fun safeSearch(uri: String): String? {
         if (!app.safeSearch) return null
-        val u = runCatching { Uri.parse(uri) }.getOrNull() ?: return null
+        val u = runCatching { Uri.parse(uri) }.getOrNull()?.takeIf { it.isHierarchical } ?: return null
         val h = u.host?.lowercase() ?: return null
         val path = u.path ?: ""
         val (key, value) = when {
@@ -350,6 +350,7 @@ class WebActivity : ComponentActivity() {
 
         override fun onLocationChange(session: GeckoSession, url: String?, perms: MutableList<GeckoSession.PermissionDelegate.ContentPermission>, hasUserGesture: Boolean) {
             val u = url ?: return
+            if (u.startsWith("about:")) return
             this@WebActivity.url = u
             // Sayfa içi (tek sayfa uygulaması) gezinme onLoadRequest'e uğramaz: izinsizse geri dön
             if (!parent() && !app.allows(u)) {

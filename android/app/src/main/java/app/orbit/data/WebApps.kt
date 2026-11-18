@@ -53,7 +53,7 @@ object WebApps {
         /** Üst sayfa (ana çerçeve) bu adrese gidebilir mi */
         fun allows(uri: String): Boolean {
             if (uri.startsWith("about:") || uri.startsWith("blob:") || uri.startsWith("data:")) return true
-            val u = runCatching { Uri.parse(uri) }.getOrNull() ?: return false
+            val u = runCatching { Uri.parse(uri) }.getOrNull()?.takeIf { it.isHierarchical } ?: return false
             if (u.scheme != "https" && u.scheme != "http") return false
             val h = (u.host ?: return false).lowercase()
             if (!isVideos) return hosts().any { h == it || h.endsWith(".$it") }
@@ -77,7 +77,8 @@ object WebApps {
         }
 
         fun indexOf(uri: String): Int {
-            val u = runCatching { Uri.parse(uri) }.getOrNull() ?: return -1
+            // about:blank gibi hiyerarşik olmayan adreslerde getQueryParameter hata fırlatır
+            val u = runCatching { Uri.parse(uri) }.getOrNull()?.takeIf { it.isHierarchical } ?: return -1
             val v = u.getQueryParameter("v")
             val list = u.getQueryParameter("list")
             return videos.indexOfFirst { (it.type == "playlist" && it.id == list) || (it.type == "video" && it.id == v) }

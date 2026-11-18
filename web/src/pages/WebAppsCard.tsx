@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { Info } from "../components/Info";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 
@@ -68,13 +69,7 @@ export default function WebAppsCard({ childId, onChanged, editId, onEditDone }: 
 
   return (
     <div className="card">
-      <div className="row between">
-        <h2 style={{ margin: 0 }}>Web sayfaları ve videolar</h2>
-      </div>
-      <p className="muted small" style={{ margin: "4px 0 10px" }}>
-        Bütün çocuklar için ortak liste. Telefonda Orbit içinde uygulama gibi açılır; adres çubuğu yoktur, başka siteye geçilemez.
-        Her çocukta durumu (Kurallara göre / Her zaman açık / Kiosk / Hep kapalı) aşağıdaki listede ayrı seçilir; yeni eklenen sayfa diğer çocuklarda "Hep kapalı" başlar ve telefonlarında görünmez.
-      </p>
+      <h2>Web sayfaları ve videolar <Info>Bütün çocuklar için ortak liste. Telefonda Orbit içinde uygulama gibi açılır; adres çubuğu yoktur, başka siteye geçilemez. Her çocukta durumu (Kurallara göre / Her zaman açık / Kiosk / Hep kapalı) aşağıdaki listede ayrı seçilir; yeni eklenen sayfa diğer çocuklarda "Hep kapalı" başlar ve telefonlarında görünmez.</Info></h2>
       {err && <p className="error">{err}</p>}
       {list.map((w) => (
         <button key={w.id} className="web-app-row" onClick={() => setEdit(w)}>
@@ -196,7 +191,7 @@ function WebAppDialog({ childId, value, onClose, onSaved }: { childId: string; v
               <label className="field"><span>Adres</span>
                 <input value={w.url ?? ""} onChange={(e) => set({ url: e.target.value })} placeholder="https://antolin.de" inputMode="url" autoCapitalize="off" />
               </label>
-              <label className="field"><span>İzinli ek siteler <span className="muted tiny">(her satıra bir; ör. giriş sayfası accounts.google.com)</span></span>
+              <label className="field"><span>İzinli ek siteler <Info>Her satıra bir site. Örneğin giriş başka bir adreste yapılıyorsa (accounts.google.com gibi) onu buraya ekle.</Info></span>
                 <textarea rows={2} value={domains} onChange={(e) => setDomains(e.target.value)} placeholder="westermann.de" autoCapitalize="off" />
               </label>
             </>
@@ -207,8 +202,8 @@ function WebAppDialog({ childId, value, onClose, onSaved }: { childId: string; v
               <div className="row gap-s">
                 <input className="grow" value={link} onChange={(e) => setLink(e.target.value)} placeholder="YouTube linkini yapıştır" onKeyDown={(e) => e.key === "Enter" && addVideo()} autoCapitalize="off" />
                 <button className="btn small" onClick={addVideo}>Ekle</button>
+                <Info>Video ya da oynatma listesi linki olur. Liste eklenirse içindeki videolar sırayla oynar.</Info>
               </div>
-              <span className="muted tiny">Video ya da oynatma listesi linki olur. Liste eklenirse içindeki videolar sırayla oynar.</span>
               {(w.videos ?? []).map((v, i) => (
                 <div className="web-video" key={v.id}>
                   {v.type === "video" ? <img src={`https://i.ytimg.com/vi/${v.id}/default.jpg`} alt="" /> : <span className="web-ico videos">📃</span>}
@@ -234,7 +229,7 @@ function WebAppDialog({ childId, value, onClose, onSaved }: { childId: string; v
               {!isVideos && <Toggle label="🔍 Güvenli arama" hint="Google, Bing, DuckDuckGo" value={!!w.safe_search} onChange={(v) => set({ safe_search: v })} />}
               <Toggle label="🍪 Girişi hatırla" hint="kapalıysa her açılışta çıkış yapılmış olur" value={!!w.remember_login} onChange={(v) => set({ remember_login: v })} />
               {!isVideos && (
-                <label className="field"><span>🔑 Kasadan giriş <span className="muted tiny">(Kasa'daki kaydın web sitesi alanı bu siteyle aynı olmalı)</span></span>
+                <label className="field"><span>🔑 Kasadan giriş <Info>Çocuğun Kasa'sındaki kaydın "web sitesi" alanı bu siteyle aynı olmalı; her çocuk kendi hesabıyla girer.</Info></span>
                   <select value={w.login_mode ?? "auto"} onChange={(e) => set({ login_mode: e.target.value as WebApp["login_mode"] })}>
                     <option value="auto">Otomatik giriş (doldur ve gönder)</option>
                     <option value="fill">Doldur, çocuk "Giriş"e bassın</option>
@@ -242,11 +237,9 @@ function WebAppDialog({ childId, value, onClose, onSaved }: { childId: string; v
                   </select>
                 </label>
               )}
-              <p className="muted tiny" style={{ margin: 0 }}>
-                {isVideos
-                  ? "YouTube hesabı (Premium): panelden ebeveyn modunu aç, telefonda listeyi aç, üstteki 👤 ile Google hesabına giriş yap, sonra ⟳. Giriş hatırlanır."
-                  : "Doğrulama ya da ilk giriş için panelden ebeveyn modunu aç: o sürede kısıtlar kalkar, telefonda girişi yap; sonra site girişi hatırlar."}
-              </p>
+              <span className="muted small">{isVideos ? "YouTube hesabıyla giriş" : "Doğrulama / ilk giriş"} <Info>{isVideos
+                ? "YouTube hesabı (Premium): panelden ebeveyn modunu aç, telefonda listeyi aç, üstteki 👤 ile Google hesabına giriş yap, sonra ⟳. Giriş hatırlanır."
+                : "Doğrulama ya da ilk giriş için panelden ebeveyn modunu aç: o sürede kısıtlar kalkar, telefonda girişi yap; sonra site girişi hatırlar."}</Info></span>
             </div>
           </details>
 

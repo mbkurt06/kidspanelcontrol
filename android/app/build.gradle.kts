@@ -58,6 +58,8 @@ android {
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        // Gecko motorunun yerel kütüphaneleri sıkıştırılsın (APK ~100 MB daha küçük; güncelleme indirmesi kısalır)
+        jniLibs.useLegacyPackaging = true
     }
 }
 

@@ -202,6 +202,8 @@ jobs:
           # QR ile kurulum icin imzali APK (panel sitesine konur)
           # GitHub dosya sınırı 100 MB: büyük APK rapor dalına konmaz (sürüm sayfasında var)
           for f in orbit-*.apk; do [ -f "$f" ] && [ "$(stat -c %s "$f")" -lt 95000000 ] && cp "$f" ../rapor/orbit.apk; done || true
+          # Vercel bu dalı derlemeye çalışmasın (yoksa "web klasörü yok" hata e-postası gelir)
+          mkdir -p ../rapor/web && echo '{"git":{"deploymentEnabled":false}}' > ../rapor/web/vercel.json
           cd ../rapor && git init -q -b ci-android && git add . && git -c user.name=ci -c user.email=ci@orbit commit -qm "build ${GITHUB_SHA::7}"
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-android
 
@@ -251,5 +253,6 @@ jobs:
         if: always()
         shell: bash
         run: |
-          mkdir -p shots && cd shots && git init -q -b ci-android-emu && git add . && git -c user.name=ci -c user.email=ci@orbit commit -qm "emu" --allow-empty
+          mkdir -p shots/web && echo '{"git":{"deploymentEnabled":false}}' > shots/web/vercel.json
+          cd shots && git init -q -b ci-android-emu && git add . && git -c user.name=ci -c user.email=ci@orbit commit -qm "emu" --allow-empty
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-android-emu

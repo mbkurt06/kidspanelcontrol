@@ -159,6 +159,12 @@ fun launch(ctx: Context, pkg: String): Boolean {
     return runCatching { ctx.startActivity(i); true }.getOrDefault(false)
 }
 
+/** Web uygulamasını aç (Orbit içi tarayıcı; Gecko'suz derlemede yoksa false) */
+fun openWebApp(ctx: Context, pkg: String): Boolean = runCatching {
+    ctx.startActivity(Intent().setClassName(ctx, "app.orbit.ui.WebActivity").putExtra("id", pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    true
+}.getOrDefault(false)
+
 fun goHome(ctx: Context) {
     runCatching {
         ctx.startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

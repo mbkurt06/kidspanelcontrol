@@ -521,9 +521,3 @@ class WebActivity : ComponentActivity() {
         }
     }
 }
-
-/** Web uygulamasını aç */
-fun openWebApp(ctx: Context, pkg: String): Boolean = runCatching {
-    ctx.startActivity(Intent(ctx, WebActivity::class.java).putExtra("id", pkg).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-    true
-}.getOrDefault(false)

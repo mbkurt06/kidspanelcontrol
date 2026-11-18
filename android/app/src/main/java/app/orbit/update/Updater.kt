@@ -50,8 +50,8 @@ object Updater {
             }
             if (url == null) { msg("Sürüm $version içinde APK yok", version, "APK bulunamadı"); return }
             msg("Sürüm $version indiriliyor", version)
-            install(ctx, download(url, token), version)
-        } catch (e: Exception) {
+            install(ctx, download(ctx, url, token), version)
+        } catch (e: Throwable) {
             Log.e(TAG, "güncelleme", e)
             msg("Hata: ${e.message}", error = e.message)
         }
@@ -81,8 +81,8 @@ object Updater {
                 d.disconnect(); d = open(next, null, "application/octet-stream"); step++
             }
             if (d.responseCode != 200) throw IllegalStateException("İndirme HTTP ${d.responseCode}")
-            install(ctx, d.inputStream.use { it.readBytes() }, version)
-        } catch (e: Exception) {
+            install(ctx, save(ctx, d), version)
+        } catch (e: Throwable) {
             Log.e(TAG, "güncelleme (genel)", e)
             msg("Hata: ${e.message}", error = e.message)
         }
@@ -98,7 +98,18 @@ object Updater {
         }
 
     /** GitHub dosya adresi başka sunucuya yönlendirir; yetki başlığı oraya gönderilmez. */
-    private fun download(addr: String, token: String): ByteArray {
+    /**
+     * APK belleğe değil dosyaya yazılır: büyük kurulum dosyası (Gecko ile ~120 MB) bellekte tutulunca
+     * küçük bellekli telefonlarda OutOfMemoryError olur ve indirme sessizce takılırdı.
+     */
+    private fun save(ctx: Context, c: HttpURLConnection): java.io.File {
+        val f = java.io.File(ctx.cacheDir, "orbit-update.apk")
+        f.delete()
+        c.inputStream.use { inp -> f.outputStream().use { out -> inp.copyTo(out, 256 * 1024) } }
+        return f
+    }
+
+    private fun download(ctx: Context, addr: String, token: String): java.io.File {
         var c = open(addr, token, "application/octet-stream")
         var step = 0
         while (c.responseCode in 300..399 && step < 5) {
@@ -108,10 +119,10 @@ object Updater {
             step++
         }
         if (c.responseCode != 200) throw IllegalStateException("İndirme HTTP ${c.responseCode}")
-        return c.inputStream.use { it.readBytes() }
+        return save(ctx, c)
     }
 
-    private fun install(ctx: Context, apk: ByteArray, version: Int) {
+    private fun install(ctx: Context, apk: java.io.File, version: Int) {
         Store.prefs().edit().putInt("updateTarget", version).apply()
         // Panelde "uygulama yükleme engelli" açıksa Orbit kendi güncellemesi için geçici kaldırır (bir dakika içinde geri gelir)
         app.orbit.device.PhoneSettings.allowSelfInstall(ctx)
@@ -120,7 +131,7 @@ object Updater {
         params.setAppPackageName(ctx.packageName)
         val id = pi.createSession(params)
         pi.openSession(id).use { s ->
-            s.openWrite("orbit.apk", 0, apk.size.toLong()).use { it.write(apk); s.fsync(it) }
+            s.openWrite("orbit.apk", 0, apk.length()).use { out -> apk.inputStream().use { it.copyTo(out, 256 * 1024) }; s.fsync(out) }
             val cb = PendingIntent.getBroadcast(ctx, id, Intent(ctx, InstallReceiver::class.java), PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
             s.commit(cb.intentSender)
         }

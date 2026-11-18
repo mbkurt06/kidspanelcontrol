@@ -30,7 +30,18 @@ object Updater {
     }
     @Volatile private var target = 0
 
+    private val busy = java.util.concurrent.atomic.AtomicBoolean(false)
+    @Volatile private var installStarted = 0L
+
+    /** Aynı anda tek kontrol/indirme: yoksa periyodik kontrol ve panel komutu aynı dosyayı birlikte indirir, yüzde zıplar */
     fun check(ctx: Context, installIfNew: Boolean = true) {
+        // Kurulum başlatıldıysa 3 dk bekle (Android kurarken yeniden indirme olmasın)
+        if (System.currentTimeMillis() - installStarted < 180_000) return
+        if (!busy.compareAndSet(false, true)) return
+        try { checkOnce(ctx, installIfNew) } finally { busy.set(false) }
+    }
+
+    private fun checkOnce(ctx: Context, installIfNew: Boolean) {
         Store.init(ctx)
         // Gizli depodan güncelleme için GitHub anahtarı panelden gelir (Ayarlar → Telefon güncellemeleri)
         runCatching { app.orbit.data.Api.rpc("device_update_token", org.json.JSONObject()).trim().trim('"') }.getOrNull()
@@ -154,6 +165,7 @@ object Updater {
 
     private fun install(ctx: Context, apk: java.io.File, version: Int) {
         Store.prefs().edit().putInt("updateTarget", version).apply()
+        installStarted = System.currentTimeMillis()
         // Panelde "uygulama yükleme engelli" açıksa Orbit kendi güncellemesi için geçici kaldırır (bir dakika içinde geri gelir)
         app.orbit.device.PhoneSettings.allowSelfInstall(ctx)
         val pi = ctx.packageManager.packageInstaller

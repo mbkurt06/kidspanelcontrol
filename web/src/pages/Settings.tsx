@@ -6,6 +6,7 @@ import { errorText, localDevice, supabase } from "../lib/supabase";
 import { relTime } from "../lib/util";
 import type { Device, ParentDevice } from "../lib/types";
 import { Info } from "../components/Info";
+import ContactsCard from "../components/ContactsCard";
 import { MinuteStepper } from "../components/MinuteStepper";
 import { TimeField } from "../components/DateTime";
 import type { CloudStatus } from "../lib/media";
@@ -116,6 +117,7 @@ export default function Settings() {
       {err && <p className="error">{err}</p>}
       {msg && <p className="ok">{msg}</p>}
 
+      <ContactsCard />
       <DayEndCard />
       <OneDriveCard />
       <UpdateTokenCard familyId={fam.familyId} />

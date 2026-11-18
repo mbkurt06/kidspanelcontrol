@@ -65,6 +65,7 @@ fun KioskToday(k: KioskNow, open: (Screen) -> Unit) {
         )
         live.snapshot?.let { TwoRings(it, k) }
     }
+    ContactsCard()
     // Ekranlar (Görevlerim, Planım, Ajanda…) hamburger menüde; burada yalnız açılabilen uygulamalar
     val ctx = androidx.compose.ui.platform.LocalContext.current
     Muted("Uygulamalar", 14)

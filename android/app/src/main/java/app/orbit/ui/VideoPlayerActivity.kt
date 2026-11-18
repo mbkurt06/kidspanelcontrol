@@ -59,7 +59,8 @@ class VideoPlayerActivity : ComponentActivity() {
     private var current by mutableStateOf<String?>(null)
     private var full by mutableStateOf(false)
     private var ask by mutableStateOf<Videos.Video?>(null)
-    private var resume by mutableStateOf<Pair<Videos.Video, Boolean>?>(null)
+    private var hint by mutableStateOf(false)
+    private val hideHint = Runnable { hint = false }
 
     private val tick = object : Runnable {
         override fun run() { save(false); ui.postDelayed(this, 5_000) }
@@ -77,18 +78,15 @@ class VideoPlayerActivity : ComponentActivity() {
         val st = Videos.state.value
         val want = intent.getStringExtra("video")
         val items = playable()
-        val start = items.firstOrNull { it.id == want } ?: Videos.resumeIn(l) ?: items.firstOrNull { st.progress[it.id]?.watched != true } ?: items.firstOrNull()
-        start?.let { load(it, play = want != null) }
+        // Liste açılınca hiçbir şey kendiliğinden oynamaz; ana ekranda bir videoya basıldıysa o video kaldığı yerden başlar
+        items.firstOrNull { it.id == want }?.let { load(it) }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
                 if (state != Player.STATE_ENDED) return
+                // Bitince durur; çocuk sıradakini listeden seçer
                 save(true)
-                // Sıradaki inmiş video
-                val ps = playable()
-                val i = ps.indexOfFirst { it.id == current }
-                ps.getOrNull(i + 1)?.let { load(it, play = true) }
             }
         })
 
@@ -122,38 +120,44 @@ class VideoPlayerActivity : ComponentActivity() {
                                 setFullscreenButtonClickListener { goFull(it) }
                             }
                         }, modifier = Modifier.fillMaxSize())
+                        if (hint) Text("⟲ Baştan başla", color = androidx.compose.ui.graphics.Color.White, fontSize = 14.sp,
+                            modifier = Modifier.align(Alignment.BottomStart).padding(12.dp).clip(RoundedCornerShape(16.dp))
+                                .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.6f)).clickable { restart() }
+                                .padding(horizontal = 12.dp, vertical = 8.dp))
                     }
                     if (!full) {
                         val now = vl.videos.firstOrNull { it.id == current }
-                        if (now != null) Text(now.title, color = C.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        if (now != null) Row(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(now.title, color = C.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Text("⟲ Baştan al", color = C.accent, fontSize = 14.sp,
+                                modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { restart() }.padding(horizontal = 10.dp, vertical = 8.dp))
+                        }
                         LazyColumn(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 10.dp)) {
                             items(vl.videos, key = { it.id }) { vid ->
-                                VideoRow(vid, st2, open = true, playing = vid.id == current, onAsk = { ask = it }) { load(vid, play = true) }
+                                VideoRow(vid, st2, open = true, playing = vid.id == current, onAsk = { ask = it }) { load(vid) }
                             }
                         }
                     }
                 }
                 DeleteAsk(ask, st2) { ask = null }
-                resume?.let { (v, _) ->
-                    val pos = st2.progress[v.id]?.position ?: 0
-                    androidx.compose.material3.AlertDialog(
-                        onDismissRequest = { resume = null; start(v, pos, true) },
-                        title = { Text(v.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
-                        text = { Muted("Bu videoyu ${dur(pos)}'de bırakmıştın.") },
-                        confirmButton = { androidx.compose.material3.TextButton(onClick = { resume = null; start(v, pos, true) }) { Text("▶ Kaldığım yerden (${dur(pos)})") } },
-                        dismissButton = { androidx.compose.material3.TextButton(onClick = { resume = null; start(v, 0, true) }) { Text("⟲ Baştan") } },
-                    )
-                }
             }
         }
     }
 
-    /** Kaldığı yer varsa sor: kaldığı yerden mi, baştan mı */
-    private fun load(v: Videos.Video, play: Boolean) {
+    /** YouTube gibi: kaldığı yerden başlar (izlenmişse baştan); 5 sn "Baştan başla" görünür */
+    private fun load(v: Videos.Video) {
         val pos = Videos.state.value.progress[v.id]?.takeIf { !it.watched }?.position ?: 0
-        if (pos > 10) { resume = v to play; return }
-        start(v, 0, play)
+        start(v, if (pos > 3) pos else 0, true)
+        ui.removeCallbacks(hideHint)
+        hint = pos > 10
+        if (hint) ui.postDelayed(hideHint, 5_000)
+    }
+
+    private fun restart() {
+        hint = false
+        player.seekTo(0)
+        player.play()
     }
 
     private fun start(v: Videos.Video, fromSec: Int, play: Boolean) {

@@ -91,17 +91,28 @@ internal fun VideoRow(vid: Videos.Video, st: Videos.State, open: Boolean, playin
             .padding(vertical = 6.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Thumb(vid.thumb)
+        // Kapak + altında kırmızı izlenme çubuğu (YouTube gibi)
+        Column {
+            Thumb(vid.thumb)
+            val frac = when {
+                prog?.watched == true -> 1f
+                vid.duration > 0 -> ((prog?.position ?: 0).toFloat() / vid.duration).coerceIn(0f, 1f)
+                else -> 0f
+            }
+            if (frac > 0f) Box(Modifier.width(96.dp).height(3.dp).background(C.surface2)) {
+                Box(Modifier.fillMaxWidth(frac).height(3.dp).background(androidx.compose.ui.graphics.Color(0xFFFF0033)))
+            }
+        }
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
             Text((if (playing) "▶ " else "") + vid.title, color = if (open) C.text else C.muted, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             val info = buildList {
-                dur(vid.duration).takeIf { it.isNotEmpty() }?.let { add(it) }
-                if (vid.size > 0) add("${vid.size / 1_048_576} MB")
                 when {
-                    prog?.watched == true -> add("✔ izlendi")
-                    (prog?.position ?: 0) > 5 && vid.duration > 0 -> add("%${(prog!!.position * 100 / vid.duration).coerceIn(0, 99)} izlendi")
+                    prog?.watched == true -> { dur(vid.duration).takeIf { it.isNotEmpty() }?.let { add(it) }; add("✔ izlendi") }
+                    (prog?.position ?: 0) > 5 && vid.duration > 0 -> add("${dur(prog!!.position)} / ${dur(vid.duration)}")
+                    else -> dur(vid.duration).takeIf { it.isNotEmpty() }?.let { add(it) }
                 }
+                if (vid.size > 0 && vid.id !in st.local) add("${vid.size / 1_048_576} MB")
                 when {
                     local -> add("📥 telefonda")
                     pct != null -> add("⬇ %$pct iniyor")

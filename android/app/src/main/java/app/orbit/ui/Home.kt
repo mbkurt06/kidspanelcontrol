@@ -282,6 +282,7 @@ private fun TodayScreen(go: (Screen) -> Unit) {
     val ctx = LocalContext.current
     val live by Live.state.collectAsState()
     val s = live.snapshot
+    ContactsCard()
 
     if (!Policy.hasUsageAccess(ctx)) {
         Card {

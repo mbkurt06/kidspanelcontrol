@@ -81,6 +81,7 @@ object Sync {
                 val agenda = async(Dispatchers.IO) { runCatching { Api.get("agenda_items?child_id=eq.$child&select=*&order=due_date.asc,due_time.asc,entered_at.desc") }.getOrElse { JSONArray() } }
                 // Web sayfaları / video listeleri (Orbit içinde uygulama gibi açılır)
                 launch(Dispatchers.IO) { runCatching { WebApps.store(Api.get("web_apps?select=*")) } }
+                launch(Dispatchers.IO) { runCatching { Contacts.store(Api.get("contacts?select=id,name,emoji,value,sort&order=sort.asc,created_at.asc")) } }
                 // Videolarım: listeler, videolar, bu çocuğun ayarları ve ilerlemesi; sonra arka planda indirme
                 launch(Dispatchers.IO) {
                     runCatching {

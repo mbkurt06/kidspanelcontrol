@@ -1,0 +1,11 @@
+/* Orbit: YouTube'da sadece oynatıcı. Manifestten eklenir (sayfanın CSP kuralı engelleyemez). */
+html, body { background: #000 !important; overflow: hidden !important; }
+    body * { visibility: hidden !important; }
+    .html5-video-player, .html5-video-player *, #player-container-id, #player-container-id *,
+    ytm-consent-bump-v2-renderer, ytm-consent-bump-v2-renderer *, .consent-bump-v2-lightbox, .consent-bump-v2-lightbox *,
+    .ytp-ad-skip-button-container, .ytp-ad-skip-button-container *, .ytp-skip-ad, .ytp-skip-ad * { visibility: visible !important; }
+    .html5-video-player { position: fixed !important; top: 0 !important; left: 0 !important; width: 100vw !important; height: 100vh !important; z-index: 2147483646 !important; }
+    .html5-video-player video { object-fit: contain !important; width: 100% !important; height: 100% !important; left: 0 !important; top: 0 !important; }
+    .ytp-ce-element, .ytp-endscreen-content, .ytp-pause-overlay, .ytp-suggested-action, .ytp-cards-teaser, .ytp-cards-button,
+    .ytp-title-channel, .ytp-title-link, .ytp-youtube-button, .ytp-watermark, .ytp-share-button, .ytp-overflow-button,
+    .ytm-autonav-toggle-button-container, .ytp-autonav-toggle-button, .ytmVideoInfoVideoTitle, a.ytp-title-fullerscreen-link { display: none !important; }

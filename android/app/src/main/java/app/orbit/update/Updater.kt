@@ -21,10 +21,14 @@ object Updater {
     private const val TAG = "OrbitUpdate"
 
     fun status(): String = Store.prefs().getString("updateStatus", "") ?: ""
+    /** Hakkında ekranı canlı izler (indirme yüzdesi) */
+    val live = kotlinx.coroutines.flow.MutableStateFlow("")
     private fun msg(s: String, target: Int? = null, error: String? = null) {
         Store.prefs().edit().putString("updateStatus", s).apply()
+        live.value = s
         runCatching { Sync.pushUpdateStatus(s, target, error) }
     }
+    @Volatile private var target = 0
 
     fun check(ctx: Context, installIfNew: Boolean = true) {
         Store.init(ctx)
@@ -50,6 +54,7 @@ object Updater {
             }
             if (url == null) { msg("Sürüm $version içinde APK yok", version, "APK bulunamadı"); return }
             msg("Sürüm $version indiriliyor", version)
+            target = version
             install(ctx, download(ctx, url, token), version)
         } catch (e: Throwable) {
             Log.e(TAG, "güncelleme", e)
@@ -74,6 +79,7 @@ object Updater {
             val url = j.optString("url")
             if (!url.startsWith("https://")) { msg("Sürüm dosyası hatalı", version, "APK URL hatalı"); return }
             msg("Sürüm $version indiriliyor", version)
+            target = version
             var d = open(url, null, "application/octet-stream")
             var step = 0
             while (d.responseCode in 300..399 && step < 5) {
@@ -105,7 +111,31 @@ object Updater {
     private fun save(ctx: Context, c: HttpURLConnection): java.io.File {
         val f = java.io.File(ctx.cacheDir, "orbit-update.apk")
         f.delete()
-        c.inputStream.use { inp -> f.outputStream().use { out -> inp.copyTo(out, 256 * 1024) } }
+        val total = c.contentLengthLong
+        var done = 0L
+        var lastPct = -1
+        val buf = ByteArray(256 * 1024)
+        c.inputStream.use { inp ->
+            f.outputStream().use { out ->
+                while (true) {
+                    val n = inp.read(buf)
+                    if (n < 0) break
+                    out.write(buf, 0, n)
+                    done += n
+                    val pct = if (total > 0) (done * 100 / total).toInt() else -1
+                    if (pct != lastPct && pct >= 0) {
+                        val text = "Sürüm $target indiriliyor %$pct (${done / 1_048_576} / ${total / 1_048_576} MB)"
+                        live.value = text
+                        Store.prefs().edit().putString("updateStatus", text).apply()
+                        // Panele her %10'da bir
+                        if (pct / 10 != lastPct / 10) runCatching { Sync.pushUpdateStatus(text, target, null) }
+                        lastPct = pct
+                    }
+                }
+            }
+        }
+        if (total > 0 && done < total) throw IllegalStateException("İndirme yarıda kaldı (${done / 1_048_576} / ${total / 1_048_576} MB)")
+        msg("Sürüm $target kuruluyor", target)
         return f
     }
 

@@ -16,6 +16,10 @@ type Grade = {
 };
 const COLORS = ["#378ADD", "#D85A30", "#1D9E75", "#7F77DD", "#D4537E", "#BA7517", "#639922", "#888780"];
 const show = (g: string) => (g.length === 3 ? g.replace("-", "–") : g.replace("-", "−"));
+/** Tüm not seçenekleri: 1+, 1, 1−, 1–2, 2+ … 6 */
+const GRADE_OPTS = [1, 2, 3, 4, 5, 6].flatMap((d) => [`${d}+`, `${d}`, `${d}-`, ...(d < 6 ? [`${d}-${d + 1}`] : [])]);
+/** orbit.grade_value ile aynı: 2+ = 1,7 · 2− = 2,3 · 2–3 = 2,5 */
+const gradeValue = (g: string) => (g.length === 3 ? Number(g[0]) + 0.5 : Number(g[0]) + (g[1] === "-" ? 0.3 : g[1] === "+" ? -0.3 : 0));
 const dShort = (d: string) => `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}`;
 const fmt = (v: number | null) => (v == null ? "—" : v.toFixed(1).replace(".", ","));
 
@@ -185,13 +189,29 @@ export default function GradesTab({ childId }: { childId: string }) {
       )}
 
       {subject && <SubjectDialog subject={subject} grades={grades.filter((g) => g.subject_id === subject.id)} onClose={() => setSubject(null)} onOpen={(g) => { setSubject(null); setReview(g); }} />}
-      {review && <ReviewDialog g={review} subject={subjects.find((s) => s.id === review.subject_id)} onClose={() => setReview(null)} onDone={(t) => { setReview(null); setMsg(t); load(); }} />}
+      {review && <ReviewDialog g={review} subjects={subjects} subject={subjects.find((s) => s.id === review.subject_id)} onClose={() => setReview(null)} onDone={(t) => { setReview(null); setMsg(t); load(); }} />}
       {edit && lv != null && <SubjectsDialog level={lv} subjects={subs} onClose={() => { setEdit(false); load(); }} />}
     </div>
   );
 }
 
-function ReviewDialog({ g, subject, onClose, onDone }: { g: Grade; subject?: Subject; onClose: () => void; onDone: (msg: string) => void }) {
+function ReviewDialog({ g, subject, subjects, onClose, onDone }: { g: Grade; subject?: Subject; subjects: Subject[]; onClose: () => void; onDone: (msg: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [f, setF] = useState({ subject_id: g.subject_id, kind: g.kind, grade: g.grade, taken_on: g.taken_on, note: g.note ?? "" });
+  async function saveEdit(approve: boolean) {
+    setBusy(true);
+    const patch: Record<string, unknown> = {
+      subject_id: f.subject_id, kind: f.kind, grade: f.grade, value: gradeValue(f.grade), taken_on: f.taken_on, note: f.note.trim() || null,
+    };
+    if (approve) {
+      const { data: u } = await supabase.auth.getUser();
+      Object.assign(patch, { status: "approved", reject_note: null, decided_at: new Date().toISOString(), decided_by: u.user?.id ?? null });
+    }
+    const { error } = await supabase.from("grades").update(patch).eq("id", g.id);
+    setBusy(false);
+    if (error) setErr(errorText(error));
+    else onDone(approve ? "Not düzeltildi ve onaylandı" : "Not düzeltildi");
+  }
   const [links, setLinks] = useState<{ url?: string; thumb?: string }[]>([]);
   const [note, setNote] = useState(g.reject_note ?? "");
   const [busy, setBusy] = useState(false);
@@ -232,13 +252,44 @@ function ReviewDialog({ g, subject, onClose, onDone }: { g: Grade; subject?: Sub
           </div>
         ) : <p className="small muted" style={{ margin: 0 }}>Fotoğraf eklenmemiş.</p>}
         {big != null && <Lightbox urls={links.map((l) => l.url)} start={big} title={`${subject?.name ?? "Ders"} · ${KIND_TEXT[g.kind]}`} onClose={() => setBig(null)} />}
-        {g.status !== "approved" && (
+        {editing ? (
+          <div className="stack-s grade-edit">
+            <label className="row gap-s" style={{ alignItems: "center" }}><span className="small muted" style={{ minWidth: 56 }}>Ders</span>
+              <select value={f.subject_id} onChange={(e) => setF({ ...f, subject_id: e.target.value })}>
+                {subjects.filter((s) => s.grade_level === g.grade_level).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </label>
+            <div className="row gap-s" style={{ alignItems: "center", flexWrap: "wrap" }}><span className="small muted" style={{ minWidth: 56 }}>Tür</span>
+              {KINDS.map((k) => <button key={k} type="button" className={`chip ${f.kind === k ? "on" : ""}`} onClick={() => setF({ ...f, kind: k })}>{KIND_TEXT[k]}</button>)}
+            </div>
+            <div className="row gap-s" style={{ alignItems: "center", flexWrap: "wrap" }}><span className="small muted" style={{ minWidth: 56 }}>Not</span>
+              {GRADE_OPTS.map((o) => <button key={o} type="button" className={`chip ${f.grade === o ? "on" : ""}`} onClick={() => setF({ ...f, grade: o })}>{show(o)}</button>)}
+            </div>
+            <label className="row gap-s" style={{ alignItems: "center" }}><span className="small muted" style={{ minWidth: 56 }}>Tarih</span>
+              <input type="date" value={f.taken_on} onChange={(e) => e.target.value && setF({ ...f, taken_on: e.target.value })} />
+            </label>
+            <label className="row gap-s" style={{ alignItems: "center" }}><span className="small muted" style={{ minWidth: 56 }}>Açıklama</span>
+              <input value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} placeholder="ör. 10/11 puan" />
+            </label>
+          </div>
+        ) : (
+          <button type="button" className="link-btn small" style={{ alignSelf: "flex-start" }} onClick={() => setEditing(true)}>✎ Notu düzenle</button>
+        )}
+        {!editing && g.status !== "approved" && (
           <label className="stack-s">
             <span className="small muted">Geri gönderme notu</span>
             <input value={note} onChange={(e) => { setNote(e.target.value); setErr(null); }} placeholder="Notu yanlış yazmışsın, kâğıtta 2+ görünüyor" />
           </label>
         )}
         {err && <p className="small bad-text" style={{ margin: 0 }}>{err}</p>}
+        {editing ? (
+          <div className="pop-actions">
+            <button className="pill-btn ghost" onClick={() => setEditing(false)} disabled={busy}>Vazgeç</button>
+            <span className="grow" />
+            <button className={`pill-btn ${g.status === "approved" ? "primary" : ""}`} onClick={() => saveEdit(false)} disabled={busy}>Kaydet</button>
+            {g.status !== "approved" && <button className="pill-btn primary" onClick={() => saveEdit(true)} disabled={busy}>Kaydet ve onayla</button>}
+          </div>
+        ) : (
         <div className="pop-actions">
           <button className="pill-btn ghost" onClick={remove} disabled={busy}>Sil</button>
           <span className="grow" />
@@ -247,6 +298,7 @@ function ReviewDialog({ g, subject, onClose, onDone }: { g: Grade; subject?: Sub
           {g.status !== "approved" && <button className="pill-btn primary" onClick={() => decide(true)} disabled={busy}>Onayla</button>}
           {g.status === "approved" && <button className="pill-btn ghost" onClick={onClose}>Kapat</button>}
         </div>
+        )}
       </div>
     </>,
     document.body,

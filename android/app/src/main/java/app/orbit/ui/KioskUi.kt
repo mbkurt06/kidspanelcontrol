@@ -50,6 +50,12 @@ fun KioskToday(k: KioskNow, open: (Screen) -> Unit) {
     var pin by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(now?.toString()?.take(5) ?: "", color = C.text, fontSize = 64.sp, fontWeight = FontWeight.Bold)
+        // Tarih: 18 Kasım 2026 · Çarşamba
+        val today = remember(now?.hour) { java.time.LocalDate.now(runCatching { ZoneId.of(Store.rules().timezone) }.getOrDefault(ZoneId.systemDefault())) }
+        Text(
+            today.format(java.time.format.DateTimeFormatter.ofPattern("d MMMM yyyy · EEEE", java.util.Locale("tr", "TR"))),
+            color = C.muted, fontSize = 16.sp,
+        )
         Text("🔒 ${if (k.source == "manual") "Kilitli" else k.name}", color = C.accent, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
         k.message?.let { Text(it, color = C.text, fontSize = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 12.dp)) }
         Muted(
@@ -59,29 +65,12 @@ fun KioskToday(k: KioskNow, open: (Screen) -> Unit) {
         )
         live.snapshot?.let { TwoRings(it, k) }
     }
-    val tasks = remember(live.lastSync) { Tasks.current().count { it.open && it.inWindow() } }
-    val tiles = Screen.entries.filter { it != Screen.TODAY && (it == Screen.ABOUT || it == Screen.WIFI || it.kioskKey() in k.screens) }
-    if (tiles.isNotEmpty()) {
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            for (s in tiles) {
-                Column(
-                    Modifier.width(100.dp).clip(RoundedCornerShape(18.dp)).background(C.surface).clickable { open(s) }.padding(vertical = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(s.icon, fontSize = 28.sp)
-                    Text(s.title, color = C.text, fontSize = 13.sp, textAlign = TextAlign.Center)
-                    if (s == Screen.TASKS && tasks > 0) Text("$tasks açık", color = C.warn, fontSize = 11.sp)
-                }
-            }
-        }
-    }
-    // Kiosk uygulamaları: kilitliyken de açılır; geri / ana ekran tuşu Orbit'e döner
-    if (live.kioskApps.isNotEmpty()) {
-        val ctx = androidx.compose.ui.platform.LocalContext.current
-        Muted("Uygulamalar", 14)
-        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            for ((pkg, label) in live.kioskApps) AppTile(pkg, label) { launch(ctx, pkg) }
-        }
+    // Ekranlar (Görevlerim, Planım, Ajanda…) hamburger menüde; burada yalnız açılabilen uygulamalar
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    Muted("Uygulamalar", 14)
+    if (live.kioskApps.isEmpty()) Muted("Şu an açılabilen uygulama yok.", 13)
+    else FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        for ((pkg, label) in live.kioskApps) AppTile(pkg, label) { launch(ctx, pkg) }
     }
     if (Store.rules().pinHash != null) {
         Text(

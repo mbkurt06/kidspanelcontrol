@@ -350,7 +350,8 @@ class OrbitService : Service() {
         lastTick = nowMs
 
         var snap = engine.snapshot(now, usage)
-        val fg = foreground
+        // Orbit içindeki web sayfası / video listesi açıksa ön plandaki "uygulama" odur (web:<id>)
+        val fg = foreground?.let { if (it == packageName) app.orbit.data.WebApps.current ?: it else it }
         // Sayaç odak profili aramalara izin vermiyorsa telefon uygulaması da kapanır (acil arama hariç)
         val focusProfile = app.orbit.data.Timers.activeFocus()
         val dialer = if (focusProfile != null && !focusProfile.callsAllowed)
@@ -437,6 +438,13 @@ class OrbitService : Service() {
             verdicts[a.pkg] = v
             if (v.allowed) allowed += a.pkg to a.label else suspend += a.pkg
         }
+        // Web sayfaları ve video listeleri: uygulama gibi kutucuk
+        for ((pkg, a) in rules.apps) {
+            if (!pkg.startsWith(app.orbit.data.WebApps.PREFIX) || !a.approved || app.orbit.data.WebApps.byPkg(pkg) == null) continue
+            val v = engine.verdict(pkg, snap, usage)
+            verdicts[pkg] = v
+            if (v.allowed) allowed += pkg to a.label
+        }
         Policy.syncSuspended(this, suspend, full = firstRun, all = launchables.map { it.pkg })
         // Ana ekran haber akışı (Google vb.): kapalıyken gizle, açıkken göster — normal uygulama kuralıyla
         val parentHidden = app.orbit.device.PhoneSettings.hiddenSet()
@@ -462,6 +470,7 @@ class OrbitService : Service() {
             ok += kioskPkgs
             if (captureOn) ok += listOf("com.android.permissioncontroller", "com.google.android.permissioncontroller")
             if (rules.kiosk.calls == "all") runCatching { getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull()?.let { ok += it }
+            if (fg != null && fg.startsWith(app.orbit.data.WebApps.PREFIX) && fg !in ok) app.orbit.data.WebApps.requestClose(fg, "Telefon kilitli")
             if (interactive && fg != null && fg !in ok && nowMs - lastKioskFront > 2_000) {
                 lastKioskFront = nowMs
                 runCatching {
@@ -502,9 +511,10 @@ class OrbitService : Service() {
             val v = verdicts[fg] ?: engine.verdict(fg, snap, usage)
             if (!v.allowed) {
                 lockReason = v.reason ?: lockReason
+                if (fg.startsWith(app.orbit.data.WebApps.PREFIX)) app.orbit.data.WebApps.requestClose(fg, v.reason ?: "")
                 showLock(v.reason ?: "Bu uygulama şu an kapalı", fg, nowMs)
                 // Listede olmayan (ana ekranda simgesi olmayan) uygulama açıldı: panelin uygulama listesine ekle
-                if (rules.apps[fg] == null) {
+                if (rules.apps[fg] == null && !fg.startsWith(app.orbit.data.WebApps.PREFIX)) {
                     val seen = Store.prefs().getStringSet("seenPkgs", emptySet())!!
                     if (fg !in seen) {
                         Store.prefs().edit().putStringSet("seenPkgs", seen + fg).apply()

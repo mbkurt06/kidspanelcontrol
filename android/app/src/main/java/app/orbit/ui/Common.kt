@@ -108,6 +108,13 @@ fun Ring(remaining: Float, color: Color, size: Dp, content: @Composable () -> Un
 @Composable
 fun AppIcon(pkg: String, size: Dp) {
     val ctx = LocalContext.current
+    if (pkg.startsWith(app.orbit.data.WebApps.PREFIX)) {
+        val video = app.orbit.data.WebApps.byPkg(pkg)?.isVideos == true
+        Box(Modifier.size(size).clip(RoundedCornerShape(12.dp)).background(if (video) Color(0xFFE53935) else C.blue), contentAlignment = Alignment.Center) {
+            Text(if (video) "▶" else "🌐", color = Color.White, fontSize = (size.value * 0.45f).sp)
+        }
+        return
+    }
     val bmp = remember(pkg) {
         runCatching { ctx.packageManager.getApplicationIcon(pkg).toBitmap(128, 128).asImageBitmap() }.getOrNull()
     }
@@ -146,6 +153,7 @@ fun Info(text: String) {
 }
 
 fun launch(ctx: Context, pkg: String): Boolean {
+    if (pkg.startsWith(app.orbit.data.WebApps.PREFIX)) return openWebApp(ctx, pkg)
     val i = ctx.packageManager.getLaunchIntentForPackage(pkg) ?: return false
     i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     return runCatching { ctx.startActivity(i); true }.getOrDefault(false)

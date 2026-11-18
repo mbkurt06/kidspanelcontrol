@@ -78,7 +78,8 @@ private fun LockScreen(reason: String, pkg: String?, onHome: () -> Unit) {
     val scope = rememberCoroutineScope()
     val live by Live.state.collectAsState()
     var sent by remember { mutableStateOf(false) }
-    val label = pkg?.let { p -> runCatching { ctx.packageManager.getApplicationLabel(ctx.packageManager.getApplicationInfo(p, 0)).toString() }.getOrNull() }
+    val label = pkg?.let { p -> runCatching { ctx.packageManager.getApplicationLabel(ctx.packageManager.getApplicationInfo(p, 0)).toString() }.getOrNull()
+        ?: app.orbit.data.Store.rules().apps[p]?.label }
 
     Column(
         Modifier.fillMaxSize().background(C.bg).safeDrawingPadding().verticalScroll(rememberScrollState()).padding(24.dp),

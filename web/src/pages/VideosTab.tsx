@@ -148,7 +148,7 @@ export default function VideosTab({ childId }: { childId: string }) {
 
   function upload(l: VList, items: { file: File; title: string }[]) {
     const base = videos.filter((x) => x.list_id === l.id).length;
-    enqueue(l.id, fam.familyId, base, items);
+    if (fam.familyId) enqueue(l.id, fam.familyId, base, items);
   }
 
   if (!lists) return <p className="muted">Yükleniyor…</p>;

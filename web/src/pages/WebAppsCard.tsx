@@ -118,9 +118,9 @@ function WebAppDialog({ childId, value, onClose, onSaved }: { childId: string; v
 
   useEffect(() => {
     if (!value.id) return;
-    supabase.from("web_visits").select("id,url,title,blocked,at").eq("web_app_id", value.id).order("at", { ascending: false }).limit(50)
+    supabase.from("web_visits").select("id,url,title,blocked,at").eq("web_app_id", value.id).eq("child_id", childId).order("at", { ascending: false }).limit(50)
       .then(({ data }) => setVisits((data ?? []) as Visit[]));
-  }, [value.id]);
+  }, [value.id, childId]);
 
   async function addVideo() {
     const v = parseYouTube(link);

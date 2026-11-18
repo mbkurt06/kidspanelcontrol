@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import Lightbox from "../components/Lightbox";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import { mediaLinks } from "../lib/media";
@@ -43,6 +44,7 @@ export default function GradesTab({ childId }: { childId: string }) {
   const [grades, setGrades] = useState<Grade[]>([]);
   const [edit, setEdit] = useState(false);
   const [review, setReview] = useState<Grade | null>(null);
+  const [subject, setSubject] = useState<Subject | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -151,7 +153,7 @@ export default function GradesTab({ childId }: { childId: string }) {
                     const avg = subjectAverage(list, s.weights);
                     return (
                       <tr key={s.id}>
-                        <td className="gt-sub"><span className="dot" style={{ background: s.color ?? "var(--muted)" }} /> {s.name}</td>
+                        <td className="gt-sub"><button type="button" className="gt-sub-btn" onClick={() => setSubject(s)} title="Tüm notlar ve kâğıtlar"><span className="dot" style={{ background: s.color ?? "var(--muted)" }} /> {s.name} ›</button></td>
                         {cols.flatMap((c) => {
                           const xs = list.filter((g) => g.kind === c.k);
                           return Array.from({ length: c.n }, (_, i) => {
@@ -182,6 +184,7 @@ export default function GradesTab({ childId }: { childId: string }) {
         </div>
       )}
 
+      {subject && <SubjectDialog subject={subject} grades={grades.filter((g) => g.subject_id === subject.id)} onClose={() => setSubject(null)} onOpen={(g) => { setSubject(null); setReview(g); }} />}
       {review && <ReviewDialog g={review} subject={subjects.find((s) => s.id === review.subject_id)} onClose={() => setReview(null)} onDone={(t) => { setReview(null); setMsg(t); load(); }} />}
       {edit && lv != null && <SubjectsDialog level={lv} subjects={subs} onClose={() => { setEdit(false); load(); }} />}
     </div>
@@ -228,9 +231,7 @@ function ReviewDialog({ g, subject, onClose, onDone }: { g: Grade; subject?: Sub
             ))}
           </div>
         ) : <p className="small muted" style={{ margin: 0 }}>Fotoğraf eklenmemiş.</p>}
-        {big != null && links[big]?.url && (
-          <a href={links[big].url} target="_blank" rel="noreferrer" className="small">Sayfa {big + 1}'i tam boy aç ↗</a>
-        )}
+        {big != null && <Lightbox urls={links.map((l) => l.url)} start={big} title={`${subject?.name ?? "Ders"} · ${KIND_TEXT[g.kind]}`} onClose={() => setBig(null)} />}
         {g.status !== "approved" && (
           <label className="stack-s">
             <span className="small muted">Geri gönderme notu</span>
@@ -349,5 +350,49 @@ function WeightsEditor({ value, onSave }: { value: Partial<Record<Kind, number>>
         <button type="button" className="pill-btn primary small" disabled={total !== 100 && total !== 0} onClick={() => onSave(Object.fromEntries(Object.entries(v).filter(([, x]) => x)) as Partial<Record<Kind, number>>)}>Kaydet</button>
       </div>
     </div>
+  );
+}
+
+/** Bir dersin tüm notları: her not için kâğıt fotoğrafları; fotoğrafa basınca tam ekran büyür */
+function SubjectDialog({ subject, grades, onClose, onOpen }: { subject: Subject; grades: Grade[]; onClose: () => void; onOpen: (g: Grade) => void }) {
+  const list = [...grades].sort((a, b) => b.taken_on.localeCompare(a.taken_on) || b.created_at.localeCompare(a.created_at));
+  const [links, setLinks] = useState<Record<string, { url?: string; thumb?: string }>>({});
+  const [big, setBig] = useState<{ g: Grade; i: number } | null>(null);
+  useEffect(() => {
+    const all = list.flatMap((g) => g.photos);
+    if (!all.length) return;
+    mediaLinks(all, 3600).then((ls) => setLinks(Object.fromEntries(all.map((p, i) => [p, ls[i] ?? {}]))));
+  }, [grades]); // eslint-disable-line react-hooks/exhaustive-deps
+  const stat = (g: Grade) => (g.status === "approved" ? "onaylı" : g.status === "pending" ? "onay bekliyor" : "geri gönderildi");
+  return createPortal(
+    <>
+      <div className="pop-backdrop sheet-like" onClick={onClose} />
+      <div className="lock-pop sheet-pop" role="dialog" aria-label={subject.name} style={{ maxHeight: "85vh", overflowY: "auto" }}>
+        <div className="row between" style={{ alignItems: "center" }}>
+          <b className="sheet-pop-title"><span className="dot" style={{ background: subject.color ?? "var(--muted)" }} /> {subject.name}</b>
+          <button type="button" className="pill-btn" onClick={onClose}>Kapat</button>
+        </div>
+        {!list.length && <p className="small muted">Bu derste henüz not yok.</p>}
+        {list.map((g) => (
+          <div key={g.id} className="subj-grade">
+            <div className="row between" style={{ alignItems: "center", gap: 8 }}>
+              <span><b>{KIND_TEXT[g.kind]} · {show(g.grade)}</b> <span className="muted tiny">{dShort(g.taken_on)} · {stat(g)}{g.note ? ` · ${g.note}` : ""}</span></span>
+              <button type="button" className="pill-btn" onClick={() => onOpen(g)}>{g.status === "pending" ? "İncele" : "Aç"}</button>
+            </div>
+            {g.photos.length > 0 ? (
+              <div className="grade-photos">
+                {g.photos.map((p, i) => (
+                  <button key={p} type="button" className="pg-cell" onClick={() => setBig({ g, i })} aria-label={`Sayfa ${i + 1}`}>
+                    {links[p]?.thumb || links[p]?.url ? <img src={links[p].thumb ?? links[p].url} alt="" loading="lazy" /> : <span className="muted tiny">{i + 1}</span>}
+                  </button>
+                ))}
+              </div>
+            ) : <span className="muted tiny">Fotoğraf yok</span>}
+          </div>
+        ))}
+      </div>
+      {big && <Lightbox urls={big.g.photos.map((p) => links[p]?.url)} start={big.i} title={`${subject.name} · ${KIND_TEXT[big.g.kind]} · ${show(big.g.grade)}`} onClose={() => setBig(null)} />}
+    </>,
+    document.body,
   );
 }

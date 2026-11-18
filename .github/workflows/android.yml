@@ -200,7 +200,8 @@ jobs:
             done
           } > ../rapor/build.txt 2>&1
           # QR ile kurulum icin imzali APK (panel sitesine konur)
-          ls orbit-*.apk >/dev/null 2>&1 && cp orbit-*.apk ../rapor/orbit.apk || true
+          # GitHub dosya sınırı 100 MB: büyük APK rapor dalına konmaz (sürüm sayfasında var)
+          for f in orbit-*.apk; do [ -f "$f" ] && [ "$(stat -c %s "$f")" -lt 95000000 ] && cp "$f" ../rapor/orbit.apk; done || true
           cd ../rapor && git init -q -b ci-android && git add . && git -c user.name=ci -c user.email=ci@orbit commit -qm "build ${GITHUB_SHA::7}"
           git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" ci-android
 

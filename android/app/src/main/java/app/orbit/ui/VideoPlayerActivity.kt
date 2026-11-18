@@ -59,6 +59,7 @@ class VideoPlayerActivity : ComponentActivity() {
     private var current by mutableStateOf<String?>(null)
     private var full by mutableStateOf(false)
     private var ask by mutableStateOf<Videos.Video?>(null)
+    private var resume by mutableStateOf<Pair<Videos.Video, Boolean>?>(null)
 
     private val tick = object : Runnable {
         override fun run() { save(false); ui.postDelayed(this, 5_000) }
@@ -76,7 +77,7 @@ class VideoPlayerActivity : ComponentActivity() {
         val st = Videos.state.value
         val want = intent.getStringExtra("video")
         val items = playable()
-        val start = items.firstOrNull { it.id == want } ?: items.firstOrNull { st.progress[it.id]?.watched != true } ?: items.firstOrNull()
+        val start = items.firstOrNull { it.id == want } ?: Videos.resumeIn(l) ?: items.firstOrNull { st.progress[it.id]?.watched != true } ?: items.firstOrNull()
         start?.let { load(it, play = want != null) }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
@@ -134,17 +135,33 @@ class VideoPlayerActivity : ComponentActivity() {
                     }
                 }
                 DeleteAsk(ask, st2) { ask = null }
+                resume?.let { (v, _) ->
+                    val pos = st2.progress[v.id]?.position ?: 0
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { resume = null; start(v, pos, true) },
+                        title = { Text(v.title, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                        text = { Muted("Bu videoyu ${dur(pos)}'de bırakmıştın.") },
+                        confirmButton = { androidx.compose.material3.TextButton(onClick = { resume = null; start(v, pos, true) }) { Text("▶ Kaldığım yerden (${dur(pos)})") } },
+                        dismissButton = { androidx.compose.material3.TextButton(onClick = { resume = null; start(v, 0, true) }) { Text("⟲ Baştan") } },
+                    )
+                }
             }
         }
     }
 
+    /** Kaldığı yer varsa sor: kaldığı yerden mi, baştan mı */
     private fun load(v: Videos.Video, play: Boolean) {
-        if (current != null) save(false)
+        val pos = Videos.state.value.progress[v.id]?.takeIf { !it.watched }?.position ?: 0
+        if (pos > 10) { resume = v to play; return }
+        start(v, 0, play)
+    }
+
+    private fun start(v: Videos.Video, fromSec: Int, play: Boolean) {
+        if (current != null && current != v.id) save(false)
         val f = Videos.file(v.id)
         if (!f.exists()) return
         current = v.id
-        val p = Videos.state.value.progress[v.id]
-        player.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(f)), (p?.takeIf { !it.watched }?.position ?: 0) * 1000L)
+        player.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(f)), fromSec * 1000L)
         player.prepare()
         player.playWhenReady = play
     }

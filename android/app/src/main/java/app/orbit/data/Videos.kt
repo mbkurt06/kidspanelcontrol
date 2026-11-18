@@ -57,7 +57,7 @@ object Videos {
     fun init(c: Context) {
         ctx = c.applicationContext
         if (_state.value.lists.isEmpty()) runCatching {
-            Store.prefs().getString("videos.cache", null)?.let { decode(JSONObject(it)) }?.let { _state.value = it.copy(local = scanLocal()) }
+            Store.prefs().getString("videos.cache", null)?.let { decode(JSONObject(it)) }?.let { _state.value = it.copy(progress = merge(it.progress), local = scanLocal()) }
         }
     }
 
@@ -105,7 +105,7 @@ object Videos {
     fun store(lists: JSONArray, videos: JSONArray, settings: JSONArray, progress: JSONArray) {
         val b = JSONObject().put("lists", lists).put("videos", videos).put("settings", settings.optJSONObject(0) ?: JSONObject()).put("progress", progress)
         val s = decode(b)
-        _state.value = s.copy(local = scanLocal(), downloading = _state.value.downloading, errors = _state.value.errors, queued = _state.value.queued)
+        _state.value = s.copy(progress = merge(s.progress), local = scanLocal(), downloading = _state.value.downloading, errors = _state.value.errors, queued = _state.value.queued)
         runCatching { Store.prefs().edit().putString("videos.cache", b.toString()).apply() }
     }
 
@@ -150,10 +150,43 @@ object Videos {
 
     // --- İlerleme ---
 
+    /** Telefonda saklanan izleme yerleri (kapanıp açılınca, internet yokken de kaldığı yerden) */
+    private fun localProgress(): Map<String, Progress> = runCatching {
+        val o = JSONObject(Store.prefs().getString("videos.progress", "{}") ?: "{}")
+        o.keys().asSequence().associateWith { k ->
+            o.getJSONObject(k).let { Progress(it.optInt("p"), it.optInt("d"), it.optBoolean("w"), it.optBoolean("r"), it.optString("u")) }
+        }
+    }.getOrDefault(emptyMap())
+
+    private fun persist(id: String, p: Progress) = runCatching {
+        val o = JSONObject(Store.prefs().getString("videos.progress", "{}") ?: "{}")
+        o.put(id, JSONObject().put("p", p.position).put("d", p.duration).put("w", p.watched).put("r", p.removed).put("u", p.updatedAt))
+        Store.prefs().edit().putString("videos.progress", o.toString()).apply()
+    }
+
+    /** Sunucudaki ile telefondakinden hangisi yeniyse o */
+    private fun merge(server: Map<String, Progress>): Map<String, Progress> {
+        val local = localProgress()
+        val out = server.toMutableMap()
+        for ((id, lp) in local) {
+            val sp = server[id]
+            if (sp == null || lp.updatedAt > sp.updatedAt) out[id] = lp
+        }
+        return out
+    }
+
+    /** Listede kaldığı video: en son izlenen ve bitmemiş olan */
+    fun resumeIn(l: VList): Video? {
+        val pr = _state.value.progress
+        return l.videos.filter { file(it.id).exists() && (pr[it.id]?.position ?: 0) > 5 && pr[it.id]?.watched != true }
+            .maxByOrNull { pr[it.id]?.updatedAt ?: "" }
+    }
+
     fun saveProgress(v: Video, positionSec: Int, durationSec: Int, watched: Boolean) {
         val old = _state.value.progress[v.id]
         val p = Progress(positionSec, durationSec, watched || old?.watched == true, false, Instant.now().toString())
         _state.value = _state.value.copy(progress = _state.value.progress + (v.id to p))
+        persist(v.id, p)
         upsertProgress(v.id, p, downloaded = file(v.id).exists())
     }
 

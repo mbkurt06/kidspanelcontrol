@@ -178,6 +178,7 @@ fun TasksCard(tasks: List<TaskItem>) {
     val session by app.orbit.data.TaskSession.flow.collectAsState()
     val scope = rememberCoroutineScope()
     var pending by remember { mutableStateOf<Pair<TaskItem, String>?>(null) }
+    if (pending != null) HoldUi()
     var busyRun by remember { mutableStateOf<String?>(null) }
     var optimisticSubmitted by remember { mutableStateOf<Set<String>>(emptySet()) }
     var msg by remember { mutableStateOf("") }

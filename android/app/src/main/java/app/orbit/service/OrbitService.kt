@@ -476,6 +476,8 @@ class OrbitService : Service() {
             ok += engine.raNow.keys.filter { engine.restrictedLeft(it, usage) }
             session?.let { ok += it.packages }
             ok += kioskPkgs
+            // Orbit'in açtığı galeri / dosya seçici: çocuk seçimini bitirene kadar kapatılmaz
+            if (fg != null && app.orbit.ui.UiGuard.external(nowMs)) ok += fg
             if (captureOn) ok += listOf("com.android.permissioncontroller", "com.google.android.permissioncontroller")
             if (rules.kiosk.calls == "all") runCatching { getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull()?.let { ok += it }
             if (fg != null && isVirtual(fg) && fg !in ok) app.orbit.data.WebApps.requestClose(fg, "Telefon kilitli")
@@ -486,7 +488,7 @@ class OrbitService : Service() {
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
                 }
             }
-        } else if (session != null && interactive && fg != null && fg !in session.packages && fg != packageName &&
+        } else if (session != null && interactive && fg != null && fg !in session.packages && fg != packageName && !app.orbit.ui.UiGuard.external(nowMs) &&
             fg !in setOf("android", "com.android.systemui", "com.android.phone", "com.android.server.telecom", "com.android.permissioncontroller", "com.google.android.permissioncontroller") &&
             fg != runCatching { getSystemService(android.telecom.TelecomManager::class.java).defaultDialerPackage }.getOrNull()) {
             // Görev sürerken başka uygulamaya geçilemez: Orbit'e dön (orada duraklat / bitir).
@@ -517,7 +519,7 @@ class OrbitService : Service() {
             }
         } else if (interactive && fg != null && fg !in exempt) {
             val v = verdicts[fg] ?: engine.verdict(fg, snap, usage)
-            if (!v.allowed) {
+            if (!v.allowed && !app.orbit.ui.UiGuard.external(nowMs)) {
                 lockReason = v.reason ?: lockReason
                 if (isVirtual(fg)) app.orbit.data.WebApps.requestClose(fg, v.reason ?: "")
                 showLock(v.reason ?: "Bu uygulama şu an kapalı", fg, nowMs)

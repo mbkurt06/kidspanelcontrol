@@ -27,7 +27,7 @@ object Notifier {
 
     fun show(channel: String, id: Int, title: String, text: String, screen: String) {
         val ctx = app ?: return
-        val open = Intent(ctx, MainActivity::class.java)
+        val open = Intent(ctx, app.orbit.ui.NotifyOpenActivity::class.java)
             .putExtra(EXTRA_SCREEN, screen)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         val pi = PendingIntent.getActivity(ctx, id, open, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)

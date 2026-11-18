@@ -63,14 +63,16 @@ fun GradesScreen() {
     val st by Grades.state.collectAsState()
     val live by Live.state.collectAsState()
     LaunchedEffect(live.lastSync) { withContext(Dispatchers.IO) { Grades.refresh() } }
-    var form by remember { mutableStateOf<Grades.Grade?>(null) }
-    var adding by remember { mutableStateOf(false) }
+    // Kaydedilebilir: Orbit arka planda yeniden açılsa da form açık kalır
+    var formId by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
+    val form = formId?.let { id -> st.grades.firstOrNull { it.id == id } }
+    var adding by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
     var msg by remember { mutableStateOf<String?>(null) }
 
     if (adding || form != null) {
         GradeForm(st, form) { done ->
             adding = false
-            form = null
+            formId = null
             if (done != null) msg = done
         }
         return
@@ -96,7 +98,7 @@ fun GradesScreen() {
         Title("Düzeltmen gerekenler")
         rejected.forEach { g ->
             val s = st.subjects.firstOrNull { it.id == g.subjectId }
-            Row(Modifier.fillMaxWidth().clickable { form = g }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.fillMaxWidth().clickable { formId = g.id }.padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("${s?.name ?: "Ders"} · ${Grades.KIND_TEXT[g.kind]} · ${Grades.show(g.grade)}", color = C.text, fontWeight = FontWeight.SemiBold)
                     g.rejectNote?.let { Text("Ebeveynin: $it", color = C.warn, fontSize = 13.sp) }
@@ -105,7 +107,7 @@ fun GradesScreen() {
             }
         }
     }
-    if (lvl != null) GradeTable(st, lvl) { if (it.status == "pending") form = it }
+    if (lvl != null) GradeTable(st, lvl) { if (it.status == "pending") formId = it.id }
 }
 
 @Composable
@@ -180,19 +182,23 @@ private fun GradeForm(st: Grades.State, edit: Grades.Grade?, onClose: (String?) 
     val lvl = edit?.level ?: st.level ?: return
     val subs = st.subjects.filter { it.level == lvl }
     val today = LocalDate.now(ZoneId.of("Europe/Berlin"))
-    var subject by remember { mutableStateOf(edit?.subjectId) }
-    var kind by remember { mutableStateOf(edit?.kind) }
-    var digit by remember { mutableStateOf(edit?.grade?.take(1)?.toIntOrNull()) }
-    var mod by remember { mutableStateOf(edit?.grade?.drop(1) ?: "") }
-    var date by remember { mutableStateOf(edit?.takenOn?.let { LocalDate.parse(it) } ?: today) }
-    var note by remember { mutableStateOf(edit?.note ?: "") }
-    var photos by remember { mutableStateOf<List<String>>(emptyList()) }
+    HoldUi()
+    // Alanlar kaydedilebilir: kamera dönüşünde ya da Orbit yeniden açıldığında yazılanlar kaybolmaz
+    var subject by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(edit?.subjectId) }
+    var kind by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(edit?.kind) }
+    var digit by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(edit?.grade?.take(1)?.toIntOrNull()) }
+    var mod by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(edit?.grade?.drop(1) ?: "") }
+    var dateText by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf((edit?.takenOn?.let { LocalDate.parse(it) } ?: today).toString()) }
+    val date = LocalDate.parse(dateText)
+    var note by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(edit?.note ?: "") }
+    var photoList by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(arrayListOf<String>()) }
+    val photos: List<String> = photoList
     var busy by remember { mutableStateOf(false) }
     var err by remember { mutableStateOf<String?>(null) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
         if (res.resultCode != Activity.RESULT_OK) return@rememberLauncherForActivityResult
         val ps = res.data?.getStringArrayListExtra("paths") ?: return@rememberLauncherForActivityResult
-        photos = photos + ps
+        photoList = ArrayList(photoList + ps)
     }
 
     @Composable
@@ -224,10 +230,10 @@ private fun GradeForm(st: Grades.State, edit: Grades.Grade?, onClose: (String?) 
         }
         Muted("Tarih", 13)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            chip("Bugün", date == today) { date = today }
-            chip("Dün", date == today.minusDays(1)) { date = today.minusDays(1) }
+            chip("Bugün", date == today) { dateText = today.toString() }
+            chip("Dün", date == today.minusDays(1)) { dateText = today.minusDays(1).toString() }
             chip(if (date != today && date != today.minusDays(1)) "%02d.%02d.%d".format(date.dayOfMonth, date.monthValue, date.year) else "Tarih seç…", date != today && date != today.minusDays(1)) {
-                DatePickerDialog(ctx, { _, y, m, d -> date = LocalDate.of(y, m + 1, d) }, date.year, date.monthValue - 1, date.dayOfMonth).apply {
+                DatePickerDialog(ctx, { _, y, m, d -> dateText = LocalDate.of(y, m + 1, d).toString() }, date.year, date.monthValue - 1, date.dayOfMonth).apply {
                     datePicker.maxDate = System.currentTimeMillis()
                 }.show()
             }

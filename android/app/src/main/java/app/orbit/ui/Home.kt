@@ -119,7 +119,11 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
             (focusNow == null || focusNow.screens.isEmpty() || s == Screen.TODAY || s.kioskKey() in focusNow.screens) &&
             (taskScreens == null || s == Screen.TODAY || s.kioskKey() in taskScreens) &&
             (kiosk != null || modeScreens == null || s == Screen.TODAY || s.kioskKey() in modeScreens)
-    LaunchedEffect(kiosk?.screens, taskScreens, modeScreens) { if (!visible(screen)) screen = Screen.TODAY }
+    // Ekran kapandıysa ana sayfaya dön; ama çocuk o an bir iş yapıyorsa (form, yazı, kamera) bitirene kadar bekle
+    LaunchedEffect(kiosk?.screens, taskScreens, modeScreens, focusNow?.screens) {
+        while (!visible(screen) && UiGuard.busy()) kotlinx.coroutines.delay(2_000)
+        if (!visible(screen)) screen = Screen.TODAY
+    }
     var pinOpen by remember { mutableStateOf(false) }
     if (pinOpen) PinDialog { pinOpen = false }
     BackHandler(enabled = drawer.isOpen || screen != Screen.TODAY) {

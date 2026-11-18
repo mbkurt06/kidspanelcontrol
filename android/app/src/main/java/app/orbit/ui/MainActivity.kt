@@ -71,6 +71,8 @@ class MainActivity : ComponentActivity() {
 
     private fun readRequest(i: android.content.Intent?) {
         val s = i?.getStringExtra(app.orbit.data.Notifier.EXTRA_SCREEN) ?: return
+        // Çocuk bir form doldururken bildirime basıldıysa açık iş bozulmaz
+        if (UiGuard.holding()) return
         runCatching { Screen.valueOf(s) }.getOrNull()?.let { request = it to System.nanoTime() }
     }
 
@@ -110,8 +112,14 @@ class MainActivity : ComponentActivity() {
         if (!on && inLock) runCatching { stopLockTask() }
     }
 
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        UiGuard.touch()
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun onResume() {
         super.onResume()
+        UiGuard.endExternal()
         if (Store.creds != null) {
             ensureNotifications()
             OrbitService.start(this)

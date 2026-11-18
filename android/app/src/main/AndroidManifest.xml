@@ -124,6 +124,13 @@
             android:theme="@style/Theme.Orbit" />
 
         <activity
+            android:name=".ui.NotifyOpenActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <activity
             android:name=".ui.CaptureActivity"
             android:exported="false"
             android:screenOrientation="portrait"

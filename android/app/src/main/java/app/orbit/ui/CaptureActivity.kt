@@ -102,6 +102,7 @@ class CaptureActivity : ComponentActivity() {
     private var reviewBmp by mutableStateOf<Bitmap?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        UiGuard.hold()
         super.onCreate(savedInstanceState)
         val media = intent.getStringExtra("media") ?: "photo"
         val title = intent.getStringExtra("title") ?: "Kanıt"
@@ -334,6 +335,7 @@ class CaptureActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        UiGuard.release()
         recording?.stop()
         if (isFinishing && !isChangingConfigurations && photos.isNotEmpty()) photos.forEach { File(it).delete() }
         if (isFinishing) review?.let { File(it.first).delete() }

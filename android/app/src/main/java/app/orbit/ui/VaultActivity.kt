@@ -65,7 +65,13 @@ class VaultActivity : ComponentActivity() {
         if (r.resultCode == RESULT_OK) { unlocked = true; load() } else finish()
     }
 
+    override fun onDestroy() {
+        UiGuard.release()
+        super.onDestroy()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        UiGuard.hold()
         super.onCreate(savedInstanceState)
         Store.init(this)
         val km = getSystemService(KeyguardManager::class.java)

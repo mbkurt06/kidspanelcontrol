@@ -95,7 +95,7 @@ fun ProfileScreen() {
             if (photo != null) Image(photo, contentDescription = "Profil fotoğrafı", modifier = Modifier.size(54.dp).clip(CircleShape)) else Text(avatar, fontSize = 44.sp)
             Column { Title(Store.childName.ifBlank { "Profil" }); Muted("Telefonundaki Orbit profili", 13) }
         }
-        OutlinedButton(enabled = canEdit, onClick = { photoPicker.launch("image/*") }) { Text("Profil fotoğrafı seç") }
+        OutlinedButton(enabled = canEdit, onClick = { UiGuard.allowExternal(); photoPicker.launch("image/*") }) { Text("Profil fotoğrafı seç") }
         OutlinedTextField(name, { name = it.take(60) }, enabled = canEdit, label = { Text("İsim veya takma ad") }, singleLine = true, modifier = Modifier.fillMaxWidth())
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             AVATARS.forEach { a -> Chip(a, avatar == a, canEdit) { avatar = a } }

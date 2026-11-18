@@ -2523,3 +2523,10 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .video-items { display: flex; flex-direction: column; gap: 6px; }
 .upload-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .upload-row progress { flex: 1 1 120px; }
+.web-logins { display: flex; flex-direction: column; gap: 6px; padding: 8px 0; border-top: 1px solid var(--line); }
+.web-login-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 6px 0; }
+.web-login-name { min-width: 64px; font-weight: 600; }
+.web-login-row select { flex: 1 1 180px; min-width: 0; }
+.web-login-res { flex: 1 1 100%; word-break: break-word; }
+.web-login-new { flex: 1 1 100%; flex-wrap: wrap; }
+.web-login-new input { flex: 1 1 140px; min-width: 0; }

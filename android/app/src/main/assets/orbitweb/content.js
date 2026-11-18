@@ -124,7 +124,7 @@
       if (pw) setVal(pw, c.p);
       if (cfg.login === "auto") {
         mark();
-        setTimeout(() => submit((pw || user).form, pw || user), 400);
+        setTimeout(() => { submit((pw || user).form, pw || user); send({ t: "submitted" }); }, 400);
       }
     } finally {
       filling = false;

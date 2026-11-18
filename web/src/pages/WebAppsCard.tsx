@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Info } from "../components/Info";
+import WebLogins from "../components/WebLogins";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 
@@ -9,6 +10,7 @@ export type WebApp = {
   id: string; family_id: string; child_id: string; kind: "site" | "videos"; title: string; url: string | null; allowed_domains: string[];
   videos: WebVideo[]; autoplay: boolean; loop: boolean; strict: boolean; history: boolean; downloads: boolean; media: boolean;
   fullscreen: boolean; safe_search: boolean; remember_login: boolean; login_mode: "off" | "fill" | "auto";
+  login_url?: string | null;
 };
 type Visit = { id: number; url: string; title: string | null; blocked: boolean; at: string };
 
@@ -153,6 +155,7 @@ function WebAppDialog({ childId, value, onClose, onSaved }: { childId: string; v
       allowed_domains: domains.split(/[\s,]+/).map((d) => hostOf(d)).filter((d) => d.includes(".")),
       videos: w.videos ?? [], autoplay: !!w.autoplay, loop: !!w.loop, strict: !!w.strict, history: !!w.history, downloads: !!w.downloads,
       media: !!w.media, fullscreen: !!w.fullscreen, safe_search: !!w.safe_search, remember_login: !!w.remember_login, login_mode: w.login_mode ?? "auto",
+      login_url: isVideos ? null : (w.login_url ?? "").trim() ? ((w.login_url ?? "").trim().includes("://") ? (w.login_url ?? "").trim() : `https://${(w.login_url ?? "").trim()}`) : null,
       updated_at: new Date().toISOString(),
     };
     const { error } = value.id
@@ -236,11 +239,18 @@ function WebAppDialog({ childId, value, onClose, onSaved }: { childId: string; v
                   </select>
                 </label>
               )}
+              {!isVideos && w.login_mode !== "off" && (
+                <label className="field"><span>Giriş sayfası adresi <Info>Boş bırakılabilir. Ana sayfada giriş formu yoksa (ör. önce "Giriş"e basmak gerekiyorsa) giriş sayfasının adresini yaz; "Telefonda dene" oradan başlar.</Info></span>
+                  <input value={w.login_url ?? ""} placeholder="ör. kulmindset.com/login" onChange={(e) => set({ login_url: e.target.value })} />
+                </label>
+              )}
               <span className="muted small">{isVideos ? "YouTube hesabıyla giriş" : "Doğrulama / ilk giriş"} <Info>{isVideos
                 ? "YouTube hesabı (Premium): panelden ebeveyn modunu aç, telefonda listeyi aç, üstteki 👤 ile Google hesabına giriş yap, sonra ⟳. Giriş hatırlanır."
                 : "Doğrulama ya da ilk giriş için panelden ebeveyn modunu aç: o sürede kısıtlar kalkar, telefonda girişi yap; sonra site girişi hatırlar."}</Info></span>
             </div>
           </details>
+
+          {value.id && !isVideos && w.login_mode !== "off" && <WebLogins webAppId={value.id} siteUrl={w.url ?? ""} title={w.title ?? ""} />}
 
           {visits && visits.length > 0 && (
             <details className="web-more">

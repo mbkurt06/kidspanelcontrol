@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Info } from "../components/Info";
 import { KioskWindows, MODE3_LABEL, MODES, fromMode3, mode3, type Mode3 } from "../components/AppModes";
 import { useFamily } from "../lib/family";
@@ -16,6 +17,9 @@ type Progress = { video_id: string; position_sec: number; duration_sec: number |
 const DEF: Settings = { can_delete: true, can_redownload: false, auto_delete_days: null, max_gb: 4, wifi_only: true };
 /** OneDrive parça boyutu: 320 KiB'nin katı */
 const CHUNK = 320 * 1024 * 32;
+
+/** Dosya adından video adı: uzantı ve alt çizgiler gider */
+const cleanName = (n: string) => n.replace(/\.[^.]+$/, "").replace(/[_]+/g, " ").replace(/\s+/g, " ").trim();
 
 const mb = (b: number | null | undefined) => (b ? (b / 1048576 >= 1024 ? `${(b / 1073741824).toFixed(1)} GB` : `${Math.round(b / 1048576)} MB`) : "");
 const dur = (s: number | null | undefined) => (s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : "");
@@ -62,6 +66,8 @@ export default function VideosTab({ childId }: { childId: string }) {
   const [uploads, setUploads] = useState<Record<string, { name: string; pct: number; error?: string }>>({});
   const [err, setErr] = useState("");
   const [newName, setNewName] = useState("");
+  const [editing, setEditing] = useState<string | null>(null);
+  const [staged, setStaged] = useState<{ list: VList; files: File[] } | null>(null);
 
   const load = useCallback(async () => {
     const [l, v, r, s, p] = await Promise.all([
@@ -140,26 +146,41 @@ export default function VideosTab({ childId }: { childId: string }) {
     await Promise.all(a.map((x, k) => supabase.from("videos").update({ sort: k }).eq("id", x.id)));
   }
 
-  async function renameVideo(v: Video) {
-    const title = prompt("Videonun adı", v.title)?.trim();
-    if (!title || title === v.title) return;
-    const { error } = await supabase.from("videos").update({ title }).eq("id", v.id);
-    if (error) setErr(errorText(error)); else load();
+  async function renameVideo(v: Video, title: string) {
+    const t = title.trim();
+    setEditing(null);
+    if (!t || t === v.title) return;
+    setVideos((all) => all.map((x) => (x.id === v.id ? { ...x, title: t } : x)));
+    const { error } = await supabase.from("videos").update({ title: t }).eq("id", v.id);
+    if (error) { setErr(errorText(error)); load(); }
   }
 
-  async function upload(l: VList, files: FileList) {
-    for (const file of Array.from(files)) {
+  /** Listeyi videoların adına göre sırala (1, 2, 10 doğal sırayla) */
+  async function sortByName(listId: string) {
+    const a = videos.filter((x) => x.list_id === listId).sort((x, y) => x.title.localeCompare(y.title, "tr", { numeric: true, sensitivity: "base" }));
+    setVideos((all) => [...all.filter((x) => x.list_id !== listId), ...a.map((x, k) => ({ ...x, sort: k }))]);
+    await Promise.all(a.map((x, k) => supabase.from("videos").update({ sort: k }).eq("id", x.id)));
+  }
+
+  /** Dosya adlarını yeniden video adı yap */
+  async function namesFromFiles(listId: string) {
+    const a = videos.filter((x) => x.list_id === listId && x.file_name);
+    if (!a.length || !confirm("Bu listedeki videoların adları dosya adlarından yeniden alınsın mı?")) return;
+    setVideos((all) => all.map((x) => (x.list_id === listId && x.file_name ? { ...x, title: cleanName(x.file_name) } : x)));
+    await Promise.all(a.map((x) => supabase.from("videos").update({ title: cleanName(x.file_name!) }).eq("id", x.id)));
+  }
+
+  async function upload(l: VList, items: { file: File; title: string }[]) {
+    const base = videos.filter((x) => x.list_id === l.id).length;
+    for (const [idx, { file, title }] of items.entries()) {
       const key = `${l.id}:${file.name}:${file.size}`;
-      const ok = /\.mp4$/i.test(file.name) || file.type === "video/mp4";
-      if (!ok && !confirm(`“${file.name}” MP4 değil; bazı telefonlarda oynamayabilir. Yine de yüklensin mi?`)) continue;
       setUploads((u) => ({ ...u, [key]: { name: file.name, pct: 0 } }));
       try {
         const meta = await probe(file);
-        const count = videos.filter((x) => x.list_id === l.id).length;
         const { data: row, error } = await supabase.from("videos").insert({
-          family_id: fam.familyId, list_id: l.id, title: file.name.replace(/\.[^.]+$/, ""), file_name: file.name, size_bytes: file.size,
+          family_id: fam.familyId, list_id: l.id, title: title.trim() || cleanName(file.name), file_name: file.name, size_bytes: file.size,
           duration_sec: meta.duration || null, width: meta.width || null, height: meta.height || null, mime: file.type || "video/mp4",
-          thumb: meta.thumb, sort: count, status: "uploading",
+          thumb: meta.thumb, sort: base + idx, status: "uploading",
         }).select().single();
         if (error) throw error;
         const s = await supabase.functions.invoke("orbit-onedrive", { body: { action: "video_session", list_id: l.id, name: file.name } });
@@ -232,11 +253,17 @@ export default function VideosTab({ childId }: { childId: string }) {
                     return (
                       <div key={v.id} className="web-video">
                         {v.thumb ? <img src={v.thumb} alt="" /> : <span className="web-ico videos">🎬</span>}
-                        <span className="grow small">
-                          {i + 1}. {v.title}
-                          <span className="muted tiny"> · {dur(v.duration_sec)} · {mb(v.size_bytes)}{st ? ` · ${st}` : ""}</span>
-                        </span>
-                        <button className="link-btn" onClick={() => renameVideo(v)} aria-label="Adını değiştir">✎</button>
+                        {editing === v.id ? (
+                          <input className="grow" autoFocus defaultValue={v.title}
+                            onBlur={(e) => renameVideo(v, e.currentTarget.value)}
+                            onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); if (e.key === "Escape") setEditing(null); }} />
+                        ) : (
+                          <span className="grow small" onClick={() => setEditing(v.id)} title="Adını değiştirmek için dokun">
+                            {i + 1}. {v.title}
+                            <span className="muted tiny"> · {dur(v.duration_sec)} · {mb(v.size_bytes)}{st ? ` · ${st}` : ""}</span>
+                          </span>
+                        )}
+                        <button className="link-btn" onClick={() => setEditing(v.id)} aria-label="Adını değiştir">✎</button>
                         <button className="link-btn" onClick={() => move(l.id, v, -1)} aria-label="Yukarı">▲</button>
                         <button className="link-btn" onClick={() => move(l.id, v, 1)} aria-label="Aşağı">▼</button>
                         <button className="link-btn danger" onClick={() => removeVideo(v)} aria-label="Sil">✕</button>
@@ -250,8 +277,10 @@ export default function VideosTab({ childId }: { childId: string }) {
                       <span className="muted tiny">{u.error ? "" : `%${u.pct}`}</span>
                     </div>
                   ))}
-                  <UploadButton onFiles={(f) => upload(l, f)} />
-                  <div className="row gap-s">
+                  <UploadButton onFiles={(f) => setStaged({ list: l, files: Array.from(f) })} />
+                  <div className="row gap-s" style={{ flexWrap: "wrap" }}>
+                    <button className="link-btn" onClick={() => sortByName(l.id)}>⇅ Ada göre sırala</button>
+                    <button className="link-btn" onClick={() => namesFromFiles(l.id)}>🏷 Adları dosya adından al</button>
                     <button className="link-btn" onClick={() => renameList(l)}>✎ Adı / simge</button>
                     <button className="link-btn danger" onClick={() => removeList(l)}>Listeyi sil</button>
                   </div>
@@ -265,6 +294,15 @@ export default function VideosTab({ childId }: { childId: string }) {
           <button className="btn small" onClick={addList}>＋ Liste</button>
         </div>
       </div>
+
+      {staged && (
+        <StageDialog
+          list={staged.list}
+          files={staged.files}
+          onClose={() => setStaged(null)}
+          onUpload={(items) => { const l = staged.list; setStaged(null); setOpen(l.id); upload(l, items); }}
+        />
+      )}
 
       <div className="card">
         <h2>Bu çocuğun video izinleri <Info>Telefondaki indirme ve silme kuralları. Çocuk videoyu ancak burada izin verirsen telefondan silebilir ya da sildiğini tekrar indirebilir.</Info></h2>
@@ -293,5 +331,54 @@ function UploadButton({ onFiles }: { onFiles: (f: FileList) => void }) {
       <input ref={ref} type="file" accept="video/*" multiple hidden onChange={(e) => { if (e.target.files?.length) onFiles(e.target.files); e.target.value = ""; }} />
       <button className="btn small" onClick={() => ref.current?.click()}>＋ Video seç</button>
     </>
+  );
+}
+
+/** Toplu eklemeden önce: sırala, adları dosya adından al ya da elle yaz */
+function StageDialog({ list, files, onClose, onUpload }: { list: VList; files: File[]; onClose: () => void; onUpload: (items: { file: File; title: string }[]) => void }) {
+  const [auto, setAuto] = useState(true);
+  const [items, setItems] = useState(() => files.map((file) => ({ file, title: cleanName(file.name) })));
+  const setAll = (on: boolean) => {
+    setAuto(on);
+    setItems((a) => a.map((x) => ({ ...x, title: on ? cleanName(x.file.name) : "" })));
+  };
+  const move = (i: number, d: number) => setItems((a) => {
+    const b = [...a]; const j = i + d;
+    if (j < 0 || j >= b.length) return a;
+    [b[i], b[j]] = [b[j], b[i]];
+    return b;
+  });
+  const sortName = () => setItems((a) => [...a].sort((x, y) => (x.title || x.file.name).localeCompare(y.title || y.file.name, "tr", { numeric: true, sensitivity: "base" })));
+  const notMp4 = items.filter((x) => !(/\.mp4$/i.test(x.file.name) || x.file.type === "video/mp4"));
+  const missing = items.some((x) => !x.title.trim());
+  return createPortal(
+    <>
+      <div className="pop-backdrop sheet-like" onClick={onClose} />
+      <div className="lock-pop sheet-pop web-dialog" role="dialog" aria-label="Video ekle">
+        <b className="sheet-pop-title">{list.emoji} {list.name} · {items.length} video ekle</b>
+        <div className="stack" style={{ gap: 8 }}>
+          <label className="web-toggle"><input type="checkbox" checked={auto} onChange={(e) => setAll(e.target.checked)} /><span><b>Video adlarını dosya adlarından al</b></span></label>
+          <div className="row gap-s"><button className="link-btn" onClick={sortName}>⇅ Ada göre sırala</button></div>
+          {items.map((x, i) => (
+            <div key={x.file.name + i} className="web-video">
+              <span className="muted small" style={{ width: 22 }}>{i + 1}.</span>
+              <span className="grow" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <input value={x.title} placeholder="Video adı" onChange={(e) => setItems((a) => a.map((y, k) => (k === i ? { ...y, title: e.target.value } : y)))} />
+                <span className="muted tiny">{x.file.name} · {mb(x.file.size)}</span>
+              </span>
+              <button className="link-btn" onClick={() => move(i, -1)} aria-label="Yukarı">▲</button>
+              <button className="link-btn" onClick={() => move(i, 1)} aria-label="Aşağı">▼</button>
+              <button className="link-btn danger" onClick={() => setItems((a) => a.filter((_, k) => k !== i))} aria-label="Çıkar">✕</button>
+            </div>
+          ))}
+          {notMp4.length > 0 && <p className="error tiny">⚠ {notMp4.length} dosya MP4 değil; bazı telefonlarda oynamayabilir.</p>}
+          <div className="row between">
+            <button className="btn ghost small" onClick={onClose}>Vazgeç</button>
+            <button className="btn small" disabled={!items.length || missing} onClick={() => onUpload(items)}>{missing ? "Adları yaz" : `Yükle (${items.length})`}</button>
+          </div>
+        </div>
+      </div>
+    </>,
+    document.body,
   );
 }

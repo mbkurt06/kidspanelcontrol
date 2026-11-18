@@ -21,6 +21,10 @@ const CHUNK = 320 * 1024 * 32;
 /** Dosya adından video adı: uzantı ve alt çizgiler gider */
 const cleanName = (n: string) => n.replace(/\.[^.]+$/, "").replace(/[_]+/g, " ").replace(/\s+/g, " ").trim();
 
+/** Doğal sıra: baştaki numaraya göre (001, 002, 10), sonra ada göre */
+const natural = (a: string, b: string) => a.localeCompare(b, "tr", { numeric: true, sensitivity: "base" });
+const numbered = (t: string) => /^\s*\d+/.test(t);
+
 const mb = (b: number | null | undefined) => (b ? (b / 1048576 >= 1024 ? `${(b / 1073741824).toFixed(1)} GB` : `${Math.round(b / 1048576)} MB`) : "");
 const dur = (s: number | null | undefined) => (s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : "");
 
@@ -157,7 +161,7 @@ export default function VideosTab({ childId }: { childId: string }) {
 
   /** Listeyi videoların adına göre sırala (1, 2, 10 doğal sırayla) */
   async function sortByName(listId: string) {
-    const a = videos.filter((x) => x.list_id === listId).sort((x, y) => x.title.localeCompare(y.title, "tr", { numeric: true, sensitivity: "base" }));
+    const a = videos.filter((x) => x.list_id === listId).sort((x, y) => natural(x.title, y.title));
     setVideos((all) => [...all.filter((x) => x.list_id !== listId), ...a.map((x, k) => ({ ...x, sort: k }))]);
     await Promise.all(a.map((x, k) => supabase.from("videos").update({ sort: k }).eq("id", x.id)));
   }
@@ -209,11 +213,18 @@ export default function VideosTab({ childId }: { childId: string }) {
         const { error: e2 } = await supabase.from("videos").update({ item_id: item, status: "ready" }).eq("id", (row as Video).id);
         if (e2) throw e2;
         setUploads((u) => { const n = { ...u }; delete n[key]; return n; });
-        load();
       } catch (e) {
         setUploads((u) => ({ ...u, [key]: { name: file.name, pct: u[key]?.pct ?? 0, error: e instanceof Error ? e.message : String(e) } }));
       }
     }
+    // Adlar numaralıysa (001, 002…) liste numaraya göre dizilir; yeni eklenenler araya doğru yere girer
+    const { data } = await supabase.from("videos").select("id,title").eq("list_id", l.id);
+    const all = (data ?? []) as { id: string; title: string }[];
+    if (all.length && all.every((x) => numbered(x.title))) {
+      const sorted = [...all].sort((a, b) => natural(a.title, b.title));
+      await Promise.all(sorted.map((x, k) => supabase.from("videos").update({ sort: k }).eq("id", x.id)));
+    }
+    load();
   }
 
   if (!lists) return <p className="muted">Yükleniyor…</p>;
@@ -337,7 +348,8 @@ function UploadButton({ onFiles }: { onFiles: (f: FileList) => void }) {
 /** Toplu eklemeden önce: sırala, adları dosya adından al ya da elle yaz */
 function StageDialog({ list, files, onClose, onUpload }: { list: VList; files: File[]; onClose: () => void; onUpload: (items: { file: File; title: string }[]) => void }) {
   const [auto, setAuto] = useState(true);
-  const [items, setItems] = useState(() => files.map((file) => ({ file, title: cleanName(file.name) })));
+  // Seçim sırası telefona göre değişir: dosya adına göre (001, 002…) sıralı başla
+  const [items, setItems] = useState(() => files.map((file) => ({ file, title: cleanName(file.name) })).sort((x, y) => natural(x.file.name, y.file.name)));
   const setAll = (on: boolean) => {
     setAuto(on);
     setItems((a) => a.map((x) => ({ ...x, title: on ? cleanName(x.file.name) : "" })));
@@ -348,7 +360,7 @@ function StageDialog({ list, files, onClose, onUpload }: { list: VList; files: F
     [b[i], b[j]] = [b[j], b[i]];
     return b;
   });
-  const sortName = () => setItems((a) => [...a].sort((x, y) => (x.title || x.file.name).localeCompare(y.title || y.file.name, "tr", { numeric: true, sensitivity: "base" })));
+  const sortName = () => setItems((a) => [...a].sort((x, y) => natural(x.title || x.file.name, y.title || y.file.name)));
   const notMp4 = items.filter((x) => !(/\.mp4$/i.test(x.file.name) || x.file.type === "video/mp4"));
   const missing = items.some((x) => !x.title.trim());
   return createPortal(

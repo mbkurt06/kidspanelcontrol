@@ -43,6 +43,10 @@ object Videos {
         /** Telefonda hazır videolar */
         val local: Set<String> = emptySet(),
         val note: String? = null,
+        /** İnemeyen video → sebep */
+        val errors: Map<String, String> = emptyMap(),
+        /** İndirme sırası bekleyen videolar */
+        val queued: Set<String> = emptySet(),
     )
 
     private val _state = MutableStateFlow(State())
@@ -101,7 +105,7 @@ object Videos {
     fun store(lists: JSONArray, videos: JSONArray, settings: JSONArray, progress: JSONArray) {
         val b = JSONObject().put("lists", lists).put("videos", videos).put("settings", settings.optJSONObject(0) ?: JSONObject()).put("progress", progress)
         val s = decode(b)
-        _state.value = s.copy(local = scanLocal(), downloading = _state.value.downloading)
+        _state.value = s.copy(local = scanLocal(), downloading = _state.value.downloading, errors = _state.value.errors, queued = _state.value.queued)
         runCatching { Store.prefs().edit().putString("videos.cache", b.toString()).apply() }
     }
 
@@ -182,6 +186,19 @@ object Videos {
         Thread { sync() }.start()
     }
 
+    /** "İndir" düğmesi: hemen eşitle (ebeveyn "sadece Wi-Fi" dediyse yine Wi-Fi bekler) */
+    fun downloadNow() { Thread { sync() }.start() }
+
+    @Volatile private var diagSent = false
+    private fun fail(v: Video, why: String) {
+        Log.w(TAG, "${v.title}: $why")
+        _state.value = _state.value.copy(errors = _state.value.errors + (v.id to why), downloading = _state.value.downloading - v.id)
+        if (!diagSent) {
+            diagSent = true
+            Thread { runCatching { Sync.event("video_diag", JSONObject().put("video", v.id).put("why", why.take(400))) } }.start()
+        }
+    }
+
     // --- İndirme / temizlik (ağ iş parçacığında) ---
 
     private fun onWifi(): Boolean {
@@ -215,15 +232,18 @@ object Videos {
             _state.value = _state.value.copy(local = scanLocal())
             if (s.settings.wifiOnly && !onWifi()) { _state.value = _state.value.copy(note = "Wi-Fi bekleniyor"); return }
             val maxBytes = (s.settings.maxGb * 1_073_741_824L).toLong()
-            for (v in wanted.sortedWith(compareBy({ s.progress[it.id]?.watched == true }, { it.sort }))) {
+            val order = wanted.sortedWith(compareBy({ s.progress[it.id]?.watched == true }, { it.sort })).filter { !file(it.id).exists() }
+            _state.value = _state.value.copy(queued = order.map { it.id }.toSet())
+            for (v in order) {
                 if (file(v.id).exists()) continue
                 val used = (dir().listFiles() ?: emptyArray()).sumOf { it.length() }
                 if (used + v.size > maxBytes) { _state.value = _state.value.copy(note = "Yer sınırı doldu (${"%.1f".format(s.settings.maxGb)} GB)"); break }
                 if (dir().usableSpace < v.size + 300L * 1_048_576) { _state.value = _state.value.copy(note = if (onSdCard) "Hafıza kartında yer yok" else "Telefonda yer yok"); break }
                 if (s.settings.wifiOnly && !onWifi()) break
-                download(v)
+                runCatching { download(v) }.onFailure { fail(v, it.message ?: it.javaClass.simpleName) }
+                _state.value = _state.value.copy(queued = _state.value.queued - v.id)
             }
-            _state.value = _state.value.copy(note = null, local = scanLocal())
+            _state.value = _state.value.copy(note = null, local = scanLocal(), queued = emptySet())
         } catch (t: Throwable) {
             Log.w(TAG, "video eşitleme", t)
         } finally {
@@ -232,14 +252,16 @@ object Videos {
     }
 
     private fun download(v: Video) {
+        _state.value = _state.value.copy(downloading = _state.value.downloading + (v.id to 0), errors = _state.value.errors - v.id)
         val (code, txt) = Api.function("orbit-onedrive", JSONObject().put("action", "video_url").put("video_id", v.id))
-        if (code !in 200..299) { Log.w(TAG, "adres alınamadı $code ${txt.take(120)}"); return }
-        val url = JSONObject(txt).optString("url").takeIf { it.startsWith("https://") } ?: return
+        if (code !in 200..299) { fail(v, "Adres alınamadı ($code) ${txt.take(160)}"); return }
+        val url = runCatching { JSONObject(txt).optString("url") }.getOrDefault("").takeIf { it.startsWith("https://") }
+            ?: run { fail(v, "İndirme adresi yok: ${txt.take(160)}"); return }
         val part = File(dir(), "${v.id}.part")
         val from = if (part.exists()) part.length() else 0L
         val req = Request.Builder().url(url).apply { if (from > 0) header("Range", "bytes=$from-") }.build()
         Api.bigClient.newCall(req).execute().use { r ->
-            if (!r.isSuccessful) { Log.w(TAG, "indirme HTTP ${r.code}"); return }
+            if (!r.isSuccessful) { fail(v, "İndirme HTTP ${r.code}"); return }
             val append = r.code == 206
             val total = if (append) from + (r.body?.contentLength() ?: 0) else (r.body?.contentLength() ?: v.size)
             var done = if (append) from else 0L
@@ -257,7 +279,7 @@ object Videos {
                     }
                 }
             }
-            if (total > 0 && done < total) return
+            if (total > 0 && done < total) { fail(v, "Yarıda kaldı (${done / 1_048_576}/${total / 1_048_576} MB), tekrar denenecek"); return }
         }
         part.renameTo(file(v.id))
         _state.value = _state.value.copy(downloading = _state.value.downloading - v.id, local = scanLocal())

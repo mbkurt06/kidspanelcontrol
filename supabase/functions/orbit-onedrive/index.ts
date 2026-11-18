@@ -189,10 +189,17 @@ Deno.serve(async (req) => {
       const { data: v } = await admin.from("videos").select("item_id,family_id").eq("id", String(body.video_id ?? "")).maybeSingle();
       if (!v || v.family_id !== d.family_id || !v.item_id) throw new HttpErr(404, "video_not_found");
       const token = await accessToken(d.family_id);
-      const r = await fetch(`${GRAPH}/me/drive/items/${encodeURIComponent(v.item_id)}?$select=id,size,@microsoft.graph.downloadUrl`, { headers: { Authorization: `Bearer ${token}` } });
+      const r = await fetch(`${GRAPH}/me/drive/items/${encodeURIComponent(v.item_id)}`, { headers: { Authorization: `Bearer ${token}` } });
       const j = await r.json();
       if (!r.ok) throw new HttpErr(502, `item_failed: ${j.error?.message ?? r.status}`);
-      return json({ url: j["@microsoft.graph.downloadUrl"], size: j.size });
+      let url: string | null = j["@microsoft.graph.downloadUrl"] ?? null;
+      if (!url) {
+        // Yedek: /content yönlendirmesinin adresi (ön imzalı, kısa ömürlü)
+        const c = await fetch(`${GRAPH}/me/drive/items/${encodeURIComponent(v.item_id)}/content`, { headers: { Authorization: `Bearer ${token}` }, redirect: "manual" });
+        url = c.headers.get("location");
+      }
+      if (!url) throw new HttpErr(502, "no_download_url");
+      return json({ url, size: j.size });
     }
     if (action === "video_delete") {
       const fam = await parentFamily(req);

@@ -1,15 +1,40 @@
 package app.orbit.ui
 
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.Gravity
-import android.view.ViewGroup
 import android.view.WindowManager
-import android.widget.FrameLayout
-import android.widget.TextView
-import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -24,112 +49,133 @@ import app.orbit.data.WebApps
 import kotlinx.coroutines.launch
 
 /**
- * Videolarım oynatıcısı: sadece telefona inmiş videolar, liste sırasıyla. İnternet / başka yere çıkış yok.
+ * Bir video listesinin ekranı: üstte oynatıcı, altında listenin videoları (inenler oynar, inmeyenlerin yüzdesi görünür).
  * Ön planda "video:<listeId>" uygulaması sayılır: süre, saat ve kilit kuralları buna göre işler.
  */
 class VideoPlayerActivity : ComponentActivity() {
-    private var player: ExoPlayer? = null
-    private lateinit var list: Videos.VList
-    private var items: List<Videos.Video> = emptyList()
+    private val player by lazy { ExoPlayer.Builder(this).build() }
+    private lateinit var listId: String
     private val ui = Handler(Looper.getMainLooper())
-    private lateinit var titleView: TextView
+    private var current by mutableStateOf<String?>(null)
+    private var full by mutableStateOf(false)
+    private var ask by mutableStateOf<Videos.Video?>(null)
 
     private val tick = object : Runnable {
-        override fun run() {
-            save(false)
-            ui.postDelayed(this, 5_000)
-        }
+        override fun run() { save(false); ui.postDelayed(this, 5_000) }
     }
+
+    private fun list(): Videos.VList? = Videos.list(listId)
+    private fun playable(): List<Videos.Video> = list()?.videos?.filter { Videos.file(it.id).exists() } ?: emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Store.init(this)
         Videos.init(this)
-        val l = intent.getStringExtra("list")?.let { Videos.list(it) }
-        if (l == null) { finish(); return }
-        list = l
-        items = l.videos.filter { Videos.file(it.id).exists() }
-        if (items.isEmpty()) { Toast.makeText(this, "Bu listede henüz inmiş video yok", Toast.LENGTH_LONG).show(); finish(); return }
+        listId = intent.getStringExtra("list") ?: run { finish(); return }
+        val l = list() ?: run { finish(); return }
         val st = Videos.state.value
-        val wantId = intent.getStringExtra("video")
-        val start = items.indexOfFirst { it.id == wantId }.takeIf { it >= 0 }
-            ?: items.indexOfFirst { st.progress[it.id]?.watched != true }.takeIf { it >= 0 } ?: 0
-
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, window.decorView).apply {
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            hide(WindowInsetsCompat.Type.systemBars())
-        }
+        val want = intent.getStringExtra("video")
+        val items = playable()
+        val start = items.firstOrNull { it.id == want } ?: items.firstOrNull { st.progress[it.id]?.watched != true } ?: items.firstOrNull()
+        start?.let { load(it, play = want != null) }
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        val p = ExoPlayer.Builder(this).build()
-        player = p
-        p.setMediaItems(items.map { MediaItem.Builder().setUri(android.net.Uri.fromFile(Videos.file(it.id))).setMediaId(it.id).build() }, start,
-            ((st.progress[items[start].id]?.takeIf { !it.watched }?.position ?: 0) * 1000L))
-        p.addListener(object : Player.Listener {
-            override fun onMediaItemTransition(item: androidx.media3.common.MediaItem?, reason: Int) {
-                // Önceki video bitti sayılır
-                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
-                    val prev = items.getOrNull(p.currentMediaItemIndex - 1)
-                    prev?.let { Videos.saveProgress(it, it.duration, it.duration, true) }
-                }
-                updateTitle()
-            }
+        player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(state: Int) {
-                if (state == Player.STATE_ENDED) { save(true); finish() }
+                if (state != Player.STATE_ENDED) return
+                save(true)
+                // Sıradaki inmiş video
+                val ps = playable()
+                val i = ps.indexOfFirst { it.id == current }
+                ps.getOrNull(i + 1)?.let { load(it, play = true) }
             }
         })
-        p.prepare()
-        p.playWhenReady = true
 
-        val root = FrameLayout(this).apply { setBackgroundColor(android.graphics.Color.BLACK) }
-        val view = PlayerView(this).apply {
-            this.player = p
-            setShowNextButton(true)
-            setShowPreviousButton(true)
-            setFullscreenButtonClickListener(null)
-        }
-        root.addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        titleView = TextView(this).apply {
-            setTextColor(android.graphics.Color.WHITE)
-            textSize = 15f
-            setPadding(36, 48, 36, 24)
-            setShadowLayer(6f, 0f, 0f, android.graphics.Color.BLACK)
-            maxLines = 1
-        }
-        root.addView(titleView, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP))
-        view.setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { v -> titleView.visibility = v })
-        setContentView(root)
-        updateTitle()
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() { if (full) setFull(false) else finish() }
+        })
 
         lifecycleScope.launch {
             WebApps.close.collect { c ->
-                if (c != null && c.first == list.pkg) {
-                    WebApps.clearClose()
-                    finish()
+                if (c != null && c.first == l.pkg) { WebApps.clearClose(); finish() }
+            }
+        }
+
+        setContent {
+            OrbitTheme {
+                val st2 by Videos.state.collectAsState()
+                val vl = remember(st2.lists) { list() } ?: l
+                Column(Modifier.fillMaxSize().background(C.bg).let { if (full) it else it.statusBarsPadding() }) {
+                    if (!full) Row(Modifier.fillMaxWidth().background(C.surface).padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.clip(RoundedCornerShape(10.dp)).clickable { finish() }.padding(horizontal = 14.dp, vertical = 10.dp)) { Text("✕", color = C.text, fontSize = 20.sp) }
+                        Text("${vl.emoji} ${vl.name}", color = C.text, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1,
+                            overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 6.dp))
+                    }
+                    Box(Modifier.fillMaxWidth().let { if (full) it.weight(1f) else it.aspectRatio(16f / 9f) }.background(androidx.compose.ui.graphics.Color.Black)) {
+                        if (current == null) Text("Oynatmak için aşağıdan bir video seç", color = C.muted, modifier = Modifier.align(Alignment.Center))
+                        AndroidView(factory = { ctx ->
+                            PlayerView(ctx).apply {
+                                player = this@VideoPlayerActivity.player
+                                setShowNextButton(false)
+                                setShowPreviousButton(false)
+                                setFullscreenButtonClickListener { setFull(it) }
+                            }
+                        }, modifier = Modifier.fillMaxSize())
+                    }
+                    if (!full) {
+                        val now = vl.videos.firstOrNull { it.id == current }
+                        if (now != null) Text(now.title, color = C.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        LazyColumn(Modifier.fillMaxWidth().weight(1f).padding(horizontal = 10.dp)) {
+                            items(vl.videos, key = { it.id }) { vid ->
+                                VideoRow(vid, st2, open = true, playing = vid.id == current, onAsk = { ask = it }) { load(vid, play = true) }
+                            }
+                        }
+                    }
                 }
+                DeleteAsk(ask, st2) { ask = null }
             }
         }
     }
 
-    private fun updateTitle() {
-        val p = player ?: return
-        val v = items.getOrNull(p.currentMediaItemIndex) ?: return
-        titleView.text = "${list.emoji} ${list.name} · ${p.currentMediaItemIndex + 1}/${items.size} · ${v.title}"
+    private fun load(v: Videos.Video, play: Boolean) {
+        if (current != null) save(false)
+        val f = Videos.file(v.id)
+        if (!f.exists()) return
+        current = v.id
+        val p = Videos.state.value.progress[v.id]
+        player.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(f)), (p?.takeIf { !it.watched }?.position ?: 0) * 1000L)
+        player.prepare()
+        player.playWhenReady = play
+    }
+
+    private fun setFull(on: Boolean) {
+        full = on
+        val c = WindowInsetsControllerCompat(window, window.decorView)
+        if (on) {
+            WindowCompat.setDecorFitsSystemWindows(window, false)
+            c.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            c.hide(WindowInsetsCompat.Type.systemBars())
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        } else {
+            WindowCompat.setDecorFitsSystemWindows(window, true)
+            c.show(WindowInsetsCompat.Type.systemBars())
+            requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
     }
 
     private fun save(ended: Boolean) {
-        val p = player ?: return
-        val v = items.getOrNull(p.currentMediaItemIndex) ?: return
-        val dur = (p.duration.takeIf { it > 0 } ?: (v.duration * 1000L)) / 1000
-        val pos = p.currentPosition / 1000
-        val watched = ended || (dur > 0 && pos >= dur * 0.9)
-        Videos.saveProgress(v, pos.toInt(), dur.toInt(), watched)
+        val id = current ?: return
+        val v = list()?.videos?.firstOrNull { it.id == id } ?: return
+        val dur = (player.duration.takeIf { it > 0 } ?: (v.duration * 1000L)) / 1000
+        val pos = player.currentPosition / 1000
+        if (pos <= 0 && !ended) return
+        Videos.saveProgress(v, pos.toInt(), dur.toInt(), ended || (dur > 0 && pos >= dur * 0.9))
     }
 
     override fun onResume() {
         super.onResume()
-        if (::list.isInitialized) WebApps.current = list.pkg
+        if (::listId.isInitialized) WebApps.current = Videos.PREFIX + listId
         ui.postDelayed(tick, 5_000)
     }
 
@@ -137,13 +183,12 @@ class VideoPlayerActivity : ComponentActivity() {
         super.onPause()
         ui.removeCallbacks(tick)
         save(false)
-        player?.pause()
-        if (::list.isInitialized && WebApps.current == list.pkg) WebApps.current = null
+        player.pause()
+        if (::listId.isInitialized && WebApps.current == Videos.PREFIX + listId) WebApps.current = null
     }
 
     override fun onDestroy() {
-        player?.release()
-        player = null
+        player.release()
         super.onDestroy()
     }
 }

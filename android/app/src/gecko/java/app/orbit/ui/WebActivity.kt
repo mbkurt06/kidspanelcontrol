@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.DownloadManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
@@ -53,6 +54,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import app.orbit.data.Store
+import app.orbit.data.Sync
 import app.orbit.data.WebApps
 import app.orbit.service.Live
 import kotlinx.coroutines.launch
@@ -144,6 +146,19 @@ class WebActivity : ComponentActivity() {
         app = a
         title = a.title
         WindowCompat.setDecorFitsSystemWindows(window, true)
+
+        // Gecko'nun yerel kütüphanesi kurulmamışsa motor açılırken uygulama çöker: önce kontrol et, durumu panele bildir
+        val libDir = java.io.File(applicationInfo.nativeLibraryDir ?: "")
+        if (!java.io.File(libDir, "libmozglue.so").exists()) {
+            val info = JSONObject().put("libDir", libDir.path).put("abis", JSONArray(android.os.Build.SUPPORTED_ABIS.toList()))
+                .put("primaryAbi", runCatching { ApplicationInfo::class.java.getField("primaryCpuAbi").get(applicationInfo)?.toString() }.getOrNull() ?: "?")
+                .put("files", JSONArray((libDir.list() ?: emptyArray()).toList()))
+                .put("sourceDir", applicationInfo.sourceDir).put("splits", JSONArray((applicationInfo.splitSourceDirs ?: emptyArray()).toList()))
+            thread { Sync.event("web_diag", info) }
+            Toast.makeText(this, "Tarayıcı bu telefonda henüz açılamıyor (bilgi panele gönderildi)", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
 
         val rt = Gecko.runtime(this)
         session = GeckoSession(

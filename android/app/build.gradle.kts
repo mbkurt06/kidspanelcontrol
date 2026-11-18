@@ -53,6 +53,11 @@ android {
         compose = true
         buildConfig = true
     }
+    // Gecko'nun getirdiği yeni lifecycle kütüphanesindeki lint kuralı bu AGP sürümünde çöküyor: sürüm derlemesinde lint atlanır
+    lint {
+        checkReleaseBuilds = false
+        abortOnError = false
+    }
     testOptions {
         unitTests.isReturnDefaultValues = true
     }

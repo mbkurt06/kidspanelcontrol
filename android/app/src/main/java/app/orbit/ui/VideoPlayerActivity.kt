@@ -147,6 +147,8 @@ class VideoPlayerActivity : ComponentActivity() {
 
     /** YouTube gibi: kaldığı yerden başlar (izlenmişse baştan); 5 sn "Baştan başla" görünür */
     private fun load(v: Videos.Video) {
+        // İzlenmiş video yeniden açılınca işareti kalkar, baştan başlar
+        if (Videos.state.value.progress[v.id]?.watched == true) Videos.resetWatched(v)
         val pos = Videos.state.value.progress[v.id]?.takeIf { !it.watched }?.position ?: 0
         start(v, if (pos > 3) pos else 0, true)
         ui.removeCallbacks(hideHint)
@@ -156,6 +158,7 @@ class VideoPlayerActivity : ComponentActivity() {
 
     private fun restart() {
         hint = false
+        list()?.videos?.firstOrNull { it.id == current }?.let { Videos.resetWatched(it) }
         player.seekTo(0)
         player.play()
     }

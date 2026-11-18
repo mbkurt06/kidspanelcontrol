@@ -126,6 +126,8 @@ internal fun VideoRow(vid: Videos.Video, st: Videos.State, open: Boolean, playin
             if (pct != null) LinearProgressIndicator(progress = { pct / 100f }, modifier = Modifier.fillMaxWidth().padding(top = 4.dp), color = C.accent)
             if (err != null && pct == null && !local) Text(err, color = C.bad, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
+        if (prog?.watched == true) Text("↺", fontSize = 20.sp, color = C.accent,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { Videos.resetWatched(vid) }.padding(8.dp))
         when {
             local && st.settings.canDelete -> Text("🗑", fontSize = 18.sp, modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { onAsk(vid) }.padding(8.dp))
             removed && st.settings.canRedownload -> Text("⬇", fontSize = 20.sp, color = C.accent,

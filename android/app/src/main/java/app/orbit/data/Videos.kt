@@ -190,6 +190,15 @@ object Videos {
         upsertProgress(v.id, p, downloaded = file(v.id).exists())
     }
 
+    /** "İzlendi" işaretini kaldırır: video baştan izlenebilir */
+    fun resetWatched(v: Video) {
+        val old = _state.value.progress[v.id] ?: return
+        val p = old.copy(position = 0, watched = false, updatedAt = Instant.now().toString())
+        _state.value = _state.value.copy(progress = _state.value.progress + (v.id to p))
+        persist(v.id, p)
+        upsertProgress(v.id, p, downloaded = file(v.id).exists())
+    }
+
     private fun upsertProgress(id: String, p: Progress, downloaded: Boolean) {
         val c = Store.creds ?: return
         Thread {

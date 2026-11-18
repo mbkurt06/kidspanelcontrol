@@ -5,6 +5,7 @@ import { KioskWindows, MODE3_LABEL, MODES, fromMode3, mode3, type Mode3 } from "
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import type { ChildApp } from "../lib/types";
+import { dismiss, enqueue, onUploaded, retry, useUploads } from "../lib/uploads";
 
 type VList = { id: string; family_id: string; child_id: string | null; name: string; emoji: string; sort: number; created_at: string };
 type Video = {
@@ -15,8 +16,6 @@ type Settings = { can_delete: boolean; can_redownload: boolean; auto_delete_days
 type Progress = { video_id: string; position_sec: number; duration_sec: number | null; watched: boolean; removed: boolean; downloaded: boolean };
 
 const DEF: Settings = { can_delete: true, can_redownload: false, auto_delete_days: null, max_gb: 4, wifi_only: true };
-/** OneDrive parça boyutu: 320 KiB'nin katı */
-const CHUNK = 320 * 1024 * 32;
 
 /** Dosya adından video adı: uzantı ve alt çizgiler gider */
 const cleanName = (n: string) => n.replace(/\.[^.]+$/, "").replace(/[_]+/g, " ").replace(/\s+/g, " ").trim();
@@ -29,35 +28,6 @@ const mb = (b: number | null | undefined) => (b ? (b / 1048576 >= 1024 ? `${(b /
 const dur = (s: number | null | undefined) => (s ? `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}` : "");
 
 /** Videonun süresi, boyutu ve kapak karesi (tarayıcıda) */
-function probe(file: File): Promise<{ duration: number; width: number; height: number; thumb: string | null }> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
-    const v = document.createElement("video");
-    v.preload = "metadata";
-    v.muted = true;
-    v.playsInline = true;
-    let done = false;
-    const finish = (thumb: string | null) => {
-      if (done) return;
-      done = true;
-      resolve({ duration: Math.round(v.duration || 0), width: v.videoWidth, height: v.videoHeight, thumb });
-      URL.revokeObjectURL(url);
-    };
-    v.onloadedmetadata = () => { v.currentTime = Math.min(2, (v.duration || 2) / 3); };
-    v.onseeked = () => {
-      try {
-        const c = document.createElement("canvas");
-        c.width = 192; c.height = 108;
-        c.getContext("2d")!.drawImage(v, 0, 0, 192, 108);
-        finish(c.toDataURL("image/jpeg", 0.7));
-      } catch { finish(null); }
-    };
-    v.onerror = () => finish(null);
-    setTimeout(() => finish(null), 15000);
-    v.src = url;
-  });
-}
-
 /** Çocuk → Videolar: ailenin ortak video listeleri; bu çocukta durumu ve izinleri */
 export default function VideosTab({ childId }: { childId: string }) {
   const fam = useFamily();
@@ -67,7 +37,7 @@ export default function VideosTab({ childId }: { childId: string }) {
   const [settings, setSettings] = useState<Settings>(DEF);
   const [progress, setProgress] = useState<Record<string, Progress>>({});
   const [open, setOpen] = useState<string | null>(null);
-  const [uploads, setUploads] = useState<Record<string, { name: string; pct: number; error?: string }>>({});
+  const queue = useUploads();
   const [err, setErr] = useState("");
   const [newName, setNewName] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
@@ -90,6 +60,8 @@ export default function VideosTab({ childId }: { childId: string }) {
     setProgress(Object.fromEntries(((p.data ?? []) as Progress[]).map((x) => [x.video_id, x])));
   }, [childId, fam.familyId]);
   useEffect(() => { load(); }, [load]);
+  // Her video yüklendikçe liste kendiliğinden yenilenir
+  useEffect(() => onUploaded(() => { void load(); }), [load]);
 
   async function updateRow(listId: string, patch: Partial<ChildApp>) {
     const pkg = `video:${listId}`;
@@ -174,57 +146,9 @@ export default function VideosTab({ childId }: { childId: string }) {
     await Promise.all(a.map((x) => supabase.from("videos").update({ title: cleanName(x.file_name!) }).eq("id", x.id)));
   }
 
-  async function upload(l: VList, items: { file: File; title: string }[]) {
+  function upload(l: VList, items: { file: File; title: string }[]) {
     const base = videos.filter((x) => x.list_id === l.id).length;
-    for (const [idx, { file, title }] of items.entries()) {
-      const key = `${l.id}:${file.name}:${file.size}`;
-      setUploads((u) => ({ ...u, [key]: { name: file.name, pct: 0 } }));
-      try {
-        const meta = await probe(file);
-        const { data: row, error } = await supabase.from("videos").insert({
-          family_id: fam.familyId, list_id: l.id, title: title.trim() || cleanName(file.name), file_name: file.name, size_bytes: file.size,
-          duration_sec: meta.duration || null, width: meta.width || null, height: meta.height || null, mime: file.type || "video/mp4",
-          thumb: meta.thumb, sort: base + idx, status: "uploading",
-        }).select().single();
-        if (error) throw error;
-        const s = await supabase.functions.invoke("orbit-onedrive", { body: { action: "video_session", list_id: l.id, name: file.name } });
-        if (s.error || !s.data?.upload_url) throw new Error(s.data?.error ?? s.error?.message ?? "OneDrive oturumu açılamadı");
-        const url = s.data.upload_url as string;
-        let off = 0;
-        let item: string | null = null;
-        while (off < file.size) {
-          const end = Math.min(off + CHUNK, file.size);
-          let tries = 0;
-          for (;;) {
-            try {
-              const r = await fetch(url, { method: "PUT", headers: { "Content-Range": `bytes ${off}-${end - 1}/${file.size}` }, body: file.slice(off, end) });
-              if (r.status === 200 || r.status === 201) { item = (await r.json()).id; break; }
-              if (r.status === 202) break;
-              throw new Error(`OneDrive HTTP ${r.status}`);
-            } catch (e) {
-              if (++tries >= 4) throw e;
-              await new Promise((ok2) => setTimeout(ok2, 2000 * tries));
-            }
-          }
-          off = end;
-          setUploads((u) => ({ ...u, [key]: { name: file.name, pct: Math.round((off * 100) / file.size) } }));
-        }
-        if (!item) throw new Error("OneDrive yüklemeyi tamamlamadı");
-        const { error: e2 } = await supabase.from("videos").update({ item_id: item, status: "ready" }).eq("id", (row as Video).id);
-        if (e2) throw e2;
-        setUploads((u) => { const n = { ...u }; delete n[key]; return n; });
-      } catch (e) {
-        setUploads((u) => ({ ...u, [key]: { name: file.name, pct: u[key]?.pct ?? 0, error: e instanceof Error ? e.message : String(e) } }));
-      }
-    }
-    // Adlar numaralıysa (001, 002…) liste numaraya göre dizilir; yeni eklenenler araya doğru yere girer
-    const { data } = await supabase.from("videos").select("id,title").eq("list_id", l.id);
-    const all = (data ?? []) as { id: string; title: string }[];
-    if (all.length && all.every((x) => numbered(x.title))) {
-      const sorted = [...all].sort((a, b) => natural(a.title, b.title));
-      await Promise.all(sorted.map((x, k) => supabase.from("videos").update({ sort: k }).eq("id", x.id)));
-    }
-    load();
+    enqueue(l.id, fam.familyId, base, items);
   }
 
   if (!lists) return <p className="muted">Yükleniyor…</p>;
@@ -236,13 +160,16 @@ export default function VideosTab({ childId }: { childId: string }) {
         {lists.length === 0 && <p className="muted">Henüz liste yok.</p>}
         {lists.map((l) => {
           const row = rows[`video:${l.id}`];
-          const vids = videos.filter((v) => v.list_id === l.id);
+          const active = new Set(queue.filter((q) => q.videoId && q.status !== "done").map((q) => q.videoId));
+          const vids = videos.filter((v) => v.list_id === l.id && !active.has(v.id));
+          const lq = queue.filter((q) => q.listId === l.id && (q.status !== "done" || !videos.some((v) => v.id === q.videoId && v.status === "ready")));
+          const left = lq.filter((q) => q.status === "waiting" || q.status === "uploading").length;
           const size = vids.reduce((n, v) => n + (v.size_bytes ?? 0), 0);
           return (
             <div key={l.id} className="video-list">
               <div className="row between" onClick={() => setOpen(open === l.id ? null : l.id)} role="button" tabIndex={0}>
                 <b>{l.emoji} {l.name}</b>
-                <span className="muted small">{vids.length} video · {mb(size)} {open === l.id ? "▴" : "▾"}</span>
+                <span className="muted small">{vids.length} video · {mb(size)}{left ? ` · ⬆ ${left} yükleniyor` : ""} {open === l.id ? "▴" : "▾"}</span>
               </div>
               {row ? (
                 <div className="app-setting-controls">
@@ -281,13 +208,24 @@ export default function VideosTab({ childId }: { childId: string }) {
                       </div>
                     );
                   })}
-                  {Object.entries(uploads).filter(([k]) => k.startsWith(`${l.id}:`)).map(([k, u]) => (
-                    <div key={k} className="upload-row">
-                      <span className="small">{u.name}</span>
-                      {u.error ? <span className="error tiny">{u.error}</span> : <progress max={100} value={u.pct} />}
-                      <span className="muted tiny">{u.error ? "" : `%${u.pct}`}</span>
+                  {lq.length > 0 && (
+                    <div className="upload-queue">
+                      <p className="small"><b>Yükleme</b> <span className="muted">· {lq.filter((q) => q.status === "done").length} / {lq.length} yüklendi{left ? " · sayfadan ayrılabilirsin, panel açık kaldıkça sürer" : ""}</span></p>
+                      {lq.map((q) => (
+                        <div key={q.key} className="upload-row">
+                          <span className="small grow">{q.title}</span>
+                          {q.status === "uploading" && <><progress max={100} value={q.pct} /><span className="muted tiny">%{q.pct} yükleniyor</span></>}
+                          {q.status === "waiting" && <span className="muted tiny">⏳ bekliyor</span>}
+                          {q.status === "done" && <span className="ok tiny">✔ yüklendi</span>}
+                          {q.status === "error" && <>
+                            <span className="error tiny">⚠ {q.error}</span>
+                            <button className="link-btn" onClick={() => retry(q.key)}>Tekrar dene</button>
+                            <button className="link-btn" onClick={() => dismiss(q.key)}>✕</button>
+                          </>}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  )}
                   <UploadButton onFiles={(f) => setStaged({ list: l, files: Array.from(f) })} />
                   <div className="row gap-s" style={{ flexWrap: "wrap" }}>
                     <button className="link-btn" onClick={() => sortByName(l.id)}>⇅ Ada göre sırala</button>

@@ -84,7 +84,7 @@ dependencies {
     implementation("androidx.camera:camera-view:$camerax")
     implementation("com.google.zxing:core:3.5.3")
     // Web sayfaları / YouTube için Gecko motoru (Google girişi kabul edilir); çocuk telefonları arm64
-    implementation("org.mozilla.geckoview:geckoview-arm64-v8a:159.0.20261102144711")
+    implementation("org.mozilla.geckoview:geckoview-arm64-v8a:140.0.20250707120347")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

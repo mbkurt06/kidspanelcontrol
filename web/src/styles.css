@@ -2496,3 +2496,23 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .plan-day { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0; border-radius: 10px; border: 1px solid var(--line); background: none; color: inherit; cursor: pointer; }
 .plan-day.on { border-color: var(--accent); }
 .plan-link { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; padding: 2px 4px; }
+
+/* Web sayfaları ve video listeleri */
+.web-app-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 4px; background: none; border: 0; border-top: 1px solid var(--line); color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.web-app-row .grow { display: flex; flex-direction: column; min-width: 0; }
+.web-ico { display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 10px; background: #4F7CFF; color: #fff; flex: none; font-size: 16px; }
+.web-ico.videos { background: #E53935; }
+.web-dialog { max-height: 88vh; overflow-y: auto; }
+.web-dialog .field { display: flex; flex-direction: column; gap: 4px; }
+.web-dialog textarea, .web-dialog input, .web-dialog select { width: 100%; }
+.web-toggle { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+.web-toggle input { width: auto; margin-top: 3px; }
+.web-video { display: flex; align-items: center; gap: 8px; padding: 4px 0; border-top: 1px solid var(--line); }
+.web-video img { width: 64px; height: 36px; object-fit: cover; border-radius: 6px; flex: none; }
+.web-video .link-btn, .web-visit .link-btn { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; padding: 4px 6px; }
+.link-btn.danger { color: var(--bad, #FF5D6C); }
+.web-more summary { cursor: pointer; padding: 4px 0; }
+.web-visits { display: flex; flex-direction: column; max-height: 260px; overflow-y: auto; }
+.web-visit { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; padding: 6px 0; border-top: 1px solid var(--line); word-break: break-all; }
+.web-visit.blocked .small { color: var(--bad, #FF5D6C); }
+.app-setting-name .link-btn { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; padding: 2px 0; }

@@ -129,10 +129,18 @@
     }
   }
 
+  let ytCss = false;
+  async function refresh() {
+    const c = await send({ t: "cfg", url: location.href });
+    if (c) cfg = c;
+    // YouTube'da her zaman sadece oynatıcı (ebeveyn modunda da: giriş Google sayfasında yapılır)
+    if (cfg && cfg.yt && !ytCss && /(^|\.)youtube\.com$/.test(location.hostname)) { css(YT_CSS); ytCss = true; }
+  }
   async function start() {
-    cfg = await send({ t: "cfg", url: location.href });
+    await refresh();
     if (!cfg) return;
-    if (cfg.yt && !cfg.parent) css(YT_CSS);
+    // Ebeveyn modu bitince kısıtlar geri gelsin
+    setInterval(() => { if (cfg && cfg.parent) refresh(); }, 5000);
     const tick = () => { if (cfg.yt) watchVideo(); login(); };
     tick();
     new MutationObserver(() => { clearTimeout(start.t); start.t = setTimeout(tick, 300); })

@@ -221,6 +221,12 @@ class WebActivity : ComponentActivity() {
     private fun TopBar() {
         val live by Live.state.collectAsState()
         val pm = live.snapshot?.parentMode == true || (live.pinUntil ?: 0L) > System.currentTimeMillis()
+        // Ebeveyn modu bitince listedeki videoya dön (kısıtlar geri gelir)
+        val wasPm = androidx.compose.runtime.remember { mutableStateOf(pm) }
+        androidx.compose.runtime.LaunchedEffect(pm) {
+            if (wasPm.value && !pm) session.loadUri(app.startUrl(index))
+            wasPm.value = pm
+        }
         Row(Modifier.fillMaxWidth().background(C.surface).padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             BarBtn("✕") { finish() }
             if (!app.isVideos || pm) BarBtn("←") { if (canBack) session.goBack() }
@@ -375,7 +381,21 @@ class WebActivity : ComponentActivity() {
         }, 2500)
     }
 
-    private val progress = object : GeckoSession.ProgressDelegate {}
+    @Volatile private var cfgSeen = false
+    private var diagSent = false
+
+    /** Uzantı çalışmıyorsa (YouTube sadeleştirme / giriş yok) panele bir kez bildir */
+    private val progress = object : GeckoSession.ProgressDelegate {
+        override fun onPageStop(session: GeckoSession, success: Boolean) {
+            if (!success || diagSent || url.isBlank() || url.startsWith("about:")) return
+            window.decorView.postDelayed({
+                if (cfgSeen || diagSent) return@postDelayed
+                diagSent = true
+                val info = JSONObject().put("problem", "uzanti_yok").put("ext", Gecko.ext != null).put("url", url.take(300))
+                thread { Sync.event("web_diag", info) }
+            }, 4000)
+        }
+    }
 
     private val content = object : GeckoSession.ContentDelegate {
         override fun onTitleChange(session: GeckoSession, title: String?) { this@WebActivity.title = title ?: "" }
@@ -446,12 +466,12 @@ class WebActivity : ComponentActivity() {
         override fun onMessage(nativeApp: String, message: Any, sender: WebExtension.MessageSender): GeckoResult<Any>? {
             val m = message as? JSONObject ?: return null
             return when (m.optString("t")) {
-                "cfg" -> GeckoResult.fromValue(
+                "cfg" -> { cfgSeen = true; GeckoResult.fromValue(
                     JSONObject().put("yt", app.isVideos).put("parent", parent()).put("login", app.loginMode)
                         .put("hosts", JSONArray(app.hosts()))
                         .put("videos", JSONArray(app.videos.filter { it.type == "video" }.map { it.id }))
                         .put("lists", JSONArray(app.videos.filter { it.type == "playlist" }.map { it.id })),
-                )
+                ) }
                 "ended" -> {
                     runOnUiThread {
                         val cur = app.indexOf(m.optString("url"))

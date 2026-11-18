@@ -182,6 +182,11 @@ class OrbitService : Service() {
     override fun onCreate() {
         super.onCreate()
         Store.init(this)
+        // Önceki çökme özeti: panele olay olarak gönder
+        getSharedPreferences("orbit_crash", MODE_PRIVATE).getString("last", null)?.let { crash ->
+            getSharedPreferences("orbit_crash", MODE_PRIVATE).edit().remove("last").apply()
+            Thread { app.orbit.data.Sync.event("app_crash", org.json.JSONObject().put("text", crash).put("version", app.orbit.BuildConfig.VERSION_CODE)) }.start()
+        }
         channels()
         val n = runningNotification("Orbit çalışıyor")
         if (Build.VERSION.SDK_INT >= 34) startForeground(1, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)

@@ -80,7 +80,7 @@ object Sync {
                 val deviceSettings = async(Dispatchers.IO) { runCatching { Api.get("device_settings?child_id=eq.$child&select=desired") }.getOrElse { JSONArray() } }
                 val agenda = async(Dispatchers.IO) { runCatching { Api.get("agenda_items?child_id=eq.$child&select=*&order=due_date.asc,due_time.asc,entered_at.desc") }.getOrElse { JSONArray() } }
                 // Web sayfaları / video listeleri (Orbit içinde uygulama gibi açılır)
-                launch(Dispatchers.IO) { runCatching { WebApps.store(Api.get("web_apps?child_id=eq.$child&select=*")) } }
+                launch(Dispatchers.IO) { runCatching { WebApps.store(Api.get("web_apps?select=*")) } }
 
                 JSONObject()
                     .put("timezone", tz)

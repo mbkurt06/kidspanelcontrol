@@ -34,6 +34,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -188,10 +189,6 @@ class WebActivity : ComponentActivity() {
             OrbitTheme {
                 Column(Modifier.fillMaxSize().background(C.bg).let { if (full) it else it.statusBarsPadding() }) {
                     if (!full) TopBar()
-                    if (parent() && !full) Text(
-                        "👤 Ebeveyn modu: kısıtlar kapalı (giriş için)", color = C.text, fontSize = 13.sp,
-                        modifier = Modifier.fillMaxWidth().background(C.warn.copy(alpha = 0.35f)).padding(horizontal = 12.dp, vertical = 6.dp),
-                    )
                     Box(Modifier.fillMaxWidth().weight(if (app.isVideos && !full) 0.45f else 1f).background(androidx.compose.ui.graphics.Color.Black)) {
                         AndroidView(factory = { ctx -> GeckoView(ctx).also { it.setSession(session) } }, modifier = Modifier.fillMaxSize())
                     }
@@ -207,15 +204,27 @@ class WebActivity : ComponentActivity() {
 
     @Composable
     private fun TopBar() {
+        val live by Live.state.collectAsState()
+        val pm = live.snapshot?.parentMode == true || (live.pinUntil ?: 0L) > System.currentTimeMillis()
         Row(Modifier.fillMaxWidth().background(C.surface).padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
             BarBtn("✕") { finish() }
-            if (!app.isVideos) BarBtn("←") { if (canBack) session.goBack() }
+            if (!app.isVideos || pm) BarBtn("←") { if (canBack) session.goBack() }
             Text(
                 (if (app.isVideos) "🎬 " else "🌐 ") + title.ifBlank { app.title }, color = C.text, fontSize = 16.sp, fontWeight = FontWeight.SemiBold,
                 maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 6.dp),
             )
-            BarBtn("⟳") { session.reload() }
+            // Ebeveyn modunda: Google / YouTube hesabıyla giriş (oturum hatırlanır)
+            if (pm && app.isVideos) BarBtn("👤") {
+                session.loadUri("https://accounts.google.com/ServiceLogin?service=youtube&hl=tr&continue=" + Uri.encode("https://m.youtube.com/"))
+            }
+            BarBtn("⟳") { if (url.isBlank() || (!pm && !app.allows(url))) session.loadUri(app.startUrl(index)) else session.reload() }
         }
+        if (pm) Text(
+            if (app.isVideos) "👤 Ebeveyn modu: kısıtlar kapalı. 👤 ile YouTube hesabına giriş yap; bitince ⟳ listeye döner."
+            else "👤 Ebeveyn modu: kısıtlar kapalı (giriş / doğrulama için). Bitince ⟳.",
+            color = C.text, fontSize = 13.sp,
+            modifier = Modifier.fillMaxWidth().background(C.warn.copy(alpha = 0.35f)).padding(horizontal = 12.dp, vertical = 6.dp),
+        )
     }
 
     @Composable

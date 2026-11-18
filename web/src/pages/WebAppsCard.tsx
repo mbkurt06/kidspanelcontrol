@@ -48,15 +48,17 @@ const hostOf = (s: string | null) => { try { return new URL((s ?? "").includes("
 
 /** Çocuk → Uygulamalar: web sayfaları ve YouTube video listeleri (telefonda uygulama gibi) */
 export default function WebAppsCard({ childId, onChanged, editId, onEditDone }: { childId: string; onChanged: () => void; editId?: string | null; onEditDone?: () => void }) {
+  const fam = useFamily();
   const [list, setList] = useState<WebApp[]>([]);
   const [edit, setEdit] = useState<Partial<WebApp> | null>(null);
   const [err, setErr] = useState("");
 
   const load = useCallback(async () => {
-    const { data, error } = await supabase.from("web_apps").select("*").eq("child_id", childId).order("created_at");
+    // Ailenin ortak listesi: her çocukta görünür, durumu çocuğa göre ayrı seçilir
+    const { data, error } = await supabase.from("web_apps").select("*").eq("family_id", fam.familyId).order("created_at");
     if (error) setErr(errorText(error));
     setList((data ?? []) as WebApp[]);
-  }, [childId]);
+  }, [fam.familyId]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     if (!editId) return;
@@ -70,7 +72,8 @@ export default function WebAppsCard({ childId, onChanged, editId, onEditDone }: 
         <h2 style={{ margin: 0 }}>Web sayfaları ve videolar</h2>
       </div>
       <p className="muted small" style={{ margin: "4px 0 10px" }}>
-        Telefonda Orbit içinde uygulama gibi açılır; adres çubuğu yoktur, başka siteye geçilemez. Grubu, durumu ve özel kuralı aşağıdaki listede diğer uygulamalar gibi seçilir.
+        Bütün çocuklar için ortak liste. Telefonda Orbit içinde uygulama gibi açılır; adres çubuğu yoktur, başka siteye geçilemez.
+        Her çocukta durumu (Kurallara göre / Her zaman açık / Kiosk / Hep kapalı) aşağıdaki listede ayrı seçilir; yeni eklenen sayfa diğer çocuklarda "Hep kapalı" başlar ve telefonlarında görünmez.
       </p>
       {err && <p className="error">{err}</p>}
       {list.map((w) => (
@@ -167,7 +170,7 @@ function WebAppDialog({ childId, value, onClose, onSaved }: { childId: string; v
   }
 
   async function remove() {
-    if (!value.id || !confirm(`“${value.title}” silinsin mi? Telefondan da kalkar.`)) return;
+    if (!value.id || !confirm(`“${value.title}” silinsin mi? Bütün çocukların telefonundan kalkar.`)) return;
     const { error } = await supabase.from("web_apps").delete().eq("id", value.id);
     if (error) { setErr(errorText(error)); return; }
     onSaved();
@@ -240,7 +243,9 @@ function WebAppDialog({ childId, value, onClose, onSaved }: { childId: string; v
                 </label>
               )}
               <p className="muted tiny" style={{ margin: 0 }}>
-                Doğrulama ya da ilk giriş için panelden ebeveyn modunu aç: o sürede kısıtlar kalkar, girişi yap; sonra site girişi hatırlar.
+                {isVideos
+                  ? "YouTube hesabı (Premium): panelden ebeveyn modunu aç, telefonda listeyi aç, üstteki 👤 ile Google hesabına giriş yap, sonra ⟳. Giriş hatırlanır."
+                  : "Doğrulama ya da ilk giriş için panelden ebeveyn modunu aç: o sürede kısıtlar kalkar, telefonda girişi yap; sonra site girişi hatırlar."}
               </p>
             </div>
           </details>

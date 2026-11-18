@@ -37,7 +37,22 @@ android {
         }
     }
 
+    // Telefonlara göre ayrı APK: 64-bit (arm64-v8a) ve 32-bit (armeabi-v7a, ör. Redmi 13C). Gecko her ikisini de içerir.
+    // Sadece sürüm derlemesinde; hata ayıklama derlemesi tek APK (emülatör testi için x86_64 dahil).
+    val releaseBuild = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+    splits {
+        abi {
+            isEnable = releaseBuild
+            reset()
+            include("armeabi-v7a", "arm64-v8a")
+            isUniversalApk = false
+        }
+    }
+
     buildTypes {
+        debug {
+            ndk { abiFilters += listOf("x86_64", "arm64-v8a") }
+        }
         release {
             isMinifyEnabled = false
             signingConfig = if (keystoreFile != null) signingConfigs.getByName("release") else signingConfigs.getByName("debug")
@@ -94,7 +109,8 @@ dependencies {
     implementation("androidx.camera:camera-view:$camerax")
     implementation("com.google.zxing:core:3.5.3")
     // Web sayfaları / YouTube için Gecko motoru (Google girişi kabul edilir); çocuk telefonları arm64
-    if (geckoOn) implementation("org.mozilla.geckoview:geckoview-arm64-v8a:140.0.20250707120347")
+    // Tüm işlemci türlerini içeren paket; ABI bölmesi her APK'ya yalnız kendi kütüphanelerini koyar
+    if (geckoOn) implementation("org.mozilla.geckoview:geckoview:140.0.20250707120347")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")

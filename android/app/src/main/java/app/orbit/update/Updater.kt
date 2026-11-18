@@ -58,11 +58,18 @@ object Updater {
             if (version <= BuildConfig.VERSION_CODE) { msg("Güncel (${BuildConfig.VERSION_CODE})", version); return }
             if (!installIfNew) { msg("Yeni sürüm $version mevcut", version); return }
             val assets = j.optJSONArray("assets")
+            // Telefonun işlemcisine uygun APK (orbit-N.arm64-v8a.apk); yoksa ilk APK (32-bit, her telefonda çalışır)
+            val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: ""
             var url: String? = null
+            var first: String? = null
             for (i in 0 until (assets?.length() ?: 0)) {
                 val a = assets!!.getJSONObject(i)
-                if (a.optString("name").endsWith(".apk")) { url = a.optString("url"); break }
+                val name = a.optString("name")
+                if (!name.endsWith(".apk")) continue
+                if (first == null) first = a.optString("url")
+                if (abi.isNotBlank() && name.endsWith(".$abi.apk")) url = a.optString("url")
             }
+            if (url == null) url = first
             if (url == null) { msg("Sürüm $version içinde APK yok", version, "APK bulunamadı"); return }
             msg("Sürüm $version indiriliyor", version)
             target = version
@@ -87,7 +94,7 @@ object Updater {
             val version = j.optInt("version")
             if (version <= BuildConfig.VERSION_CODE) { msg("Güncel (${BuildConfig.VERSION_CODE})", version); return }
             if (!installIfNew) { msg("Yeni sürüm $version mevcut", version); return }
-            val url = j.optString("url")
+            val url = j.optJSONObject("urls")?.optString(android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: "")?.takeIf { it.startsWith("https://") } ?: j.optString("url")
             if (!url.startsWith("https://")) { msg("Sürüm dosyası hatalı", version, "APK URL hatalı"); return }
             msg("Sürüm $version indiriliyor", version)
             target = version

@@ -62,7 +62,9 @@ jobs:
           export ORBIT_KEYSTORE="$RUNNER_TEMP/orbit.jks"
           set -o pipefail
           gradle --no-daemon --console=plain :app:assembleRelease 2>&1 | tee -a gradle.log
-          cp app/build/outputs/apk/release/app-release.apk "orbit-$ORBIT_VERSION_CODE.apk"
+          # 32-bit APK her telefonda çalışır (eski güncelleyici ilk APK'yı alır); 64-bit ayrı
+          cp app/build/outputs/apk/release/app-armeabi-v7a-release.apk "orbit-$ORBIT_VERSION_CODE.apk"
+          cp app/build/outputs/apk/release/app-arm64-v8a-release.apk "orbit-$ORBIT_VERSION_CODE.arm64-v8a.apk"
           echo "imza=var" >> "$GITHUB_OUTPUT"
 
       - name: GitHub surumu (Release)
@@ -71,7 +73,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           C=${{ steps.surum.outputs.code }}
-          gh release create "orbit-v$C" "orbit-$C.apk" --title "Orbit $C" --notes "Otomatik derleme ${GITHUB_SHA::7}" --latest
+          gh release create "orbit-v$C" "orbit-$C.apk" "orbit-$C.arm64-v8a.apk" --title "Orbit $C" --notes "Otomatik derleme ${GITHUB_SHA::7}" --latest
 
       - name: Kurulum dosyasini Supabase'e yukle, surum dosyasini guncelle
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/main' && steps.imza.outputs.imza == 'var'
@@ -104,7 +106,8 @@ jobs:
           import json, os
           version = int(os.environ["ORBIT_VERSION_CODE"])
           with open("../web/public/kurulum/version.json", "w", encoding="utf-8") as f:
-              json.dump({"version": version, "url": "$URL"}, f, separators=(",", ":"))
+              base = "https://github.com/${GITHUB_REPOSITORY}/releases/download/orbit-v%d/orbit-%d" % (version, version)
+              json.dump({"version": version, "url": "$URL", "urls": {"arm64-v8a": base + ".arm64-v8a.apk", "armeabi-v7a": base + ".apk"}}, f, separators=(",", ":"))
               f.write("\n")
           PY
           cd ..

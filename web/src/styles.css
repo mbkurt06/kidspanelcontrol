@@ -2546,3 +2546,4 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .app-pick-row { padding: 10px 4px; border-bottom: 1px solid var(--line); align-items: center; cursor: pointer; }
 .app-pick-row input { width: 20px; height: 20px; }
 .dial-list-head { width: 100%; background: var(--surface2, rgba(255,255,255,.05)); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; color: inherit; align-items: center; cursor: pointer; text-align: left; }
+.dial-delta { min-width: 34px; text-align: right; font-weight: 600; }

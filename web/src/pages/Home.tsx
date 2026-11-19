@@ -197,7 +197,6 @@ function ChildCard({ child }: { child: Child }) {
   // Uygulama satırları: verirken seçilen uygulamaların, geri alırken (Genel + uygulamalar) her birinin dakikası
   const [alloc, setAlloc] = useState<Record<string, number>>({});
   // Çarkta "+ Ver" / "− Geri al" yönü ve listeye sonradan eklenen (henüz süresi olmayan) uygulamalar
-  const [dir, setDir] = useState<1 | -1>(1);
   const [extraApps, setExtraApps] = useState<string[]>([]);
   const GEN = "__general";
   const capsSet = !!at.limit && at.limit.scope !== "now" && at.limit.only_apps && at.limit.apps.some((p) => (at.limit!.caps?.[p] ?? 0) > 0);
@@ -575,14 +574,15 @@ function ChildCard({ child }: { child: Child }) {
   }
   function applyDial() {
     const d = dial;
-    if (!d) return;
+    // alloc: her satırın değişimi (+ artır / − azalt)
+    const rowsNow = { ...alloc };
+    if (!d && !Object.values(rowsNow).some(Boolean)) return;
     setDial(0);
-    const rowsNow = Object.fromEntries(dialApps.map((k) => [k, alloc[k] ?? 0]));
-    const keys = dialApps;
-    setAlloc({}); setDialApps([GEN]); setExtraApps([]); setDir(1);
-    const gen = rowsNow[GEN] ?? 0;
-    const appMap = Object.fromEntries(Object.entries(rowsNow).filter(([k, v]) => k !== GEN && v > 0).map(([k, v]) => [k, d < 0 ? -v : v]));
-    const onlyGen = !Object.keys(appMap).length && keys.includes(GEN);
+    setAlloc({}); setDialApps([GEN]); setExtraApps([]);
+    const genD = rowsNow[GEN] ?? 0;
+    const appMap = Object.fromEntries(Object.entries(rowsNow).filter(([k, v]) => k !== GEN && v !== 0));
+    const onlyGen = !Object.keys(appMap).length;
+    if (onlyGen && !genD) return;
     const then = () => {
       if (dialThen === "unlock") setUnlockOpen(true);
       else if (dialThen === "time") { setXDur("60"); setXOpen(true); }
@@ -592,14 +592,15 @@ function ChildCard({ child }: { child: Child }) {
       // Uygulamalar (ve varsa Genel) ayrı ayrı: her biri kendi dakikası
       run("give", async () => {
         const parts: string[] = [];
-        if (gen > 0 && d < 0) {
+        if (genD < 0) {
+          const gen = -genD;
           const { data, error } = await supabase.rpc("parent_reduce_time", { p_child: child.id, p_minutes: gen });
           if (error) throw error;
           const rest = Number(data ?? 0);
           if (rest > 0) await sendCommand(child.id, "adjust_minutes", { minutes: -rest });
           parts.push(`Genel −${minutesText(gen)}`);
         }
-        if (gen > 0 && d > 0) { await giveNow(child.id, gen, fam, st, { kiosk, limited: limited || closed || finished }); parts.push(`Genel +${minutesText(gen)}`); }
+        if (genD > 0) { await giveNow(child.id, genD, fam, st, { kiosk, limited: limited || closed || finished }); parts.push(`Genel +${minutesText(genD)}`); }
         if (Object.keys(appMap).length) {
           await applyAppTimeMap(child.id, fam.familyId!, at.day, appMap, at.totals, at.used);
           parts.push(...Object.entries(appMap).map(([p, v]) => `${at.name(p)} ${v < 0 ? "−" : "+"}${minutesText(Math.abs(v))}`));
@@ -607,7 +608,7 @@ function ChildCard({ child }: { child: Child }) {
         await at.reload();
         fam.reload();
         return parts.join(" · ") || "değişiklik yok";
-      }, (r) => `${d < 0 ? "Geri alındı" : "Verildi"} · ${r}`);
+      }, (r) => `Uygulandı · ${r}`);
       then();
       return;
     }
@@ -720,7 +721,10 @@ function ChildCard({ child }: { child: Child }) {
   // Çark listesi: Genel + bugün süre verilen uygulamalar + listeye eklenenler; işaretliler (dialApps) çarktan etkilenir
   const dialKeys = [GEN, ...Array.from(new Set([...Object.keys(at.totals).filter((p) => (at.totals[p] ?? 0) > 0), ...extraApps]))];
   const leftOf = (k: string) => (k === GEN ? (hakUnl ? 600 : Math.max(0, remainingNow)) : at.left[k] ?? 0);
-  const allocFor = (v: number, keys: string[]) => (v >= 0 ? splitEven(v, keys) : fillEven(-v, keys.map((k) => ({ key: k, left: leftOf(k) }))));
+  // Çark değeri işaretlilere dağılır: + eşit bölünür, − her birinin mevcut süresi kadar azaltılır
+  const allocFor = (v: number, keys: string[]): Record<string, number> => (v >= 0 ? splitEven(v, keys)
+    : Object.fromEntries(Object.entries(fillEven(-v, keys.map((k) => ({ key: k, left: leftOf(k) })))).map(([k, x]) => [k, -x])));
+  const baseOf = (k: string) => (k === GEN && hakUnl ? 0 : leftOf(k));
   const dialMax = dialApps.reduce((a, k) => a + leftOf(k), 0);
   const lockEnd: { label: string; ms: number | null; task: boolean } | null = !st || !isLocked
     ? null
@@ -791,7 +795,7 @@ function ChildCard({ child }: { child: Child }) {
           className="dial"
           role="button"
           aria-label="Süreyi çarkla ayarla"
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (st) { setDial(0); setDialThen("none"); setDialApps([GEN]); setExtraApps([]); setAlloc({}); setDir(1); setDialOpen(true); } }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (st) { setDial(0); setDialThen("none"); setDialApps([GEN]); setExtraApps([]); setAlloc({}); setDialOpen(true); } }}
         >
           <Ring value={hakUnl ? 1 : hakTotal} max={hakUnl ? 1 : Math.max(st?.allowance_minutes ?? 0, hakTotal + (st?.used_minutes ?? 0), 1)} color={!hakUnl && hakTotal <= 10 ? "var(--warn)" : child.color} size={80}>
             {!st ? <b>—</b> : hakUnl ? <span className="ring-state"><b>∞</b><small>süre</small></span> : <span className="ring-state"><b>{minutesText(hakTotal)}</b><small>{appLeftSum ? "toplam" : "süre"}</small></span>}
@@ -1191,34 +1195,34 @@ function ChildCard({ child }: { child: Child }) {
           apps={dialApps.filter((k) => k !== GEN).map(at.name)}
           onPickApps={() => setPickApps(true)}
           onLimit={() => setLimitOpen(true)}
-          rows={dialKeys.length > 1 ? dialKeys.map((k) => ({ key: k, label: k === GEN ? "Genel süre" : at.name(k), left: k === GEN && hakUnl ? undefined : leftOf(k), value: alloc[k] ?? 0, on: dialApps.includes(k) })) : []}
-          neg={dir < 0}
-          onDir={(x) => { setDir(x); setDial(0); setAlloc({}); }}
+          rows={dialKeys.length > 1 ? dialKeys.map((k) => ({ key: k, label: k === GEN ? "Genel süre" : at.name(k), base: baseOf(k), unl: k === GEN && hakUnl, delta: alloc[k] ?? 0, on: dialApps.includes(k) })) : []}
+          dirty={Object.values(alloc).some(Boolean)}
           onToggle={(k) => {
             const sel = dialApps.includes(k) ? dialApps.filter((x) => x !== k) : [...dialApps, k];
             setDialApps(sel);
-            setAlloc(allocFor(dial, sel));
+            const n = allocFor(dial, sel);
+            setAlloc(n);
           }}
           onAll={(on) => { const sel = on ? dialKeys : []; setDialApps(sel); setAlloc(allocFor(dial, sel)); }}
-          onRow={(k, v) => {
-            const n = { ...alloc, [k]: Math.max(0, dir < 0 ? Math.min(v, leftOf(k)) : v) };
+          onRow={(k, target) => {
+            // Kutudaki rakam yeni süre: değişim = yeni − şimdiki (sıfırın altına inmez)
+            const n = { ...alloc, [k]: Math.max(0, target) - baseOf(k) };
             const sel = dialApps.includes(k) ? dialApps : [...dialApps, k];
             setDialApps(sel);
             setAlloc(n);
-            setDial(dir * sel.reduce((a, x) => a + (n[x] ?? 0), 0));
+            setDial(Object.values(n).reduce((a, x) => a + x, 0));
           }}
           onEven={() => setAlloc(allocFor(dial, dialApps))}
           canReset={!!at.limit || Object.keys(at.left).length > 0}
           onReset={() => { setDialOpen(false); setDial(0); setDialApps([GEN]); run("give", async () => { await resetAppTime(child.id, fam.familyId!, at.day, at.totals, at.used); await at.reload(); return "ok"; }, () => "Uygulama kısıtları ve süreleri sıfırlandı"); }}
           value={dial}
           onChange={(v) => {
-            if (v !== 0 && Math.sign(v) !== dir) setDir(v < 0 ? -1 : 1);
             setDial(v);
             setAlloc(allocFor(v, dialApps));
           }}
           then={dialThen}
           onThen={setDialThen}
-          onClose={() => { setDialOpen(false); setDial(0); setDialApps([GEN]); setAlloc({}); setDir(1); setExtraApps([]); }}
+          onClose={() => { setDialOpen(false); setDial(0); setDialApps([GEN]); setAlloc({}); setExtraApps([]); }}
           onApply={() => { setDialOpen(false); applyDial(); }}
         />,
         document.body
@@ -1254,11 +1258,11 @@ function ChildCard({ child }: { child: Child }) {
 }
 
 /** Büyük süre çarkı: tam tur 60 dk, her çentik 1 dk; saat yönü artırır, ters yönü azaltır (kalan sürenin altına inmez). */
-function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, onApply, then, onThen, apps, onPickApps, onLimit, rows, neg, onDir, onToggle, onAll, onRow, onEven, canReset, onReset }: {
+function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, onApply, then, onThen, apps, onPickApps, onLimit, rows, dirty, onToggle, onAll, onRow, onEven, canReset, onReset }: {
   name: string; remaining: number; showRemaining: boolean; value: number;
   apps: string[]; onPickApps: () => void; onLimit: () => void;
-  rows: { key: string; label: string; left?: number; value: number; on: boolean }[]; neg: boolean;
-  onDir: (d: 1 | -1) => void; onToggle: (k: string) => void; onAll: (on: boolean) => void; onRow: (k: string, v: number) => void; onEven: () => void;
+  rows: { key: string; label: string; base: number; unl: boolean; delta: number; on: boolean }[]; dirty: boolean;
+  onToggle: (k: string) => void; onAll: (on: boolean) => void; onRow: (k: string, v: number) => void; onEven: () => void;
   canReset: boolean; onReset: () => void;
   onChange: (v: number) => void; onClose: () => void; onApply: () => void;
   then: "none" | "unlock" | "time" | "lock"; onThen: (v: "none" | "unlock" | "time" | "lock") => void;
@@ -1332,26 +1336,28 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
         {rows.length > 0 && listOpen && (
           <div className="stack-s">
             <div className="row between" style={{ alignItems: "center" }}>
-              <div className="chips">
-                <button type="button" className={`chip-btn ${!neg ? "on" : ""}`} onClick={() => onDir(1)}>+ Ver</button>
-                <button type="button" className={`chip-btn ${neg ? "on" : ""}`} onClick={() => onDir(-1)}>− Geri al</button>
-              </div>
+              <span className="muted tiny">Kutudaki rakam yeni süre. Çark işaretlileri birlikte değiştirir.</span>
               <button type="button" className="link-btn small" onClick={() => onAll(!rows.every((x) => x.on))}>{rows.every((x) => x.on) ? "Hiçbiri" : "Hepsini seç"}</button>
             </div>
-            <span className="muted tiny">İşaretlediklerin çarktan etkilenir; satırdaki dakikayı elle de değiştirebilirsin.</span>
             {rows.map((x) => (
-              <div key={x.key} className="row between dial-row" style={{ alignItems: "center", gap: 8, opacity: x.on ? 1 : 0.55 }}>
+              <div key={x.key} className="row between dial-row" style={{ alignItems: "center", gap: 6, opacity: x.on || x.delta ? 1 : 0.6 }}>
                 <label className="row gap-s" style={{ alignItems: "center", flex: 1, minWidth: 0 }}>
                   <input type="checkbox" checked={x.on} onChange={() => onToggle(x.key)} style={{ width: 20, height: 20 }} />
-                  <span className="small">{x.label}{x.left != null && <span className="muted tiny"> · {minutesText(x.left)} var</span>}</span>
+                  <span className="small">{x.label} <span className="muted tiny">· şimdi {x.unl ? "∞" : minutesText(x.base)}</span></span>
                 </label>
-                <MinuteStepper value={x.on ? x.value : 0} onChange={(v) => onRow(x.key, v)} min={0} max={neg ? x.left ?? 600 : 600} label="" />
+                <MinuteStepper value={x.base + x.delta} onChange={(v) => onRow(x.key, v)} min={0} max={x.base + 600} label="" />
+                <span className={`tiny dial-delta ${x.delta > 0 ? "good-text" : x.delta < 0 ? "bad-text" : "muted"}`}>{x.delta > 0 ? `+${x.delta}` : x.delta < 0 ? `−${-x.delta}` : "—"}</span>
               </div>
             ))}
-            <div className="row between" style={{ alignItems: "center" }}>
-              <button type="button" className="link-btn small" onClick={onEven}>⚖ Eşit böl</button>
-              <span className="muted tiny">Toplam {neg ? "−" : "+"}{minutesText(rows.filter((x) => x.on).reduce((a, x) => a + x.value, 0))}</span>
-            </div>
+            {(() => {
+              const plus = rows.reduce((a, x) => a + Math.max(0, x.delta), 0), minus = rows.reduce((a, x) => a + Math.max(0, -x.delta), 0), net = plus - minus;
+              return (
+                <div className="row between" style={{ alignItems: "center" }}>
+                  <button type="button" className="link-btn small" onClick={onEven}>⚖ Eşit böl</button>
+                  <span className="muted tiny">Net {net > 0 ? "+" : net < 0 ? "−" : ""}{minutesText(Math.abs(net))}{plus && minus ? ` · +${minutesText(plus)} / −${minutesText(minus)}` : ""}</span>
+                </div>
+              );
+            })()}
           </div>
         )}
         <div className="row gap-xs" style={{ flexWrap: "wrap", justifyContent: "center" }}>
@@ -1373,7 +1379,7 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
         )}
         <div className="row gap-xs">
           <button className="pill-btn grow" onClick={onClose}>Vazgeç</button>
-          <button className="pill-btn primary grow" disabled={!value} onClick={onApply}>{value !== 0 && then !== "none" ? "Devam →" : "✓ Uygula"}</button>
+          <button className="pill-btn primary grow" disabled={!value && !dirty} onClick={onApply}>{value !== 0 && then !== "none" ? "Devam →" : "✓ Uygula"}</button>
         </div>
       </div>
     </>

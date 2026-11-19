@@ -66,6 +66,9 @@ object Sync {
                 val assignments = async(Dispatchers.IO) { Api.get("profile_assignments?child_id=eq.$child&select=weekday,profile_id") }
                 val overrides = async(Dispatchers.IO) { Api.get("day_overrides?child_id=eq.$child&select=*") }
                 val grants = async(Dispatchers.IO) { Api.get("time_grants?child_id=eq.$child&select=*&order=created_at.desc&limit=100") }
+                val dayFrom = java.time.LocalDate.parse(today).minusDays(1)
+                val appGrants = async(Dispatchers.IO) { runCatching { Api.get("app_grants?child_id=eq.$child&day=gte.$dayFrom&select=day,package,minutes") }.getOrElse { JSONArray() } }
+                val dayAppLimits = async(Dispatchers.IO) { runCatching { Api.get("day_app_limits?child_id=eq.$child&day=gte.$dayFrom&select=day,only_apps,apps,caps") }.getOrElse { JSONArray() } }
                 val commands = async(Dispatchers.IO) { Api.get("commands?child_id=eq.$child&select=*&order=created_at.desc&limit=60") }
                 val sections = async(Dispatchers.IO) { runCatching { Api.get("profile_sections?select=*") }.getOrElse { JSONArray() } }
                 val sectionRules = async(Dispatchers.IO) { runCatching { Api.get("section_rules?select=*") }.getOrElse { JSONArray() } }
@@ -113,6 +116,8 @@ object Sync {
                     .put("assignments", assignments.await())
                     .put("overrides", overrides.await())
                     .put("grants", grants.await())
+                    .put("app_grants", appGrants.await())
+                    .put("day_app_limits", dayAppLimits.await())
                     .put("commands", commands.await())
                     .put("sections", sections.await())
                     .put("section_rules", sectionRules.await())
@@ -254,6 +259,7 @@ object Sync {
         val m = HashMap<String, Long>()
         for ((k, v) in u.buckets) {
             val id = when {
+                k.startsWith("ap:") -> k.substringBefore("@")
                 k.startsWith("w:") -> k.removePrefix("w:")
                 k.startsWith("s:grant:") -> k.removePrefix("s:grant:").substringBefore("@")
                 else -> null

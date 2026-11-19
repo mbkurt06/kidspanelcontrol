@@ -218,6 +218,19 @@ object Parse {
         assignments = assignments(b.optJSONArray("assignments") ?: JSONArray()),
         overrides = overrides(b.optJSONArray("overrides") ?: JSONArray()),
         grants = grants(b.optJSONArray("grants") ?: JSONArray()),
+        appGrants = (b.optJSONArray("app_grants") ?: JSONArray()).let { a ->
+            (0 until a.length()).map { a.getJSONObject(it) }.groupBy { date(it.getString("day"))!! }
+                .mapValues { (_, l) -> l.groupBy { it.getString("package") }.mapValues { (_, x) -> x.sumOf { it.optInt("minutes") } } }
+        },
+        dayAppLimits = (b.optJSONArray("day_app_limits") ?: JSONArray()).let { a ->
+            (0 until a.length()).map { a.getJSONObject(it) }.associate { o ->
+                date(o.getString("day"))!! to app.orbit.engine.DayAppLimit(
+                    o.optBoolean("only_apps", true),
+                    o.optJSONArray("apps")?.let { strings(it).toSet() } ?: emptySet(),
+                    o.optJSONObject("caps")?.let { c -> c.keys().asSequence().associateWith { c.optInt(it) }.filterValues { it > 0 } } ?: emptyMap(),
+                )
+            }
+        },
         commands = commands(b.optJSONArray("commands") ?: JSONArray()),
         agenda = Agenda.parse(b.optJSONArray("agenda")),
         mandatoryOpen = Tasks.parse(b.optJSONArray("tasks")).filter { it.blocking && !hiddenNewDay(it, b) }.map { it.title },

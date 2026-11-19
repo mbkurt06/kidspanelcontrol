@@ -216,6 +216,10 @@ data class Rules(
     val assignments: Map<Int, String> = emptyMap(),
     val overrides: List<DayOverride> = emptyList(),
     val grants: List<Grant> = emptyList(),
+    /** Uygulamaya özel süreler: gün → (paket → dk). Kullandıkça düşer, genel süreden ayrı. */
+    val appGrants: Map<java.time.LocalDate, Map<String, Int>> = emptyMap(),
+    /** Bugünlük genel süre kısıtı: gün → kısıt */
+    val dayAppLimits: Map<java.time.LocalDate, DayAppLimit> = emptyMap(),
     val commands: List<Command> = emptyList(),
     /** Çocuğun oluşturduğu ajanda kayıtları */
     val agenda: List<app.orbit.data.AgendaItem> = emptyList(),
@@ -256,6 +260,9 @@ data class Rules(
     val profileNickname: String? = null,
     val profileAvatar: String? = null,
 )
+
+/** Genel süre sadece [apps] içinde (onlyApps), [caps] = paket → bugün en fazla dk */
+data class DayAppLimit(val onlyApps: Boolean, val apps: Set<String>, val caps: Map<String, Int>)
 
 data class KioskSettings(
     val message: String? = null,

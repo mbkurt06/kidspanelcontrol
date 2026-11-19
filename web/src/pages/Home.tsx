@@ -14,6 +14,7 @@ import { Ring } from "../components/Ring";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
+import { AppPicker, DayLimitSheet, applyAppTime, breakdownText, limitText, useAppTime } from "../components/AppTime";
 import type { Child, Section } from "../lib/types";
 
 const COLORS = ["#4F7CFF", "#FF7A59", "#2BB673", "#C25BFF"];
@@ -186,6 +187,11 @@ function ChildCard({ child }: { child: Child }) {
   const [infoOpen, setInfoOpen] = useState(false);
   const [tempNext, setTempNext] = useCached<string | null>(`${child.id}:tempNext`, null);
   const [dialThen, setDialThen] = useState<"none" | "unlock" | "time" | "lock">("none");
+  // Uygulamaya özel süre (çarkta "📱 Uygulama seç") ve bugünlük genel süre kısıtı
+  const at = useAppTime(child.id, st);
+  const [dialApps, setDialApps] = useState<string[]>([]);
+  const [pickApps, setPickApps] = useState(false);
+  const [limitOpen, setLimitOpen] = useState(false);
   const [pendingGive, setPendingGive] = useState(0);
   const [xDur, setXDur] = useState("60");
   const [xMin, setXMin] = useState(75);
@@ -562,6 +568,17 @@ function ChildCard({ child }: { child: Child }) {
     const d = dial;
     if (!d) return;
     setDial(0);
+    if (dialApps.length) {
+      // Süre sadece seçilen uygulamalara: önce o uygulamada düşer
+      const pk = dialApps;
+      setDialApps([]);
+      run("give", async () => { const r = await applyAppTime(child.id, fam.familyId!, at.day, pk, d, at.totals, at.used); await at.reload(); return r; },
+        (r) => `${d > 0 ? "+" : "−"}${minutesText(Math.abs(d))} · ${pk.map(at.name).join(", ")} · ${r}`);
+      if (dialThen === "unlock") setUnlockOpen(true);
+      else if (dialThen === "time") { setXDur("60"); setXOpen(true); }
+      else if (dialThen === "lock") { setLockKind("kiosk"); setLockOpen(true); }
+      return;
+    }
     if (dialThen !== "none") {
       setPendingGive(d);
       if (dialThen === "unlock") setUnlockOpen(true);
@@ -664,6 +681,9 @@ function ChildCard({ child }: { child: Child }) {
   // Sol halka: gün bitişine kadar kalan hak (telefon kilitliyken de bildirir; eski sürümde kalan süre)
   const hak = Math.max(0, (st?.day_left_minutes ?? st?.remaining_minutes ?? 0) + (st && (st.day_left_minutes ?? st.remaining_minutes) < 1440 ? pend.give : 0));
   const hakUnl = hak >= 1440;
+  // Sol halkada toplam: genel süre + uygulamalara ayrılan süreler
+  const appLeftSum = Object.values(at.left).reduce((a, b) => a + b, 0);
+  const hakTotal = hak + appLeftSum;
   const lockEnd: { label: string; ms: number | null; task: boolean } | null = !st || !isLocked
     ? null
     : manualLock && kiosk && !manualLock.from
@@ -733,10 +753,10 @@ function ChildCard({ child }: { child: Child }) {
           className="dial"
           role="button"
           aria-label="Süreyi çarkla ayarla"
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (st) { setDial(0); setDialThen("none"); setDialOpen(true); } }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (st) { setDial(0); setDialThen("none"); setDialApps([]); setDialOpen(true); } }}
         >
-          <Ring value={hakUnl ? 1 : hak} max={hakUnl ? 1 : Math.max(st?.allowance_minutes ?? 0, hak + (st?.used_minutes ?? 0), 1)} color={!hakUnl && hak <= 10 ? "var(--warn)" : child.color} size={80}>
-            {!st ? <b>—</b> : hakUnl ? <span className="ring-state"><b>∞</b><small>süre</small></span> : <span className="ring-state"><b>{minutesText(hak)}</b><small>süre</small></span>}
+          <Ring value={hakUnl ? 1 : hakTotal} max={hakUnl ? 1 : Math.max(st?.allowance_minutes ?? 0, hakTotal + (st?.used_minutes ?? 0), 1)} color={!hakUnl && hakTotal <= 10 ? "var(--warn)" : child.color} size={80}>
+            {!st ? <b>—</b> : hakUnl ? <span className="ring-state"><b>∞</b><small>süre</small></span> : <span className="ring-state"><b>{minutesText(hakTotal)}</b><small>{appLeftSum ? "toplam" : "süre"}</small></span>}
           </Ring>
         </span>
         <div className="grow">
@@ -780,6 +800,8 @@ function ChildCard({ child }: { child: Child }) {
                 </span>
               )}
               <span className="muted small">Bugün {minutesText(st.used_minutes)} kullandı</span>
+              {(() => { const b = breakdownText(hak, hakUnl, at.left, at.name); return b ? <span className="small">⏱ {b}</span> : null; })()}
+              {(() => { const t = limitText(at.limit, at.name); return t ? <span className="small warn-text">🎯 {t}</span> : null; })()}
               {timer && (
                 <span className="pill accent">
                   {timer.icon ?? "⏱"} {timer.title}
@@ -1126,16 +1148,24 @@ function ChildCard({ child }: { child: Child }) {
       {dialOpen && createPortal(
         <DialSheet
           name={child.name}
-          remaining={remainingNow}
-          showRemaining={!!st && hakNow < 1440}
+          remaining={dialApps.length ? Math.max(0, ...dialApps.map((p) => at.left[p] ?? 0)) : remainingNow}
+          showRemaining={!!st && (dialApps.length > 0 || hakNow < 1440)}
+          apps={dialApps.map(at.name)}
+          onPickApps={() => setPickApps(true)}
+          onLimit={() => setLimitOpen(true)}
           value={dial}
           onChange={setDial}
           then={dialThen}
           onThen={setDialThen}
-          onClose={() => { setDialOpen(false); setDial(0); }}
+          onClose={() => { setDialOpen(false); setDial(0); setDialApps([]); }}
           onApply={() => { setDialOpen(false); applyDial(); }}
         />,
         document.body
+      )}
+      {pickApps && <AppPicker apps={at.apps} selected={dialApps} onChange={setDialApps} onClose={() => setPickApps(false)} title="Süre hangi uygulamalar için" />}
+      {limitOpen && fam.familyId && (
+        <DayLimitSheet childId={child.id} familyId={fam.familyId} day={at.day} apps={at.apps} limit={at.limit} remaining={hakUnl ? 0 : hak}
+          onClose={() => setLimitOpen(false)} onSaved={(m) => { setLimitOpen(false); setDialOpen(false); setMsg(m); void at.reload(); }} />
       )}
       {msg && <p className="small muted center">{msg}</p>}
     </div>
@@ -1143,8 +1173,9 @@ function ChildCard({ child }: { child: Child }) {
 }
 
 /** Büyük süre çarkı: tam tur 60 dk, her çentik 1 dk; saat yönü artırır, ters yönü azaltır (kalan sürenin altına inmez). */
-function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, onApply, then, onThen }: {
+function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, onApply, then, onThen, apps, onPickApps, onLimit }: {
   name: string; remaining: number; showRemaining: boolean; value: number;
+  apps: string[]; onPickApps: () => void; onLimit: () => void;
   onChange: (v: number) => void; onClose: () => void; onApply: () => void;
   then: "none" | "unlock" | "time" | "lock"; onThen: (v: "none" | "unlock" | "time" | "lock") => void;
 }) {
@@ -1204,6 +1235,11 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
             <button key={d} className="chip-btn" disabled={d < 0 && value + d < -remaining} onClick={() => onChange(clamp(value + d))}>{d > 0 ? "+" : "−"}{d === 60 ? "1 sa" : Math.abs(d)}</button>
           ))}
         </div>
+        <div className="row gap-xs" style={{ flexWrap: "wrap", justifyContent: "center" }}>
+          <button type="button" className={`chip-btn ${apps.length ? "on" : ""}`} onClick={onPickApps}>📱 {apps.length ? apps.join(", ") : "Uygulama seç"}</button>
+          <button type="button" className="chip-btn" onClick={onLimit}>🎯 Genel süreyi kısıtla</button>
+        </div>
+        {apps.length > 0 && <p className="muted tiny center" style={{ margin: 0 }}>Bu süre sadece {apps.join(", ")} için; önce o uygulamada düşer</p>}
         {value !== 0 && (
           <div className="stack-s">
             <span className="pop-label">TELEFON NE ZAMAN AÇIK OLSUN</span>

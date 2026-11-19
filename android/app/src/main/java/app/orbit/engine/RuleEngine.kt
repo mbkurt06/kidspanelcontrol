@@ -601,6 +601,28 @@ class RuleEngine(private val rules: Rules) {
         }
     }
 
+    fun appBucket(pkg: String, day: LocalDate) = "ap:$pkg@$day"
+
+    /** Uygulamaya özel süreden kalan (sn) */
+    fun appLeftSeconds(pkg: String, day: LocalDate, usage: DayUsage): Long {
+        val m = rules.appGrants[day]?.get(pkg) ?: return 0
+        return (m * 60L - bucket(usage, appBucket(pkg, day))).coerceAtLeast(0)
+    }
+
+    /** Bugün verilmiş uygulama süreleri: paket → (verilen dk, kalan sn) */
+    fun appGrantsLeft(day: LocalDate, usage: DayUsage): Map<String, Pair<Int, Long>> =
+        rules.appGrants[day].orEmpty().filterValues { it > 0 }.mapValues { (pkg, m) -> m to appLeftSeconds(pkg, day, usage) }
+
+    private fun dayLimitBlock(pkg: String, day: LocalDate, usage: DayUsage): AppVerdict? {
+        val lim = rules.dayAppLimits[day] ?: return null
+        if (lim.onlyApps && pkg !in lim.apps) {
+            val names = lim.apps.mapNotNull { rules.apps[it]?.label }.take(4).joinToString(", ")
+            return AppVerdict(false, if (names.isBlank()) "Bugün süren bu uygulama için değil" else "Bugün süren sadece şunlarda: $names")
+        }
+        lim.caps[pkg]?.let { cap -> if ((usage.perAppCounted[pkg] ?: 0) >= cap * 60L) return AppVerdict(false, "Bugün bu uygulamaya ayrılan $cap dk doldu") }
+        return null
+    }
+
     private fun hasMandatoryBlock() = rules.mandatoryOpen.isNotEmpty()
     private fun mandatoryReason() = "Önce görevini yap: ${rules.mandatoryOpen.first()}"
 
@@ -625,7 +647,15 @@ class RuleEngine(private val rules: Rules) {
                 s.remainingSeconds <= 0 || hasMandatoryBlock()
             return if (closed) AppVerdict(false, "Kiosk saatleri dışında") else AppVerdict(true)
         }
-        val v = baseVerdict(pkg, s, usage)
+        var v = baseVerdict(pkg, s, usage)
+        // Uygulamaya özel süre: önce o düşer (genel süre bitmiş olsa da); kilit / kapalı saat / görev kilidi yine geçerli
+        if (appLeftSeconds(pkg, s.day, usage) > 0) {
+            val usable = if (v.allowed) v.countsDaily else
+                baseVerdict(pkg, s.copy(remainingSeconds = UNLIMITED_SECONDS, capLeftSeconds = null, dayLeftSeconds = UNLIMITED_SECONDS), usage).let { it.allowed && it.countsDaily }
+            if (usable) v = AppVerdict(true, buckets = listOf(appBucket(pkg, s.day)))
+        }
+        // Bugünlük genel süre kısıtı
+        if (v.allowed && v.countsDaily) dayLimitBlock(pkg, s.day, usage)?.let { return it }
         if (s.parentMode || !v.allowed) return v
         // Sayaç odak modu: kuralların açtıklarından sadece odak profilindekiler açık kalır
         val f = rules.focus ?: return v
@@ -709,7 +739,7 @@ class RuleEngine(private val rules: Rules) {
                 perAppCounted = u.perAppCounted + (pkg to ((u.perAppCounted[pkg] ?: 0) + seconds)),
             )
         }
-        val raB = v.buckets.filter { it.startsWith("ra:") }
+        val raB = v.buckets.filter { it.startsWith("ra:") || it.startsWith("ap:") }
         if (v.allowed && raB.isNotEmpty()) {
             val m = u.buckets.toMutableMap()
             for (k in raB) m[k] = (m[k] ?: 0) + seconds

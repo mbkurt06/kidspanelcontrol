@@ -106,4 +106,31 @@ fun TwoRings(s: Snapshot, k: KioskNow?) {
         }
         text?.let { Text(it, color = C.muted, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) }
     }
+    AppTimeBreakdown(s, unlimited, hak)
+}
+
+/** Ebeveynin uygulamalara ayırdığı süreler: "Toplam 55 dk · genel 30 dk · YouTube 15 dk · WhatsApp 10 dk" */
+@Composable
+private fun AppTimeBreakdown(s: Snapshot, unlimited: Boolean, hak: Long) {
+    val usage = app.orbit.service.Live.state.value.usage ?: return
+    val rules = Store.rules()
+    val left = app.orbit.engine.RuleEngine(rules).appGrantsLeft(s.day, usage).filterValues { it.second > 0 }
+    val lim = rules.dayAppLimits[s.day]
+    if (left.isEmpty() && lim == null) return
+    val name = { p: String -> rules.apps[p]?.label ?: p.substringAfterLast('.') }
+    val parts = mutableListOf<String>()
+    val appSum = left.values.sumOf { it.second } / 60
+    if (!unlimited && left.isNotEmpty()) parts += "Toplam ${minutesText(hak / 60 + appSum)}"
+    parts += if (unlimited) "genel süre sınırsız" else "genel ${minutesText(hak / 60)}"
+    for ((p, v) in left.entries.sortedByDescending { it.value.second }) parts += "${name(p)} ${minutesText(v.second / 60)}"
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(parts.joinToString(" · "), color = C.text, fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        if (left.isNotEmpty()) Muted("Bir uygulamaya ayrılan süre önce o uygulamada düşer", 12)
+        if (lim != null) {
+            val caps = lim.caps.entries.joinToString(", ") { "${name(it.key)} en fazla ${it.value} dk" }
+            val only = if (lim.onlyApps) "Genel süren bugün sadece: " + lim.apps.map { a -> name(a) + (lim.caps[a]?.let { " (en fazla $it dk)" } ?: "") }.joinToString(", ")
+                else if (caps.isNotBlank()) "Bugün: $caps" else null
+            only?.let { Text(it, color = C.warn, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) }
+        }
+    }
 }

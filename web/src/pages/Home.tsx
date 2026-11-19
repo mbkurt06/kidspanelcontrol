@@ -1349,7 +1349,6 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
         )}
         {listOpen && quick.length > 0 && (
           <div className="stack-s">
-            <span className="muted tiny">⭐ Yıldızlı uygulamalar (dokun: aşağıya iner, süresini ver):</span>
             <div className="chips">{quick.map((x) => <button key={x.key} type="button" className="chip-btn" onClick={() => onQuick(x.key)}>⭐ {x.label}</button>)}</div>
           </div>
         )}
@@ -1363,7 +1362,7 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
         {rows.length > 1 && listOpen && (
           <div className="stack-s">
             <div className="row between" style={{ alignItems: "center" }}>
-              <span className="muted tiny">Kutudaki rakam yeni süre. Çark işaretlileri birlikte değiştirir.</span>
+              <span />
               <button type="button" className="link-btn small" onClick={() => onAll(!rows.every((x) => x.on))}>{rows.every((x) => x.on) ? "Hiçbiri" : "Hepsini seç"}</button>
             </div>
             {rows.map((x) => (

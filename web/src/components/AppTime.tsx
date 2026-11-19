@@ -108,7 +108,7 @@ export function AppPicker({ apps, selected, onChange, onClose, title, favs, onFa
   const fav = new Set(favs ?? []);
   // En çok kullanılanlar üstte (son 14 gün), sonra alfabetik
   const ri = (p: string) => { const i = rank?.indexOf(p) ?? -1; return i < 0 ? 9999 : i; };
-  list.sort((a, b) => Number(fav.has(b.package)) - Number(fav.has(a.package)) || ri(a.package) - ri(b.package));
+  list.sort((a, b) => ri(a.package) - ri(b.package) || a.label.localeCompare(b.label, "tr"));
   return createPortal(
     <>
       <div className="pop-backdrop sheet-like" style={{ zIndex: 1100 }} onClick={onClose} />
@@ -118,7 +118,7 @@ export function AppPicker({ apps, selected, onChange, onClose, title, favs, onFa
           <button type="button" className="pill-btn primary" onClick={onClose}>Tamam{selected.length ? ` (${selected.length})` : ""}</button>
         </div>
         <input placeholder="🔍 Uygulama ara…" value={q} onChange={(e) => setQ(e.target.value)} />
-        {onFav && <span className="muted tiny">☆ ile sık kullanılanlara ekle: çark açılınca hep listede durur</span>}
+        {onFav && <span className="muted tiny">En çok kullanılanlar üstte · ☆ ile yıldızla: çarkta hazır durur</span>}
         <div style={{ overflowY: "auto", flex: 1 }}>
           {list.map((a) => (
             <label key={a.package} className="row gap-s app-pick-row">

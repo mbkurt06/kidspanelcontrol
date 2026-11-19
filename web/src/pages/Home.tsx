@@ -722,8 +722,9 @@ function ChildCard({ child }: { child: Child }) {
   // ⭐ sık kullanılanlar hep; bugün süresi kalanlar; listeye eklenenler (süresi biten, ⭐ olmayan çıkar)
   const dialKeys = [GEN, ...Array.from(new Set([...Object.keys(at.left), ...extraApps]))];
   // ⭐ hızlı ekle: listede satırı olmayan sık kullanılanlar
-  // Hızlı ekle: en çok kullanılan (son 14 gün) ve listede satırı olmayan ilk 6 uygulama
-  const quickFavs = at.ranked.filter((p) => at.apps.some((a) => a.package === p) && !dialKeys.includes(p)).slice(0, 6);
+  // ⭐ Yıldızlı uygulamalar: listede satırı yoksa hızlı ekle düğmesi (en çok kullanılan önce)
+  const rk = (p: string) => { const i = at.ranked.indexOf(p); return i < 0 ? 9999 : i; };
+  const quickFavs = at.favs.filter((p) => at.apps.some((a) => a.package === p) && !dialKeys.includes(p)).sort((a, b) => rk(a) - rk(b));
   const leftOf = (k: string) => (k === GEN ? (hakUnl ? 600 : Math.max(0, remainingNow)) : at.left[k] ?? 0);
   // Çark değeri işaretlilere dağılır: + eşit bölünür, − her birinin mevcut süresi kadar azaltılır
   const allocFor = (v: number, keys: string[]): Record<string, number> => (v >= 0 ? splitEven(v, keys)
@@ -1257,7 +1258,7 @@ function ChildCard({ child }: { child: Child }) {
         const sel = picked.length ? picked : [GEN];
         setDialApps(sel);
         setAlloc(allocFor(dial, sel));
-      }} onClose={() => setPickApps(false)} title="Süre hangi uygulamalar için" rank={at.ranked} />}
+      }} onClose={() => setPickApps(false)} title="Süre hangi uygulamalar için" rank={at.ranked} favs={at.favs} onFav={(p) => { void at.toggleFav(p); }} />}
       {limitOpen && fam.familyId && (
         <DayLimitSheet childId={child.id} familyId={fam.familyId} day={at.day} apps={at.apps} limit={at.limit} remaining={hakUnl ? 0 : hak}
           onClose={() => setLimitOpen(false)} onSaved={(m) => { setLimitOpen(false); setDialOpen(false); setMsg(m); void at.reload(); }} />
@@ -1339,7 +1340,8 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
             <button key={d} className="chip-btn" disabled={d < 0 && value + d < -remaining} onClick={() => onChange(clamp(value + d))}>{d > 0 ? "+" : "−"}{d === 60 ? "1 sa" : Math.abs(d)}</button>
           ))}
         </div>
-        {(rows.length > 1 || suggest.length > 0 || quick.length > 0) && (
+        {(
+
           <button type="button" className="row between dial-list-head" onClick={() => setListOpen(!listOpen)} aria-expanded={listOpen}>
             <span className="small"><b>📱 Uygulama süreleri</b> <span className="muted">({Math.max(0, rows.length - 1) + quick.length}) · {rows.filter((x) => x.on).map((x) => x.label).join(", ") || "seçim yok"}</span></span>
             <span aria-hidden>{listOpen ? "▴" : "▾"}</span>
@@ -1347,10 +1349,11 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
         )}
         {listOpen && quick.length > 0 && (
           <div className="stack-s">
-            <span className="muted tiny">Hızlı ekle (en çok kullandıkları · dokun: listeye iner):</span>
-            <div className="chips">{quick.map((x) => <button key={x.key} type="button" className="chip-btn" onClick={() => onQuick(x.key)}>+ {x.label}</button>)}</div>
+            <span className="muted tiny">⭐ Yıldızlı uygulamalar (dokun: aşağıya iner, süresini ver):</span>
+            <div className="chips">{quick.map((x) => <button key={x.key} type="button" className="chip-btn" onClick={() => onQuick(x.key)}>⭐ {x.label}</button>)}</div>
           </div>
         )}
+        {listOpen && !quick.length && rows.length <= 1 && <span className="muted tiny">İpucu: “+ Uygulama ekle” listesinde ☆'a basıp uygulamaları yıldızla; burada hazır dursunlar.</span>}
         {listOpen && suggest.length > 0 && (
           <div className="stack-s">
             <span className="muted tiny">⭐ Sık kullanılanlara ekle (en çok kullandıkları):</span>

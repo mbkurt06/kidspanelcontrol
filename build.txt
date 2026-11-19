@@ -1,0 +1,71 @@
+commit 8600d24 surum 320 sonuc success imza var
+== Derleme hatalari
+BUILD SUCCESSFUL in 1m 15s
+e: The daemon has terminated unexpectedly on startup attempt #1 with error code: 0. The daemon process output:
+BUILD SUCCESSFUL in 1m 8s
+== Uyarilar
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/data/Store.kt:118:42 Java type mismatch: inferred type is 'kotlin.String?', but 'kotlin.String' was expected.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/data/Store.kt:124:42 Java type mismatch: inferred type is 'kotlin.String?', but 'kotlin.String' was expected.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/data/Wifi.kt:10:8 'class WifiConfiguration : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/device/PhoneSettings.kt:75:42 'static field DISALLOW_ADD_MANAGED_PROFILE: String' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/device/Policy.kt:122:37 'static field KEYGUARD_DISABLE_REMOTE_INPUT: Int' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/service/OrbitService.kt:590:54 Java type mismatch: inferred type is 'kotlin.String?', but 'kotlin.String' was expected.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/ui/CaptureActivity.kt:162:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Please add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/ui/CaptureActivity.kt:163:15 'fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray): Unit' is deprecated. This method has been deprecated in favor of using the Activity Result API
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/ui/WifiScreen.kt:271:17 'val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>' is deprecated. Moved to lifecycle-runtime-compose library in androidx.lifecycle.compose package.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/data/Store.kt:118:42 Java type mismatch: inferred type is 'kotlin.String?', but 'kotlin.String' was expected.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/data/Store.kt:124:42 Java type mismatch: inferred type is 'kotlin.String?', but 'kotlin.String' was expected.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/data/Wifi.kt:10:8 'class WifiConfiguration : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/device/PhoneSettings.kt:75:42 'static field DISALLOW_ADD_MANAGED_PROFILE: String' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/device/Policy.kt:122:37 'static field KEYGUARD_DISABLE_REMOTE_INPUT: Int' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/service/OrbitService.kt:590:54 Java type mismatch: inferred type is 'kotlin.String?', but 'kotlin.String' was expected.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/ui/CaptureActivity.kt:162:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Please add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/ui/CaptureActivity.kt:163:15 'fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray): Unit' is deprecated. This method has been deprecated in favor of using the Activity Result API
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/ui/WifiScreen.kt:271:17 'val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>' is deprecated. Moved to lifecycle-runtime-compose library in androidx.lifecycle.compose package.
+== Son satirlar
+
+> Task :app:compileReleaseKotlin
+e: The daemon has terminated unexpectedly on startup attempt #1 with error code: 0. The daemon process output:
+    1. Kotlin compile daemon is ready
+
+> Task :app:mergeExtDexRelease
+
+> Task :app:compileReleaseKotlin
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/data/Store.kt:118:42 Java type mismatch: inferred type is 'kotlin.String?', but 'kotlin.String' was expected.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/data/Store.kt:124:42 Java type mismatch: inferred type is 'kotlin.String?', but 'kotlin.String' was expected.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/data/Wifi.kt:10:8 'class WifiConfiguration : Any, Parcelable' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/device/PhoneSettings.kt:75:42 'static field DISALLOW_ADD_MANAGED_PROFILE: String' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/device/Policy.kt:122:37 'static field KEYGUARD_DISABLE_REMOTE_INPUT: Int' is deprecated. Deprecated in Java.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/service/OrbitService.kt:590:54 Java type mismatch: inferred type is 'kotlin.String?', but 'kotlin.String' was expected.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/ui/CaptureActivity.kt:162:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Please add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/ui/CaptureActivity.kt:163:15 'fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray): Unit' is deprecated. This method has been deprecated in favor of using the Activity Result API
+      which brings increased type safety via an {@link ActivityResultContract} and the prebuilt
+      contracts for common intents available in
+      {@link androidx.activity.result.contract.ActivityResultContracts}, provides hooks for
+      testing, and allow receiving results in separate, testable classes independent from your
+      activity. Use
+      {@link #registerForActivityResult(ActivityResultContract, ActivityResultCallback)} passing
+      in a {@link RequestMultiplePermissions} object for the {@link ActivityResultContract} and
+      handling the result in the {@link ActivityResultCallback#onActivityResult(Object) callback}.
+w: file:///home/runner/work/kidspanelcontrol/kidspanelcontrol/android/app/src/main/java/app/orbit/ui/WifiScreen.kt:271:17 'val LocalLifecycleOwner: ProvidableCompositionLocal<LifecycleOwner>' is deprecated. Moved to lifecycle-runtime-compose library in androidx.lifecycle.compose package.
+
+> Task :app:compileReleaseJavaWithJavac
+> Task :app:dexBuilderRelease
+> Task :app:mergeReleaseGlobalSynthetics
+> Task :app:processReleaseJavaRes
+> Task :app:mergeReleaseJavaResource
+> Task :app:mergeDexRelease
+> Task :app:compileReleaseArtProfile
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect
+> Task :app:assembleRelease
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/imza-1795123623148.json
+
+BUILD SUCCESSFUL in 1m 8s
+45 actionable tasks: 45 executed
+== Testler
+app.orbit.KioskAppTest test 2 hata 0 0
+app.orbit.NightScenarioTest test 8 hata 0 0
+app.orbit.RuleEngineTest test 20 hata 0 0
+app.orbit.SectionEngineTest test 14 hata 0 0
+app.orbit.TaskUnlockTest test 6 hata 0 0

@@ -14,6 +14,9 @@ export function useAppTime(childId: string, st: DeviceStatus | undefined) {
   const [apps, setApps] = useState<ChildApp[]>([]);
   const [totals, setTotals] = useState<Record<string, number>>({});
   const [limit, setLimit] = useState<AppLimit | null>(null);
+  // ⭐ Sık kullanılanlar (çocuk başına) ve öneri: son 14 günde en çok kullanılanlar
+  const [favs, setFavs] = useState<string[]>([]);
+  const [topUsed, setTopUsed] = useState<string[]>([]);
   const day = orbitTodayISO();
   const reload = useCallback(async () => {
     const [g, l] = await Promise.all([
@@ -26,6 +29,20 @@ export function useAppTime(childId: string, st: DeviceStatus | undefined) {
     setLimit((l.data as AppLimit | null) ?? null);
   }, [childId, day]);
   useEffect(() => { void reload(); }, [reload, st?.updated_at]);
+  useEffect(() => {
+    supabase.from("children").select("fav_apps").eq("id", childId).maybeSingle().then(({ data }) => setFavs(((data as { fav_apps?: string[] } | null)?.fav_apps) ?? []));
+    const since = new Date(Date.now() - 14 * 86400e3).toISOString().slice(0, 10);
+    supabase.from("usage_daily").select("package, minutes").eq("child_id", childId).gte("day", since).then(({ data }) => {
+      const m: Record<string, number> = {};
+      for (const r of (data ?? []) as { package: string; minutes: number }[]) m[r.package] = (m[r.package] ?? 0) + (r.minutes ?? 0);
+      setTopUsed(Object.entries(m).filter(([p]) => !p.startsWith("web:") && !p.startsWith("video:") && p !== "app.orbit").sort((a, b) => b[1] - a[1]).map(([p]) => p).slice(0, 12));
+    });
+  }, [childId]);
+  const toggleFav = useCallback(async (p: string) => {
+    const next = favs.includes(p) ? favs.filter((x) => x !== p) : [...favs, p];
+    setFavs(next);
+    await supabase.from("children").update({ fav_apps: next }).eq("id", childId);
+  }, [favs, childId]);
   useEffect(() => {
     supabase.from("child_apps").select("package,label,approved").eq("child_id", childId).then(({ data }) => {
       const list = ((data ?? []) as (ChildApp & { approved: boolean })[])
@@ -44,7 +61,9 @@ export function useAppTime(childId: string, st: DeviceStatus | undefined) {
   const name = useCallback((p: string) => apps.find((a) => a.package === p)?.label ?? p.split(".").pop() ?? p, [apps]);
   // "Sadece şu anki süre" kısıtından kalan dk (telefon kısıtlı uygulamalarda harcananı "dl" olarak bildirir)
   const restrictedLeft = limit?.scope === "now" ? Math.max(0, (limit.budget ?? 0) - Number((st?.grant_used as Record<string, number> | null | undefined)?.dl ?? 0)) : 0;
-  return { apps, totals, left, limit, reload, name, used, day, restrictedLeft };
+  // Öneri: en çok kullanılan, onaylı, henüz ⭐ olmayan ilk 5
+  const suggest = topUsed.filter((p) => !favs.includes(p) && apps.some((a) => a.package === p)).slice(0, 5);
+  return { apps, totals, left, limit, reload, name, used, day, restrictedLeft, favs, toggleFav, suggest };
 }
 
 /** Seçilen uygulamalara süre ver / geri al (kullanılanın altına inmez) */
@@ -81,12 +100,13 @@ export function breakdownText(hak: number, unlimited: boolean, left: Record<stri
 }
 
 /** Uygulama listesi: tik koyulanlar seçilir */
-export function AppPicker({ apps, selected, onChange, onClose, title }: { apps: ChildApp[]; selected: string[]; onChange: (s: string[]) => void; onClose: () => void; title: string }) {
+export function AppPicker({ apps, selected, onChange, onClose, title, favs, onFav }: { apps: ChildApp[]; selected: string[]; onChange: (s: string[]) => void; onClose: () => void; title: string; favs?: string[]; onFav?: (p: string) => void }) {
   const [q, setQ] = useState("");
   const list = apps.filter((a) => !q || a.label.toLocaleLowerCase("tr").includes(q.toLocaleLowerCase("tr")));
   const sel = new Set(selected);
   // Seçilenler üstte
-  list.sort((a, b) => Number(sel.has(b.package)) - Number(sel.has(a.package)));
+  const fav = new Set(favs ?? []);
+  list.sort((a, b) => Number(fav.has(b.package)) - Number(fav.has(a.package)) || Number(sel.has(b.package)) - Number(sel.has(a.package)));
   return createPortal(
     <>
       <div className="pop-backdrop sheet-like" style={{ zIndex: 1100 }} onClick={onClose} />
@@ -96,11 +116,13 @@ export function AppPicker({ apps, selected, onChange, onClose, title }: { apps: 
           <button type="button" className="pill-btn primary" onClick={onClose}>Tamam{selected.length ? ` (${selected.length})` : ""}</button>
         </div>
         <input placeholder="🔍 Uygulama ara…" value={q} onChange={(e) => setQ(e.target.value)} />
+        {onFav && <span className="muted tiny">☆ ile sık kullanılanlara ekle: çark açılınca hep listede durur</span>}
         <div style={{ overflowY: "auto", flex: 1 }}>
           {list.map((a) => (
             <label key={a.package} className="row gap-s app-pick-row">
               <input type="checkbox" checked={sel.has(a.package)} onChange={(e) => onChange(e.target.checked ? [...selected, a.package] : selected.filter((x) => x !== a.package))} />
-              <span>{a.label}</span>
+              <span className="grow">{a.label}</span>
+              {onFav && <button type="button" className="fav-star" aria-label={fav.has(a.package) ? "Sık kullanılanlardan çıkar" : "Sık kullanılanlara ekle"} onClick={(e) => { e.preventDefault(); onFav(a.package); }}>{fav.has(a.package) ? "⭐" : "☆"}</button>}
             </label>
           ))}
           {!list.length && <p className="muted small">Uygulama bulunamadı</p>}

@@ -719,7 +719,8 @@ function ChildCard({ child }: { child: Child }) {
   const appLeftSum = Object.values(at.left).reduce((a, b) => a + b, 0);
   const hakTotal = hak + appLeftSum;
   // Çark listesi: Genel + bugün süre verilen uygulamalar + listeye eklenenler; işaretliler (dialApps) çarktan etkilenir
-  const dialKeys = [GEN, ...Array.from(new Set([...Object.keys(at.totals).filter((p) => (at.totals[p] ?? 0) > 0), ...extraApps]))];
+  // ⭐ sık kullanılanlar hep; bugün süresi kalanlar; listeye eklenenler (süresi biten, ⭐ olmayan çıkar)
+  const dialKeys = [GEN, ...Array.from(new Set([...at.favs.filter((p) => at.apps.some((a) => a.package === p)), ...Object.keys(at.left), ...extraApps]))];
   const leftOf = (k: string) => (k === GEN ? (hakUnl ? 600 : Math.max(0, remainingNow)) : at.left[k] ?? 0);
   // Çark değeri işaretlilere dağılır: + eşit bölünür, − her birinin mevcut süresi kadar azaltılır
   const allocFor = (v: number, keys: string[]): Record<string, number> => (v >= 0 ? splitEven(v, keys)
@@ -1195,8 +1196,10 @@ function ChildCard({ child }: { child: Child }) {
           apps={dialApps.filter((k) => k !== GEN).map(at.name)}
           onPickApps={() => setPickApps(true)}
           onLimit={() => setLimitOpen(true)}
-          rows={dialKeys.length > 1 ? dialKeys.map((k) => ({ key: k, label: k === GEN ? "Genel süre" : at.name(k), base: baseOf(k), unl: k === GEN && hakUnl, delta: alloc[k] ?? 0, on: dialApps.includes(k) })) : []}
+          rows={dialKeys.length > 1 ? dialKeys.map((k) => ({ key: k, label: k === GEN ? "Genel süre" : `${at.favs.includes(k) ? "⭐ " : ""}${at.name(k)}`, base: baseOf(k), unl: k === GEN && hakUnl, delta: alloc[k] ?? 0, on: dialApps.includes(k) })) : []}
           dirty={Object.values(alloc).some(Boolean)}
+          suggest={at.suggest.map((p) => ({ key: p, label: at.name(p) }))}
+          onFav={(p) => { void at.toggleFav(p); }}
           onToggle={(k) => {
             const sel = dialApps.includes(k) ? dialApps.filter((x) => x !== k) : [...dialApps, k];
             setDialApps(sel);
@@ -1247,7 +1250,7 @@ function ChildCard({ child }: { child: Child }) {
         const sel = picked.length ? picked : [GEN];
         setDialApps(sel);
         setAlloc(allocFor(dial, sel));
-      }} onClose={() => setPickApps(false)} title="Süre hangi uygulamalar için" />}
+      }} onClose={() => setPickApps(false)} title="Süre hangi uygulamalar için" favs={at.favs} onFav={(p) => { void at.toggleFav(p); }} />}
       {limitOpen && fam.familyId && (
         <DayLimitSheet childId={child.id} familyId={fam.familyId} day={at.day} apps={at.apps} limit={at.limit} remaining={hakUnl ? 0 : hak}
           onClose={() => setLimitOpen(false)} onSaved={(m) => { setLimitOpen(false); setDialOpen(false); setMsg(m); void at.reload(); }} />
@@ -1258,10 +1261,11 @@ function ChildCard({ child }: { child: Child }) {
 }
 
 /** Büyük süre çarkı: tam tur 60 dk, her çentik 1 dk; saat yönü artırır, ters yönü azaltır (kalan sürenin altına inmez). */
-function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, onApply, then, onThen, apps, onPickApps, onLimit, rows, dirty, onToggle, onAll, onRow, onEven, canReset, onReset }: {
+function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, onApply, then, onThen, apps, onPickApps, onLimit, rows, dirty, suggest, onFav, onToggle, onAll, onRow, onEven, canReset, onReset }: {
   name: string; remaining: number; showRemaining: boolean; value: number;
   apps: string[]; onPickApps: () => void; onLimit: () => void;
   rows: { key: string; label: string; base: number; unl: boolean; delta: number; on: boolean }[]; dirty: boolean;
+  suggest: { key: string; label: string }[]; onFav: (p: string) => void;
   onToggle: (k: string) => void; onAll: (on: boolean) => void; onRow: (k: string, v: number) => void; onEven: () => void;
   canReset: boolean; onReset: () => void;
   onChange: (v: number) => void; onClose: () => void; onApply: () => void;
@@ -1327,11 +1331,17 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
             <button key={d} className="chip-btn" disabled={d < 0 && value + d < -remaining} onClick={() => onChange(clamp(value + d))}>{d > 0 ? "+" : "−"}{d === 60 ? "1 sa" : Math.abs(d)}</button>
           ))}
         </div>
-        {rows.length > 0 && (
+        {(rows.length > 0 || suggest.length > 0) && (
           <button type="button" className="row between dial-list-head" onClick={() => setListOpen(!listOpen)} aria-expanded={listOpen}>
-            <span className="small"><b>📱 Uygulama süreleri</b> <span className="muted">({rows.length - 1}) · {rows.filter((x) => x.on).map((x) => x.label).join(", ") || "seçim yok"}</span></span>
+            <span className="small"><b>📱 Uygulama süreleri</b> <span className="muted">({Math.max(0, rows.length - 1)}) · {rows.filter((x) => x.on).map((x) => x.label).join(", ") || "seçim yok"}</span></span>
             <span aria-hidden>{listOpen ? "▴" : "▾"}</span>
           </button>
+        )}
+        {listOpen && suggest.length > 0 && (
+          <div className="stack-s">
+            <span className="muted tiny">⭐ Sık kullanılanlara ekle (en çok kullandıkları):</span>
+            <div className="chips">{suggest.map((x) => <button key={x.key} type="button" className="chip-btn" onClick={() => onFav(x.key)}>☆ {x.label}</button>)}</div>
+          </div>
         )}
         {rows.length > 0 && listOpen && (
           <div className="stack-s">

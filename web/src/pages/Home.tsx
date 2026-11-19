@@ -1266,6 +1266,10 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
   const ref = useRef<HTMLDivElement>(null);
   const drag = useRef<{ last: number; acc: number; base: number } | null>(null);
   const clamp = (v: number) => Math.max(-remaining, Math.min(600, v));
+  // Uygulama listesi kapalı gelir; ok ile açılır (bir uygulama işaretlenince kendiliğinden açılır)
+  const anyApp = rows.some((x) => x.on && x.key !== "__general");
+  const [listOpen, setListOpen] = useState(false);
+  useEffect(() => { if (anyApp) setListOpen(true); }, [anyApp]);
   const angle = (x: number, y: number) => {
     const r = ref.current!.getBoundingClientRect();
     return (Math.atan2(y - (r.top + r.height / 2), x - (r.left + r.width / 2)) * 180) / Math.PI;
@@ -1320,6 +1324,12 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
           ))}
         </div>
         {rows.length > 0 && (
+          <button type="button" className="row between dial-list-head" onClick={() => setListOpen(!listOpen)} aria-expanded={listOpen}>
+            <span className="small"><b>📱 Uygulama süreleri</b> <span className="muted">({rows.length - 1}) · {rows.filter((x) => x.on).map((x) => x.label).join(", ") || "seçim yok"}</span></span>
+            <span aria-hidden>{listOpen ? "▴" : "▾"}</span>
+          </button>
+        )}
+        {rows.length > 0 && listOpen && (
           <div className="stack-s">
             <div className="row between" style={{ alignItems: "center" }}>
               <div className="chips">

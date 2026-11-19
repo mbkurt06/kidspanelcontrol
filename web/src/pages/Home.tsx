@@ -240,9 +240,21 @@ function ChildCard({ child }: { child: Child }) {
   }, [pending, realKind]); // eslint-disable-line react-hooks/exhaustive-deps
   // Telefon kapalıyken yapılan kilit / açma: panel hemen yeni durumu gösterir (⏳ iletilmedi)
   const offKind = pend.kind && pend.kind !== realKind ? pend.kind : null;
-  const kiosk = pending ? pending.kind === "kiosk" : offKind ? offKind === "kiosk" : realKiosk;
+  // Geçici açma az önce bitti ama telefon henüz yeni durumu bildirmedi: "21:00'e kadar açık" yerine kilitleniyor göster
+  const tempEnded = (() => {
+    if (!st || realKiosk || realLimited || pending || offKind) return false;
+    const bm = (iso: string) => { const [h, m] = new Date(iso).toLocaleTimeString("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hour12: false }).split(":").map(Number); return (h % 24) * 60 + m; };
+    const nowM = nowBerlin().minute;
+    const stM = bm(st.updated_at);
+    return extras.some((g) => {
+      if (!g.note?.startsWith("Geçici açma") || g.note.includes("uzatıldı") || !g.window_end || g.window_end.startsWith("23:59")) return false;
+      const e = mins(g.window_end);
+      return nowM >= e && nowM - e < 3 && stM < e;
+    });
+  })();
+  const kiosk = pending ? pending.kind === "kiosk" : offKind ? offKind === "kiosk" : tempEnded || realKiosk;
   const limited = pending ? pending.kind === "limit" : offKind ? offKind === "limit" : realLimited;
-  const waiting = !!pending || !!offKind;
+  const waiting = !!pending || !!offKind || tempEnded;
   const unlimited = !!st && st.remaining_minutes >= 1440;
   const closed = !!st && !kiosk && !limited && st.remaining_minutes === 0 && st.allowance_minutes >= 1440;
   const finished = !!st && !kiosk && !limited && !closed && st.remaining_minutes === 0;

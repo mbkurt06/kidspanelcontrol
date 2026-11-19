@@ -1200,7 +1200,7 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
           </div>
         </div>
         <div className="chips center-chips">
-          {[-5, 5, 15, 30, 60].map((d) => (
+          {[-60, -30, -15, -5, 5, 15, 30, 60].map((d) => (
             <button key={d} className="chip-btn" disabled={d < 0 && value + d < -remaining} onClick={() => onChange(clamp(value + d))}>{d > 0 ? "+" : "−"}{d === 60 ? "1 sa" : Math.abs(d)}</button>
           ))}
         </div>

@@ -125,6 +125,8 @@ export function DayLimitSheet({ childId, familyId, day, apps, limit, remaining, 
   const [err, setErr] = useState("");
   const name = (p: string) => apps.find((a) => a.package === p)?.label ?? p;
   async function save() {
+    // Hiç uygulama seçili değilse ve sınır yoksa: kısıt kalkar
+    if (!sel.length) { if (limit) await clear(); else onClose(); return; }
     setBusy(true); setErr("");
     const c = Object.fromEntries(Object.entries(caps).filter(([p, v]) => v > 0 && sel.includes(p)));
     const { error } = await supabase.from("day_app_limits").upsert({ child_id: childId, family_id: familyId, day, only_apps: only, apps: sel, caps: c, scope, budget: scope === "now" ? (limit?.scope === "now" && limit.budget ? limit.budget : remaining) : null, updated_at: new Date().toISOString() });
@@ -144,7 +146,10 @@ export function DayLimitSheet({ childId, familyId, day, apps, limit, remaining, 
     <>
       <div className="pop-backdrop sheet-like" style={{ zIndex: 1050 }} onClick={onClose} />
       <div className="lock-pop sheet-pop" role="dialog" aria-label="Genel süreyi kısıtla" style={{ zIndex: 1051, maxHeight: "85vh", overflowY: "auto" }}>
-        <b className="sheet-pop-title">🎯 Genel süreyi kısıtla</b>
+        <div className="row between" style={{ alignItems: "center" }}>
+          <b className="sheet-pop-title">🎯 Genel süreyi kısıtla</b>
+          {limit && <button type="button" className="pill-btn ghost" disabled={busy} onClick={clear}>🗑 Kısıtı kaldır</button>}
+        </div>
         <p className="small muted" style={{ margin: 0 }}>Şu anki genel süre: {minutesText(remaining)} · gün bitince kısıt kalkar</p>
         <span className="pop-label">KISIT NEYE UYGULANSIN</span>
         <label className="row gap-s" style={{ alignItems: "flex-start" }}><input type="radio" checked={scope === "day"} onChange={() => setScope("day")} />
@@ -167,11 +172,11 @@ export function DayLimitSheet({ childId, familyId, day, apps, limit, remaining, 
         {sel.length > 0 && <p className="muted tiny" style={{ margin: 0 }}>"en fazla" 0 = sınır yok</p>}
         {err && <p className="error small">{err}</p>}
         <div className="pop-actions">
-          {limit && <button className="pill-btn ghost" disabled={busy} onClick={clear}>Kısıtı kaldır</button>}
+          {limit && <button className="pill-btn ghost" disabled={busy} onClick={clear}>🗑 Kısıtı kaldır</button>}
           {scope === "now" && remaining <= 0 && <span className="error tiny">Şu an genel süre yok</span>}
           <span className="grow" />
           <button className="pill-btn" onClick={onClose}>Vazgeç</button>
-          <button className="pill-btn primary" disabled={busy || (only && !sel.length) || (scope === "now" && remaining <= 0 && !(limit?.scope === "now"))} onClick={save}>✓ Uygula</button>
+          <button className="pill-btn primary" disabled={busy || (!!sel.length && scope === "now" && remaining <= 0 && !(limit?.scope === "now"))} onClick={save}>{!sel.length && limit ? "✓ Kaydet (kısıt kalkar)" : "✓ Uygula"}</button>
         </div>
       </div>
       {pick && <AppPicker apps={apps} selected={sel} onChange={setSel} onClose={() => setPick(false)} title="Genel süre hangi uygulamalarda" />}
@@ -271,6 +276,14 @@ export function AppTimeCard({ childId, familyId, st }: { childId: string; family
         <span className="pop-label">GENEL SÜRE KISITI</span>
         {lt ? <p className="small warn-text" style={{ margin: 0 }}>🎯 {lt}</p> : <p className="small muted" style={{ margin: 0 }}>Kısıt yok: genel süre tüm uygulamalarda kullanılır.</p>}
         <button className="pill-btn" onClick={() => setLimitOpen(true)}>🎯 {at.limit ? "Kısıtı düzenle" : "Genel süreyi kısıtla"}</button>
+        {(at.limit || Object.keys(at.left).length > 0) && (
+          <button className="pill-btn ghost" disabled={busy} onClick={async () => {
+            setBusy(true);
+            try { await resetAppTime(childId, familyId, at.day, at.totals, at.used); await at.reload(); setMsg("Uygulama kısıtları ve süreleri sıfırlandı"); }
+            catch (e) { setMsg(errorText(e as Error)); }
+            setBusy(false);
+          }}>♻ Hepsini sıfırla (kısıt + uygulama süreleri)</button>
+        )}
       </div>
       {msg && <p className="small muted" style={{ marginBottom: 0 }}>{msg}</p>}
       {pick && <AppPicker apps={at.apps} selected={sel} onChange={setSel} onClose={() => setPick(false)} title="Süre hangi uygulamalar için" />}
@@ -278,4 +291,12 @@ export function AppTimeCard({ childId, familyId, st }: { childId: string; family
         onClose={() => setLimitOpen(false)} onSaved={(m) => { setLimitOpen(false); setMsg(m); void at.reload(); }} />}
     </div>
   );
+}
+
+/** Bugünkü bütün uygulama ayarlarını sıfırla: genel süre kısıtı kalkar, uygulamalara verilen süreler geri alınır (kullanılan kalır) */
+export async function resetAppTime(childId: string, familyId: string, day: string, totals: Record<string, number>, used: (p: string) => number) {
+  await supabase.from("day_app_limits").delete().eq("child_id", childId).eq("day", day);
+  const rows = Object.entries(totals).map(([p, m]) => ({ family_id: familyId, child_id: childId, day, package: p, minutes: -Math.max(0, m - used(p)) })).filter((r) => r.minutes < 0);
+  if (rows.length) { const { error } = await supabase.from("app_grants").insert(rows); if (error) throw error; }
+  await sendCommand(childId, "resync", {});
 }

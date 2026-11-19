@@ -14,7 +14,7 @@ import { Ring } from "../components/Ring";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
-import { AppPicker, DayLimitSheet, DistributeSheet, applyAppTime, breakdownText, limitText, raiseCaps, useAppTime } from "../components/AppTime";
+import { AppPicker, DayLimitSheet, DistributeSheet, applyAppTime, breakdownText, limitText, raiseCaps, resetAppTime, useAppTime } from "../components/AppTime";
 import type { Child, Section } from "../lib/types";
 
 const COLORS = ["#4F7CFF", "#FF7A59", "#2BB673", "#C25BFF"];
@@ -1152,11 +1152,17 @@ function ChildCard({ child }: { child: Child }) {
       {dialOpen && createPortal(
         <DialSheet
           name={child.name}
-          remaining={dialApps.length ? Math.max(0, ...dialApps.map((p) => at.left[p] ?? 0)) : remainingNow}
+          remaining={dialApps.length ? Math.max(0, ...dialApps.map((p) => at.left[p] ?? 0)) : Math.max(remainingNow, ...Object.values(at.left))}
           showRemaining={!!st && (dialApps.length > 0 || hakNow < 1440)}
           apps={dialApps.map(at.name)}
           onPickApps={() => setPickApps(true)}
           onLimit={() => setLimitOpen(true)}
+          general={hakUnl ? null : hak}
+          sources={Object.entries(at.left).map(([p, m]) => ({ pkg: p, label: at.name(p), left: m }))}
+          selected={dialApps}
+          onSource={(p) => setDialApps(p ? [p] : [])}
+          canReset={!!at.limit || Object.keys(at.left).length > 0}
+          onReset={() => { setDialOpen(false); setDial(0); setDialApps([]); run("give", async () => { await resetAppTime(child.id, fam.familyId!, at.day, at.totals, at.used); await at.reload(); return "ok"; }, () => "Uygulama kısıtları ve süreleri sıfırlandı"); }}
           value={dial}
           onChange={setDial}
           then={dialThen}
@@ -1191,9 +1197,11 @@ function ChildCard({ child }: { child: Child }) {
 }
 
 /** Büyük süre çarkı: tam tur 60 dk, her çentik 1 dk; saat yönü artırır, ters yönü azaltır (kalan sürenin altına inmez). */
-function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, onApply, then, onThen, apps, onPickApps, onLimit }: {
+function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, onApply, then, onThen, apps, onPickApps, onLimit, general, sources, selected, onSource, canReset, onReset }: {
   name: string; remaining: number; showRemaining: boolean; value: number;
   apps: string[]; onPickApps: () => void; onLimit: () => void;
+  general: number | null; sources: { pkg: string; label: string; left: number }[]; selected: string[]; onSource: (p: string | null) => void;
+  canReset: boolean; onReset: () => void;
   onChange: (v: number) => void; onClose: () => void; onApply: () => void;
   then: "none" | "unlock" | "time" | "lock"; onThen: (v: "none" | "unlock" | "time" | "lock") => void;
 }) {
@@ -1253,11 +1261,30 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
             <button key={d} className="chip-btn" disabled={d < 0 && value + d < -remaining} onClick={() => onChange(clamp(value + d))}>{d > 0 ? "+" : "−"}{d === 60 ? "1 sa" : Math.abs(d)}</button>
           ))}
         </div>
-        <div className="row gap-xs" style={{ flexWrap: "wrap", justifyContent: "center" }}>
-          <button type="button" className={`chip-btn ${apps.length ? "on" : ""}`} onClick={onPickApps}>📱 {apps.length ? apps.join(", ") : "Uygulama seç"}</button>
-          <button type="button" className="chip-btn" onClick={onLimit}>🎯 Genel süreyi kısıtla</button>
-        </div>
-        {apps.length > 0 && <p className="muted tiny center" style={{ margin: 0 }}>Bu süre sadece {apps.join(", ")} için; önce o uygulamada düşer</p>}
+        {value < 0 && sources.length > 0 ? (
+          <div className="stack-s">
+            <span className="pop-label">NEREDEN GERİ ALINSIN</span>
+            <div className="chips">
+              <button type="button" className={`chip-btn ${!selected.length ? "on" : ""}`} onClick={() => onSource(null)}>Genel{general != null ? ` · ${minutesText(general)}` : ""}</button>
+              {sources.map((x) => <button key={x.pkg} type="button" className={`chip-btn ${selected.length === 1 && selected[0] === x.pkg ? "on" : ""}`} onClick={() => onSource(x.pkg)}>{x.label} · {minutesText(x.left)}</button>)}
+            </div>
+            {(() => {
+              const src = selected.length === 1 ? sources.find((x) => x.pkg === selected[0]) : null;
+              const from = src ? src.left : general;
+              const take = Math.min(-value, from ?? -value);
+              return <p className="muted tiny center" style={{ margin: 0 }}>{src ? src.label : "Genel süre"}'den {minutesText(take)} geri alınacak{from != null ? ` (${minutesText(from)} → ${minutesText(Math.max(0, from - take))})` : ""}</p>;
+            })()}
+          </div>
+        ) : (
+          <>
+            <div className="row gap-xs" style={{ flexWrap: "wrap", justifyContent: "center" }}>
+              <button type="button" className={`chip-btn ${apps.length ? "on" : ""}`} onClick={onPickApps}>📱 {apps.length ? apps.join(", ") : "Uygulama seç"}</button>
+              <button type="button" className="chip-btn" onClick={onLimit}>🎯 Genel süreyi kısıtla</button>
+            </div>
+            {apps.length > 0 && <p className="muted tiny center" style={{ margin: 0 }}>{value < 0 ? `${apps.join(", ")} süresinden geri alınır` : `Bu süre sadece ${apps.join(", ")} için; önce o uygulamada düşer`}</p>}
+          </>
+        )}
+        {canReset && <button type="button" className="link-btn small" style={{ alignSelf: "center" }} onClick={onReset}>♻ Uygulama kısıtlarını ve sürelerini sıfırla</button>}
         {value !== 0 && (
           <div className="stack-s">
             <span className="pop-label">TELEFON NE ZAMAN AÇIK OLSUN</span>

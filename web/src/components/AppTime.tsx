@@ -300,3 +300,36 @@ export async function resetAppTime(childId: string, familyId: string, day: strin
   if (rows.length) { const { error } = await supabase.from("app_grants").insert(rows); if (error) throw error; }
   await sendCommand(childId, "resync", {});
 }
+
+/** Uygulama başına farklı dakika: + verir, − geri alır (kullanılanın altına inmez) */
+export async function applyAppTimeMap(childId: string, familyId: string, day: string, map: Record<string, number>, totals: Record<string, number>, used: (p: string) => number) {
+  const rows = Object.entries(map).map(([p, d]) => {
+    const m = d > 0 ? d : -Math.min(-d, Math.max(0, (totals[p] ?? 0) - used(p)));
+    return { family_id: familyId, child_id: childId, day, package: p, minutes: m };
+  }).filter((r) => r.minutes !== 0);
+  if (!rows.length) return "değişiklik yok";
+  const { error } = await supabase.from("app_grants").insert(rows);
+  if (error) throw error;
+  await sendCommand(childId, "resync", {});
+  return "telefona iletildi";
+}
+
+/** Toplamı uygulamalara eşit böl */
+export function splitEven(total: number, keys: string[]): Record<string, number> {
+  if (!keys.length) return {};
+  const t = Math.max(0, total), b = Math.floor(t / keys.length), r = t - b * keys.length;
+  return Object.fromEntries(keys.map((k, i) => [k, b + (i < r ? 1 : 0)]));
+}
+
+/** Geri alınacak toplamı kaynaklara eşit dağıt (her biri en fazla kalanı kadar) */
+export function fillEven(total: number, src: { key: string; left: number }[]): Record<string, number> {
+  const out: Record<string, number> = Object.fromEntries(src.map((x) => [x.key, 0]));
+  let rest = Math.max(0, total);
+  for (let guard = 0; rest > 0 && guard < 50; guard++) {
+    const open = src.filter((x) => out[x.key] < x.left);
+    if (!open.length) break;
+    const each = Math.max(1, Math.floor(rest / open.length));
+    for (const x of open) { if (rest <= 0) break; const add = Math.min(each, x.left - out[x.key], rest); out[x.key] += add; rest -= add; }
+  }
+  return out;
+}

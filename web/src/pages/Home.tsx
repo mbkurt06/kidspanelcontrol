@@ -14,7 +14,7 @@ import { Ring } from "../components/Ring";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
-import { AppPicker, DayLimitSheet, DistributeSheet, applyAppTime, breakdownText, limitText, raiseCaps, resetAppTime, useAppTime } from "../components/AppTime";
+import { AppPicker, DayLimitSheet, DistributeSheet, applyAppTimeMap, breakdownText, fillEven, limitText, raiseCaps, resetAppTime, splitEven, useAppTime } from "../components/AppTime";
 import type { Child, Section } from "../lib/types";
 
 const COLORS = ["#4F7CFF", "#FF7A59", "#2BB673", "#C25BFF"];
@@ -194,6 +194,10 @@ function ChildCard({ child }: { child: Child }) {
   const [limitOpen, setLimitOpen] = useState(false);
   // "Bugün boyunca" kısıtı varken genel süre: uygulamalara dağıtma penceresi
   const [distrib, setDistrib] = useState<number | null>(null);
+  // Uygulama satırları: verirken seçilen uygulamaların, geri alırken (Genel + uygulamalar) her birinin dakikası
+  const [alloc, setAlloc] = useState<Record<string, number>>({});
+  const [negMode, setNegMode] = useState(false);
+  const GEN = "__general";
   const capsSet = !!at.limit && at.limit.scope !== "now" && at.limit.only_apps && at.limit.apps.some((p) => (at.limit!.caps?.[p] ?? 0) > 0);
   const [pendingGive, setPendingGive] = useState(0);
   const [xDur, setXDur] = useState("60");
@@ -571,12 +575,43 @@ function ChildCard({ child }: { child: Child }) {
     const d = dial;
     if (!d) return;
     setDial(0);
-    if (dialApps.length) {
-      // Süre sadece seçilen uygulamalara: önce o uygulamada düşer
-      const pk = dialApps;
+    const rowsNow = { ...alloc };
+    setAlloc({}); setNegMode(false);
+    const negRows = d < 0 && Object.keys(at.left).length > 0;
+    if (negRows) {
+      // Geri al: Genel'den ve uygulamalardan ayrı ayrı
+      const gen = rowsNow[GEN] ?? 0;
+      const apps = Object.fromEntries(Object.entries(rowsNow).filter(([k, v]) => k !== GEN && v > 0).map(([k, v]) => [k, -v]));
       setDialApps([]);
-      run("give", async () => { const r = await applyAppTime(child.id, fam.familyId!, at.day, pk, d, at.totals, at.used); await at.reload(); return r; },
-        (r) => `${d > 0 ? "+" : "−"}${minutesText(Math.abs(d))} · ${pk.map(at.name).join(", ")} · ${r}`);
+      run("give", async () => {
+        const parts: string[] = [];
+        if (gen > 0) {
+          const { data, error } = await supabase.rpc("parent_reduce_time", { p_child: child.id, p_minutes: gen });
+          if (error) throw error;
+          const rest = Number(data ?? 0);
+          if (rest > 0) await sendCommand(child.id, "adjust_minutes", { minutes: -rest });
+          parts.push(`genel −${minutesText(gen)}`);
+        }
+        if (Object.keys(apps).length) {
+          await applyAppTimeMap(child.id, fam.familyId!, at.day, apps, at.totals, at.used);
+          parts.push(...Object.entries(apps).map(([p, v]) => `${at.name(p)} −${minutesText(-v)}`));
+        }
+        await at.reload();
+        fam.reload();
+        return parts.join(" · ") || "değişiklik yok";
+      }, (r) => `Geri alındı · ${r}`);
+      if (dialThen === "unlock") setUnlockOpen(true);
+      else if (dialThen === "time") { setXDur("60"); setXOpen(true); }
+      else if (dialThen === "lock") { setLockKind("kiosk"); setLockOpen(true); }
+      return;
+    }
+    if (dialApps.length) {
+      // Süre sadece seçilen uygulamalara: her birine kendi dakikası, önce o uygulamada düşer
+      const pk = dialApps;
+      const map = Object.fromEntries(pk.map((p) => [p, rowsNow[p] ?? 0]).filter(([, v]) => (v as number) > 0));
+      setDialApps([]);
+      run("give", async () => { const r = await applyAppTimeMap(child.id, fam.familyId!, at.day, map, at.totals, at.used); await at.reload(); return r; },
+        (r) => `${Object.entries(map).map(([p, v]) => `${at.name(p)} +${minutesText(v as number)}`).join(" · ")} · ${r}`);
       if (dialThen === "unlock") setUnlockOpen(true);
       else if (dialThen === "time") { setXDur("60"); setXOpen(true); }
       else if (dialThen === "lock") { setLockKind("kiosk"); setLockOpen(true); }
@@ -1152,22 +1187,45 @@ function ChildCard({ child }: { child: Child }) {
       {dialOpen && createPortal(
         <DialSheet
           name={child.name}
-          remaining={dialApps.length ? Math.max(0, ...dialApps.map((p) => at.left[p] ?? 0)) : Math.max(remainingNow, ...Object.values(at.left))}
+          remaining={Object.keys(at.left).length ? remainingNow + Object.values(at.left).reduce((a, b) => a + b, 0) : remainingNow}
           showRemaining={!!st && (dialApps.length > 0 || hakNow < 1440)}
           apps={dialApps.map(at.name)}
           onPickApps={() => setPickApps(true)}
           onLimit={() => setLimitOpen(true)}
-          general={hakUnl ? null : hak}
-          sources={Object.entries(at.left).map(([p, m]) => ({ pkg: p, label: at.name(p), left: m }))}
-          selected={dialApps}
-          onSource={(p) => setDialApps(p ? [p] : [])}
+          rows={(() => {
+            const neg = negMode || dial < 0;
+            if (neg && Object.keys(at.left).length) {
+              return [{ key: GEN, label: "Genel", left: hakUnl ? 0 : Math.max(0, remainingNow) }, ...Object.entries(at.left).map(([p, m]) => ({ key: p, label: at.name(p), left: m }))]
+                .filter((x) => x.left > 0).map((x) => ({ ...x, value: alloc[x.key] ?? 0 }));
+            }
+            if (!neg && dialApps.length) return dialApps.map((p) => ({ key: p, label: at.name(p), left: undefined as number | undefined, value: alloc[p] ?? 0 }));
+            return [];
+          })()}
+          neg={negMode || dial < 0}
+          onRow={(k, v) => {
+            const n = { ...alloc, [k]: Math.max(0, v) };
+            setAlloc(n);
+            const sum = Object.entries(n).filter(([kk]) => (negMode || dial < 0) ? true : dialApps.includes(kk)).reduce((a, [, x]) => a + x, 0);
+            setDial((negMode || dial < 0) ? -sum : sum);
+          }}
+          onNeg={() => { setNegMode(true); setDialApps([]); setAlloc({}); setDial(0); }}
+          onEven={() => {
+            if (negMode || dial < 0) setAlloc(fillEven(-dial, [{ key: GEN, left: hakUnl ? 0 : Math.max(0, remainingNow) }, ...Object.entries(at.left).map(([p, m]) => ({ key: p, left: m }))]));
+            else setAlloc(splitEven(dial, dialApps));
+          }}
           canReset={!!at.limit || Object.keys(at.left).length > 0}
           onReset={() => { setDialOpen(false); setDial(0); setDialApps([]); run("give", async () => { await resetAppTime(child.id, fam.familyId!, at.day, at.totals, at.used); await at.reload(); return "ok"; }, () => "Uygulama kısıtları ve süreleri sıfırlandı"); }}
           value={dial}
-          onChange={setDial}
+          onChange={(v) => {
+            setDial(v);
+            if (v > 0 && negMode) { setNegMode(false); setAlloc({}); }
+            if (v < 0 && Object.keys(at.left).length) {
+              setAlloc(fillEven(-v, [{ key: GEN, left: hakUnl ? 0 : Math.max(0, remainingNow) }, ...Object.entries(at.left).map(([p, m]) => ({ key: p, left: m }))]));
+            } else if (v >= 0 && !negMode && dialApps.length) setAlloc(splitEven(v, dialApps));
+          }}
           then={dialThen}
           onThen={setDialThen}
-          onClose={() => { setDialOpen(false); setDial(0); setDialApps([]); }}
+          onClose={() => { setDialOpen(false); setDial(0); setDialApps([]); setAlloc({}); setNegMode(false); }}
           onApply={() => { setDialOpen(false); applyDial(); }}
         />,
         document.body
@@ -1186,7 +1244,7 @@ function ChildCard({ child }: { child: Child }) {
             }, (r) => `+${minutesText(d)}${alloc ? " · uygulamalara dağıtıldı" : ""} · ${r}`);
           }} />
       )}
-      {pickApps && <AppPicker apps={at.apps} selected={dialApps} onChange={setDialApps} onClose={() => setPickApps(false)} title="Süre hangi uygulamalar için" />}
+      {pickApps && <AppPicker apps={at.apps} selected={dialApps} onChange={(sel) => { setDialApps(sel); setNegMode(false); setAlloc(splitEven(Math.max(0, dial), sel)); if (dial < 0) setDial(0); }} onClose={() => setPickApps(false)} title="Süre hangi uygulamalar için" />}
       {limitOpen && fam.familyId && (
         <DayLimitSheet childId={child.id} familyId={fam.familyId} day={at.day} apps={at.apps} limit={at.limit} remaining={hakUnl ? 0 : hak}
           onClose={() => setLimitOpen(false)} onSaved={(m) => { setLimitOpen(false); setDialOpen(false); setMsg(m); void at.reload(); }} />
@@ -1197,10 +1255,10 @@ function ChildCard({ child }: { child: Child }) {
 }
 
 /** Büyük süre çarkı: tam tur 60 dk, her çentik 1 dk; saat yönü artırır, ters yönü azaltır (kalan sürenin altına inmez). */
-function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, onApply, then, onThen, apps, onPickApps, onLimit, general, sources, selected, onSource, canReset, onReset }: {
+function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, onApply, then, onThen, apps, onPickApps, onLimit, rows, neg, onRow, onNeg, onEven, canReset, onReset }: {
   name: string; remaining: number; showRemaining: boolean; value: number;
   apps: string[]; onPickApps: () => void; onLimit: () => void;
-  general: number | null; sources: { pkg: string; label: string; left: number }[]; selected: string[]; onSource: (p: string | null) => void;
+  rows: { key: string; label: string; left?: number; value: number }[]; neg: boolean; onRow: (k: string, v: number) => void; onNeg: () => void; onEven: () => void;
   canReset: boolean; onReset: () => void;
   onChange: (v: number) => void; onClose: () => void; onApply: () => void;
   then: "none" | "unlock" | "time" | "lock"; onThen: (v: "none" | "unlock" | "time" | "lock") => void;
@@ -1261,27 +1319,29 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
             <button key={d} className="chip-btn" disabled={d < 0 && value + d < -remaining} onClick={() => onChange(clamp(value + d))}>{d > 0 ? "+" : "−"}{d === 60 ? "1 sa" : Math.abs(d)}</button>
           ))}
         </div>
-        {value < 0 && sources.length > 0 ? (
+        {rows.length > 0 && (
           <div className="stack-s">
-            <span className="pop-label">NEREDEN GERİ ALINSIN</span>
-            <div className="chips">
-              <button type="button" className={`chip-btn ${!selected.length ? "on" : ""}`} onClick={() => onSource(null)}>Genel{general != null ? ` · ${minutesText(general)}` : ""}</button>
-              {sources.map((x) => <button key={x.pkg} type="button" className={`chip-btn ${selected.length === 1 && selected[0] === x.pkg ? "on" : ""}`} onClick={() => onSource(x.pkg)}>{x.label} · {minutesText(x.left)}</button>)}
+            <span className="pop-label">{neg ? "NEREDEN GERİ ALINSIN" : "UYGULAMALARA"}</span>
+            {rows.map((x) => (
+              <div key={x.key} className="row between" style={{ alignItems: "center", gap: 8 }}>
+                <span className="small">{x.label}{x.left != null && <span className="muted tiny"> · {minutesText(x.left)} var</span>}</span>
+                <MinuteStepper value={x.value} onChange={(v) => onRow(x.key, x.left != null ? Math.min(v, x.left) : v)} min={0} max={x.left ?? 600} label="" />
+              </div>
+            ))}
+            <div className="row between" style={{ alignItems: "center" }}>
+              <button type="button" className="link-btn small" onClick={onEven}>⚖ Eşit böl</button>
+              <span className="muted tiny">Toplam {neg ? "−" : "+"}{minutesText(rows.reduce((a, x) => a + x.value, 0))}</span>
             </div>
-            {(() => {
-              const src = selected.length === 1 ? sources.find((x) => x.pkg === selected[0]) : null;
-              const from = src ? src.left : general;
-              const take = Math.min(-value, from ?? -value);
-              return <p className="muted tiny center" style={{ margin: 0 }}>{src ? src.label : "Genel süre"}'den {minutesText(take)} geri alınacak{from != null ? ` (${minutesText(from)} → ${minutesText(Math.max(0, from - take))})` : ""}</p>;
-            })()}
           </div>
-        ) : (
+        )}
+        {!neg && (
           <>
             <div className="row gap-xs" style={{ flexWrap: "wrap", justifyContent: "center" }}>
-              <button type="button" className={`chip-btn ${apps.length ? "on" : ""}`} onClick={onPickApps}>📱 {apps.length ? apps.join(", ") : "Uygulama seç"}</button>
+              <button type="button" className={`chip-btn ${apps.length ? "on" : ""}`} onClick={onPickApps}>📱 {apps.length ? `${apps.length} uygulama` : "Uygulama seç"}</button>
               <button type="button" className="chip-btn" onClick={onLimit}>🎯 Genel süreyi kısıtla</button>
+              {canReset && <button type="button" className="chip-btn" onClick={onNeg}>− Geri al</button>}
             </div>
-            {apps.length > 0 && <p className="muted tiny center" style={{ margin: 0 }}>{value < 0 ? `${apps.join(", ")} süresinden geri alınır` : `Bu süre sadece ${apps.join(", ")} için; önce o uygulamada düşer`}</p>}
+            {apps.length > 0 && <p className="muted tiny center" style={{ margin: 0 }}>Her uygulama kendi dakikasını alır; önce o uygulamada düşer</p>}
           </>
         )}
         {canReset && <button type="button" className="link-btn small" style={{ alignSelf: "center" }} onClick={onReset}>♻ Uygulama kısıtlarını ve sürelerini sıfırla</button>}

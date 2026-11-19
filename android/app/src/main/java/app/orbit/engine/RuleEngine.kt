@@ -613,6 +613,31 @@ class RuleEngine(private val rules: Rules) {
     fun appGrantsLeft(day: LocalDate, usage: DayUsage): Map<String, Pair<Int, Long>> =
         rules.appGrants[day].orEmpty().filterValues { it > 0 }.mapValues { (pkg, m) -> m to appLeftSeconds(pkg, day, usage) }
 
+    /** Kısıtlı süreden (sadece şu anki süre) kalan sn: kısıt konduğu andaki süre − kısıtlı uygulamalarda harcanan */
+    fun restrictedLeftSeconds(s: Snapshot, usage: DayUsage): Long {
+        val lim = rules.dayAppLimits[s.day]?.takeIf { it.scope == "now" } ?: return 0
+        return ((lim.budget ?: 0) * 60L - bucket(usage, "dl@${s.day}")).coerceIn(0, s.remainingSeconds.coerceAtLeast(0))
+    }
+
+    private fun dayLimit(pkg: String, s: Snapshot, usage: DayUsage, v: AppVerdict): AppVerdict {
+        val lim = rules.dayAppLimits[s.day] ?: return v
+        if (lim.scope != "now") return dayLimitBlock(pkg, s.day, usage) ?: v
+        // Sadece şu anki süre: kısıtlı kısım seçilen uygulamalarda harcanır; sonradan verilen (serbest) kısım her uygulamada
+        val rLeft = restrictedLeftSeconds(s, usage)
+        val free = s.remainingSeconds - rLeft
+        val listed = !lim.onlyApps || pkg in lim.apps
+        val cap = lim.caps[pkg]
+        val capOk = cap == null || bucket(usage, "dla:$pkg@${s.day}") < cap * 60L
+        if (listed && rLeft > 0 && capOk) return v.copy(buckets = v.buckets + "dl@${s.day}" + "dla:$pkg@${s.day}")
+        if (free > 0) return v
+        val names = lim.apps.mapNotNull { rules.apps[it]?.label }.take(4).joinToString(", ")
+        return AppVerdict(false, when {
+            !listed -> "Şu anki süren sadece şunlar için: $names"
+            !capOk -> "Bu uygulamaya ayrılan $cap dk doldu"
+            else -> "Süren bitti"
+        })
+    }
+
     private fun dayLimitBlock(pkg: String, day: LocalDate, usage: DayUsage): AppVerdict? {
         val lim = rules.dayAppLimits[day] ?: return null
         if (lim.onlyApps && pkg !in lim.apps) {
@@ -655,7 +680,7 @@ class RuleEngine(private val rules: Rules) {
             if (usable) v = AppVerdict(true, buckets = listOf(appBucket(pkg, s.day)))
         }
         // Bugünlük genel süre kısıtı
-        if (v.allowed && v.countsDaily) dayLimitBlock(pkg, s.day, usage)?.let { return it }
+        if (v.allowed && v.countsDaily) v = dayLimit(pkg, s, usage, v)
         if (s.parentMode || !v.allowed) return v
         // Sayaç odak modu: kuralların açtıklarından sadece odak profilindekiler açık kalır
         val f = rules.focus ?: return v

@@ -14,7 +14,7 @@ import { Ring } from "../components/Ring";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
 import { MinuteStepper } from "../components/MinuteStepper";
-import { AppPicker, DayLimitSheet, applyAppTime, breakdownText, limitText, useAppTime } from "../components/AppTime";
+import { AppPicker, DayLimitSheet, DistributeSheet, applyAppTime, breakdownText, limitText, raiseCaps, useAppTime } from "../components/AppTime";
 import type { Child, Section } from "../lib/types";
 
 const COLORS = ["#4F7CFF", "#FF7A59", "#2BB673", "#C25BFF"];
@@ -192,6 +192,9 @@ function ChildCard({ child }: { child: Child }) {
   const [dialApps, setDialApps] = useState<string[]>([]);
   const [pickApps, setPickApps] = useState(false);
   const [limitOpen, setLimitOpen] = useState(false);
+  // "Bugün boyunca" kısıtı varken genel süre: uygulamalara dağıtma penceresi
+  const [distrib, setDistrib] = useState<number | null>(null);
+  const capsSet = !!at.limit && at.limit.scope !== "now" && at.limit.only_apps && at.limit.apps.some((p) => (at.limit!.caps?.[p] ?? 0) > 0);
   const [pendingGive, setPendingGive] = useState(0);
   const [xDur, setXDur] = useState("60");
   const [xMin, setXMin] = useState(75);
@@ -586,6 +589,7 @@ function ChildCard({ child }: { child: Child }) {
       else { setLockKind("kiosk"); setLockOpen(true); }
       return;
     }
+    if (d > 0 && capsSet) { setDistrib(d); return; }
     if (d > 0) {
       run("give", async () => giveNow(child.id, d, fam, st, { kiosk, limited: limited || closed || finished }), (r) => `+${minutesText(d)} · ${r}`);
     } else {
@@ -801,7 +805,7 @@ function ChildCard({ child }: { child: Child }) {
               )}
               <span className="muted small">Bugün {minutesText(st.used_minutes)} kullandı</span>
               {(() => { const b = breakdownText(hak, hakUnl, at.left, at.name); return b ? <span className="small">⏱ {b}</span> : null; })()}
-              {(() => { const t = limitText(at.limit, at.name); return t ? <span className="small warn-text">🎯 {t}</span> : null; })()}
+              {(() => { const t = limitText(at.limit, at.name, at.restrictedLeft); return t ? <span className="small warn-text">🎯 {t}</span> : null; })()}
               {timer && (
                 <span className="pill accent">
                   {timer.icon ?? "⏱"} {timer.title}
@@ -1161,6 +1165,20 @@ function ChildCard({ child }: { child: Child }) {
           onApply={() => { setDialOpen(false); applyDial(); }}
         />,
         document.body
+      )}
+      {distrib != null && at.limit && (
+        <DistributeSheet minutes={distrib} limit={at.limit} name={at.name} onClose={() => setDistrib(null)}
+          onApply={(alloc) => {
+            const d = distrib;
+            setDistrib(null);
+            run("give", async () => {
+              const r = await giveNow(child.id, d, fam, st, { kiosk, limited: limited || closed || finished });
+              if (alloc) await raiseCaps(child.id, at.day, at.limit!, alloc);
+              await sendCommand(child.id, "resync", {});
+              await at.reload();
+              return r;
+            }, (r) => `+${minutesText(d)}${alloc ? " · uygulamalara dağıtıldı" : ""} · ${r}`);
+          }} />
       )}
       {pickApps && <AppPicker apps={at.apps} selected={dialApps} onChange={setDialApps} onClose={() => setPickApps(false)} title="Süre hangi uygulamalar için" />}
       {limitOpen && fam.familyId && (

@@ -128,8 +128,16 @@ private fun AppTimeBreakdown(s: Snapshot, unlimited: Boolean, hak: Long) {
         if (left.isNotEmpty()) Muted("Bir uygulamaya ayrılan süre önce o uygulamada düşer", 12)
         if (lim != null) {
             val caps = lim.caps.entries.joinToString(", ") { "${name(it.key)} en fazla ${it.value} dk" }
-            val only = if (lim.onlyApps) "Genel süren bugün sadece: " + lim.apps.map { a -> name(a) + (lim.caps[a]?.let { " (en fazla $it dk)" } ?: "") }.joinToString(", ")
-                else if (caps.isNotBlank()) "Bugün: $caps" else null
+            val list = lim.apps.map { a -> name(a) + (lim.caps[a]?.let { " (en fazla $it dk)" } ?: "") }.joinToString(", ")
+            val rLeft = if (lim.scope == "now") app.orbit.engine.RuleEngine(rules).restrictedLeftSeconds(s, usage) / 60 else 0
+            val only = when {
+                lim.scope == "now" && rLeft <= 0 -> null
+                lim.scope == "now" && lim.onlyApps -> "Sürenin ${minutesText(rLeft)}'sı sadece: $list · sonra verilen süre serbest"
+                lim.scope == "now" && caps.isNotBlank() -> "Sürenin ${minutesText(rLeft)}'sında: $caps"
+                lim.onlyApps -> "Genel süren bugün sadece: $list"
+                caps.isNotBlank() -> "Bugün: $caps"
+                else -> null
+            }
             only?.let { Text(it, color = C.warn, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) }
         }
     }

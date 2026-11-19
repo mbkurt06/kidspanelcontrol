@@ -68,7 +68,7 @@ object Sync {
                 val grants = async(Dispatchers.IO) { Api.get("time_grants?child_id=eq.$child&select=*&order=created_at.desc&limit=100") }
                 val dayFrom = java.time.LocalDate.parse(today).minusDays(1)
                 val appGrants = async(Dispatchers.IO) { runCatching { Api.get("app_grants?child_id=eq.$child&day=gte.$dayFrom&select=day,package,minutes") }.getOrElse { JSONArray() } }
-                val dayAppLimits = async(Dispatchers.IO) { runCatching { Api.get("day_app_limits?child_id=eq.$child&day=gte.$dayFrom&select=day,only_apps,apps,caps") }.getOrElse { JSONArray() } }
+                val dayAppLimits = async(Dispatchers.IO) { runCatching { Api.get("day_app_limits?child_id=eq.$child&day=gte.$dayFrom&select=day,only_apps,apps,caps,scope,budget") }.getOrElse { JSONArray() } }
                 val commands = async(Dispatchers.IO) { Api.get("commands?child_id=eq.$child&select=*&order=created_at.desc&limit=60") }
                 val sections = async(Dispatchers.IO) { runCatching { Api.get("profile_sections?select=*") }.getOrElse { JSONArray() } }
                 val sectionRules = async(Dispatchers.IO) { runCatching { Api.get("section_rules?select=*") }.getOrElse { JSONArray() } }
@@ -260,6 +260,7 @@ object Sync {
         for ((k, v) in u.buckets) {
             val id = when {
                 k.startsWith("ap:") -> k.substringBefore("@")
+                k.startsWith("dl@") -> "dl"
                 k.startsWith("w:") -> k.removePrefix("w:")
                 k.startsWith("s:grant:") -> k.removePrefix("s:grant:").substringBefore("@")
                 else -> null

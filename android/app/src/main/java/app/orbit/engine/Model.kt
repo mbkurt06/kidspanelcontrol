@@ -262,7 +262,14 @@ data class Rules(
 )
 
 /** Genel süre sadece [apps] içinde (onlyApps), [caps] = paket → bugün en fazla dk */
-data class DayAppLimit(val onlyApps: Boolean, val apps: Set<String>, val caps: Map<String, Int>)
+data class DayAppLimit(
+    val onlyApps: Boolean,
+    val apps: Set<String>,
+    val caps: Map<String, Int>,
+    /** day = bugün verilen bütün süreler · now = sadece kısıt konduğu andaki [budget] dk (sonradan verilen süre serbest) */
+    val scope: String = "day",
+    val budget: Int? = null,
+)
 
 data class KioskSettings(
     val message: String? = null,

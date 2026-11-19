@@ -228,6 +228,8 @@ object Parse {
                     o.optBoolean("only_apps", true),
                     o.optJSONArray("apps")?.let { strings(it).toSet() } ?: emptySet(),
                     o.optJSONObject("caps")?.let { c -> c.keys().asSequence().associateWith { c.optInt(it) }.filterValues { it > 0 } } ?: emptyMap(),
+                    o.optString("scope", "day").ifBlank { "day" },
+                    o.intOrNull("budget"),
                 )
             }
         },

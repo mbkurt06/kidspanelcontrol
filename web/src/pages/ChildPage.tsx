@@ -21,6 +21,7 @@ import WebAppsCard from "./WebAppsCard";
 import VideosTab from "./VideosTab";
 import { KioskWindows, MODE3_LABEL, MODES, fromMode3, mode3, type Mode3 } from "../components/AppModes";
 import PhoneSettingsTab from "./PhoneSettingsTab";
+import { AppTimeCard, DistributeSheet, raiseCaps, useAppTime } from "../components/AppTime";
 import { currentSectionFor, hm, mins, nowBerlin, suggestGroup, timedPossible } from "../lib/sections";
 
 type Tab = "apps" | "program" | "time" | "videos" | "plan" | "timer" | "alarms" | "report" | "grades" | "phone" | "device";
@@ -161,7 +162,7 @@ export default function ChildPage() {
       <div key={child.id} className="stack" ref={sectionsRef} style={lockH ? { minHeight: lockH } : undefined}>
       {tab === "apps" && <AppsTab childId={child.id} />}
       {tab === "program" && <ProgramTab childId={child.id} />}
-      {tab === "time" && <TimeTab childId={child.id} />}
+      {tab === "time" && <>{fam.familyId && <AppTimeCard childId={child.id} familyId={fam.familyId} st={fam.statuses[child.id]} />}<TimeTab childId={child.id} /></>}
       {tab === "videos" && <VideosTab childId={child.id} />}
       {tab === "plan" && <PlanTab childId={child.id} />}
       {tab === "report" && <ReportTab childId={child.id} />}
@@ -719,6 +720,8 @@ function TimeTab({ childId }: { childId: string }) {
   const [cmode, setCmode] = useState<ClosedMode>(USAGE);
   const [zMode, setZMode] = useState<"none" | "unlock" | "time">("none");
   const [zEnd, setZEnd] = useState(() => hm(Math.min(nowBerlin().minute + 60, 1439)));
+  const at = useAppTime(childId, fam.statuses[childId]);
+  const [distrib, setDistrib] = useState<number | null>(null);
   useEffect(() => {
     let on = true;
     closedModeFor(childId, fam).then((r) => {
@@ -857,6 +860,8 @@ function TimeTab({ childId }: { childId: string }) {
         }
         const text = await giveNow(childId, m, fam, fam.statuses[childId], { override: USAGE, note: note || undefined });
         setMsg(`${minutesText(m)} verildi${zText} · ${text}`);
+        // "Bugün boyunca" kısıtı varsa yeni süre uygulamalara dağıtılsın mı
+        if (at.limit && at.limit.scope !== "now" && at.limit.only_apps && at.limit.apps.some((p) => (at.limit!.caps?.[p] ?? 0) > 0)) setDistrib(m);
       } else if (cmode.mode === "none" && when === "custom") {
         await grantMinutes(childId, m, { validOn: null, vault: true, note: note || undefined });
         setMsg(`${minutesText(m)} süre kasasına kaydedildi`);
@@ -1046,6 +1051,15 @@ function TimeTab({ childId }: { childId: string }) {
 
   return (
     <div className="stack">
+      {distrib != null && at.limit && (
+        <DistributeSheet minutes={distrib} limit={at.limit} name={at.name} onClose={() => setDistrib(null)}
+          onApply={async (alloc) => {
+            setDistrib(null);
+            if (!alloc) return;
+            try { await raiseCaps(childId, at.day, at.limit!, alloc); await sendCommand(childId, "resync", {}); await at.reload(); setMsg("Yeni süre uygulamalara dağıtıldı"); }
+            catch (e) { setMsg(errorText(e)); }
+          }} />
+      )}
       <details className="card extra-card section-collapse-card" open>
         <summary className="section-collapse-head"><span>Ekstra süre ver</span><span className="collapse-arrow" aria-hidden="true" /></summary>
         <div className="extra-row">

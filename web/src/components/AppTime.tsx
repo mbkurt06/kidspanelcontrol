@@ -35,7 +35,7 @@ export function useAppTime(childId: string, st: DeviceStatus | undefined) {
     supabase.from("usage_daily").select("package, minutes").eq("child_id", childId).gte("day", since).then(({ data }) => {
       const m: Record<string, number> = {};
       for (const r of (data ?? []) as { package: string; minutes: number }[]) m[r.package] = (m[r.package] ?? 0) + (r.minutes ?? 0);
-      setTopUsed(Object.entries(m).filter(([p]) => !p.startsWith("web:") && !p.startsWith("video:") && p !== "app.orbit").sort((a, b) => b[1] - a[1]).map(([p]) => p).slice(0, 12));
+      setTopUsed(Object.entries(m).filter(([p]) => !p.startsWith("web:") && !p.startsWith("video:") && p !== "app.orbit").sort((a, b) => b[1] - a[1]).map(([p]) => p).slice(0, 60));
     });
   }, [childId]);
   const toggleFav = useCallback(async (p: string) => {
@@ -63,7 +63,7 @@ export function useAppTime(childId: string, st: DeviceStatus | undefined) {
   const restrictedLeft = limit?.scope === "now" ? Math.max(0, (limit.budget ?? 0) - Number((st?.grant_used as Record<string, number> | null | undefined)?.dl ?? 0)) : 0;
   // Öneri: en çok kullanılan, onaylı, henüz ⭐ olmayan ilk 5
   const suggest = topUsed.filter((p) => !favs.includes(p) && apps.some((a) => a.package === p)).slice(0, 5);
-  return { apps, totals, left, limit, reload, name, used, day, restrictedLeft, favs, toggleFav, suggest };
+  return { apps, totals, left, limit, reload, name, used, day, restrictedLeft, favs, toggleFav, suggest, ranked: topUsed };
 }
 
 /** Seçilen uygulamalara süre ver / geri al (kullanılanın altına inmez) */
@@ -100,13 +100,15 @@ export function breakdownText(hak: number, unlimited: boolean, left: Record<stri
 }
 
 /** Uygulama listesi: tik koyulanlar seçilir */
-export function AppPicker({ apps, selected, onChange, onClose, title, favs, onFav }: { apps: ChildApp[]; selected: string[]; onChange: (s: string[]) => void; onClose: () => void; title: string; favs?: string[]; onFav?: (p: string) => void }) {
+export function AppPicker({ apps, selected, onChange, onClose, title, favs, onFav, rank }: { apps: ChildApp[]; selected: string[]; onChange: (s: string[]) => void; onClose: () => void; title: string; favs?: string[]; onFav?: (p: string) => void; rank?: string[] }) {
   const [q, setQ] = useState("");
   const list = apps.filter((a) => !q || a.label.toLocaleLowerCase("tr").includes(q.toLocaleLowerCase("tr")));
   const sel = new Set(selected);
   // Seçilenler üstte
   const fav = new Set(favs ?? []);
-  list.sort((a, b) => Number(fav.has(b.package)) - Number(fav.has(a.package)) || Number(sel.has(b.package)) - Number(sel.has(a.package)));
+  // En çok kullanılanlar üstte (son 14 gün), sonra alfabetik
+  const ri = (p: string) => { const i = rank?.indexOf(p) ?? -1; return i < 0 ? 9999 : i; };
+  list.sort((a, b) => Number(fav.has(b.package)) - Number(fav.has(a.package)) || ri(a.package) - ri(b.package));
   return createPortal(
     <>
       <div className="pop-backdrop sheet-like" style={{ zIndex: 1100 }} onClick={onClose} />

@@ -722,7 +722,8 @@ function ChildCard({ child }: { child: Child }) {
   // ⭐ sık kullanılanlar hep; bugün süresi kalanlar; listeye eklenenler (süresi biten, ⭐ olmayan çıkar)
   const dialKeys = [GEN, ...Array.from(new Set([...Object.keys(at.left), ...extraApps]))];
   // ⭐ hızlı ekle: listede satırı olmayan sık kullanılanlar
-  const quickFavs = at.favs.filter((p) => at.apps.some((a) => a.package === p) && !dialKeys.includes(p));
+  // Hızlı ekle: en çok kullanılan (son 14 gün) ve listede satırı olmayan ilk 6 uygulama
+  const quickFavs = at.ranked.filter((p) => at.apps.some((a) => a.package === p) && !dialKeys.includes(p)).slice(0, 6);
   const leftOf = (k: string) => (k === GEN ? (hakUnl ? 600 : Math.max(0, remainingNow)) : at.left[k] ?? 0);
   // Çark değeri işaretlilere dağılır: + eşit bölünür, − her birinin mevcut süresi kadar azaltılır
   const allocFor = (v: number, keys: string[]): Record<string, number> => (v >= 0 ? splitEven(v, keys)
@@ -1198,9 +1199,9 @@ function ChildCard({ child }: { child: Child }) {
           apps={dialApps.filter((k) => k !== GEN).map(at.name)}
           onPickApps={() => setPickApps(true)}
           onLimit={() => setLimitOpen(true)}
-          rows={dialKeys.length > 0 ? dialKeys.map((k) => ({ key: k, label: k === GEN ? "Genel süre" : `${at.favs.includes(k) ? "⭐ " : ""}${at.name(k)}`, base: baseOf(k), unl: k === GEN && hakUnl, delta: alloc[k] ?? 0, on: dialApps.includes(k) })) : []}
+          rows={dialKeys.length > 0 ? dialKeys.map((k) => ({ key: k, label: k === GEN ? "Genel süre" : at.name(k), base: baseOf(k), unl: k === GEN && hakUnl, delta: alloc[k] ?? 0, on: dialApps.includes(k) })) : []}
           dirty={Object.values(alloc).some(Boolean)}
-          suggest={at.suggest.map((p) => ({ key: p, label: at.name(p) }))}
+          suggest={[]}
           onFav={(p) => { void at.toggleFav(p); }}
           quick={quickFavs.map((p) => ({ key: p, label: at.name(p) }))}
           onQuick={(p) => { setExtraApps([...extraApps, p]); const sel = [...dialApps.filter((x) => x !== GEN || dial !== 0), p]; setDialApps(sel); setAlloc(allocFor(dial, sel)); }}
@@ -1256,7 +1257,7 @@ function ChildCard({ child }: { child: Child }) {
         const sel = picked.length ? picked : [GEN];
         setDialApps(sel);
         setAlloc(allocFor(dial, sel));
-      }} onClose={() => setPickApps(false)} title="Süre hangi uygulamalar için" favs={at.favs} onFav={(p) => { void at.toggleFav(p); }} />}
+      }} onClose={() => setPickApps(false)} title="Süre hangi uygulamalar için" rank={at.ranked} />}
       {limitOpen && fam.familyId && (
         <DayLimitSheet childId={child.id} familyId={fam.familyId} day={at.day} apps={at.apps} limit={at.limit} remaining={hakUnl ? 0 : hak}
           onClose={() => setLimitOpen(false)} onSaved={(m) => { setLimitOpen(false); setDialOpen(false); setMsg(m); void at.reload(); }} />
@@ -1346,8 +1347,8 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
         )}
         {listOpen && quick.length > 0 && (
           <div className="stack-s">
-            <span className="muted tiny">⭐ Hızlı ekle (dokun: listeye iner · basılı tut: ⭐'dan çıkar):</span>
-            <div className="chips">{quick.map((x) => <QuickChip key={x.key} label={x.label} onTap={() => onQuick(x.key)} onHold={() => onFav(x.key)} />)}</div>
+            <span className="muted tiny">Hızlı ekle (en çok kullandıkları · dokun: listeye iner):</span>
+            <div className="chips">{quick.map((x) => <button key={x.key} type="button" className="chip-btn" onClick={() => onQuick(x.key)}>+ {x.label}</button>)}</div>
           </div>
         )}
         {listOpen && suggest.length > 0 && (
@@ -1520,15 +1521,3 @@ function useCached<T>(key: string, init: T): [T, (v: T | ((p: T) => T)) => void]
   return [v, set];
 }
 
-/** ⭐ hızlı ekle düğmesi: dokununca listeye ekler, basılı tutunca sık kullanılanlardan çıkarır */
-function QuickChip({ label, onTap, onHold }: { label: string; onTap: () => void; onHold: () => void }) {
-  const t = useRef<number | null>(null);
-  const held = useRef(false);
-  return (
-    <button type="button" className="chip-btn"
-      onPointerDown={() => { held.current = false; t.current = window.setTimeout(() => { held.current = true; onHold(); }, 650); }}
-      onPointerUp={() => { if (t.current) window.clearTimeout(t.current); if (!held.current) onTap(); }}
-      onPointerLeave={() => { if (t.current) window.clearTimeout(t.current); }}
-      onContextMenu={(e) => e.preventDefault()}>⭐ {label}</button>
-  );
-}

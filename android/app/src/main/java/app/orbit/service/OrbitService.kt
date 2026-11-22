@@ -357,6 +357,8 @@ class OrbitService : Service() {
         lastTick = nowMs
 
         var snap = engine.snapshot(now, usage)
+        // Kilit ekranı (görevin Tam kilidi dahil) açıksa kilitliyken verilen süreler kullanılır, genel süre değil
+        engine.kioskActive = !snap.parentMode && runCatching { app.orbit.engine.Extras.kiosk(rules, engine, now) }.getOrNull() != null
         // Orbit içindeki web sayfası / video listesi açıksa ön plandaki "uygulama" odur (web:<id>)
         val fg = foreground?.let { if (it == packageName) app.orbit.data.WebApps.current ?: it else it }
         // Sayaç odak profili aramalara izin vermiyorsa telefon uygulaması da kapanır (acil arama hariç)

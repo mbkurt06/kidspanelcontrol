@@ -374,6 +374,8 @@ class RuleEngine(private val rules: Rules) {
 
     /** Son anlık durumda geçerli kısıtlıyken izinli uygulamalar */
     var raNow: Map<String, Int?> = emptyMap()
+    /** Telefon şu an kilit ekranında (Tam kilit / görevin Tam kilidi / kilitli profil): servis her turda ayarlar */
+    @Volatile var kioskActive: Boolean = false
         private set
     private var raDay: LocalDate? = null
 
@@ -682,7 +684,7 @@ class RuleEngine(private val rules: Rules) {
         if (raNow.containsKey(pkg) && restrictedLeft(pkg, usage)) return AppVerdict(true, buckets = listOf("ra:$pkg@$raDay"))
         // Kilitliyken (kilit ekranındayken) ayrı izinler: kilitliyken süre verilen ve "kilitliyken açık" uygulamalar.
         // Telefon açıkken bu izinler devrede değil; uygulama normal ayarına (kurallar / her zaman açık / kapalı) göre çalışır.
-        val lockedNow = s.locked || s.activeMode?.othersBlocked == true || (s.sectionMode && (s.section == null || s.sectionClosed)) ||
+        val lockedNow = kioskActive || s.locked || s.activeMode?.othersBlocked == true || (s.sectionMode && (s.section == null || s.sectionClosed)) ||
             s.remainingSeconds <= 0 || hasMandatoryBlock()
         if (lockedNow) {
             if (rules.apps[pkg]?.approved == true && kioskGrantLeft(pkg, s.day, usage) > 0) return AppVerdict(true, buckets = listOf("apk:$pkg@${s.day}"))

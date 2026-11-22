@@ -892,7 +892,8 @@ function ChildCard({ child }: { child: Child }) {
                 </button>
               )}
               {kioskList && createPortal(
-                <>
+                // Portal içindeki tıklamalar karta (çocuk sayfasına giden bağlantıya) ulaşmasın
+                <div onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
                   <div className="pop-backdrop sheet-like" onClick={() => setKioskList(false)} />
                   <div className="lock-pop sheet-pop" role="dialog" aria-label="Kilitliyken açık uygulamalar" style={{ maxHeight: "80vh", overflowY: "auto" }}>
                     <div className="row between" style={{ alignItems: "center" }}>
@@ -907,7 +908,7 @@ function ChildCard({ child }: { child: Child }) {
                     </table>
                     <p className="muted tiny" style={{ margin: 0 }}>Kilit varken sadece bu uygulamalar açılır. Ayarlar: uygulamanın “🔒 Kilitliyken” seçeneği veya çarkta “🔒 Kilitliyken” süre.</p>
                   </div>
-                </>,
+                </div>,
                 document.body,
               )}
               {(() => { const b = breakdownText(hak, hakUnl, at.left, at.name); return b ? <span className="small">⏱ {b}</span> : null; })()}

@@ -936,7 +936,7 @@ function ChildCard({ child }: { child: Child }) {
           >
             {isLocked ? (
               <Ring value={1} max={1} color={limited || closed ? "var(--warn)" : "var(--bad)"} size={80}>
-                <span className="ring-state bad"><Icon name="lock" size={18} /><small>{lockEnd?.label ?? "Kilitli"}</small>{kioskOn && <small className="kiosk-badge">+{kioskItems.length}</small>}</span>
+                <span className="ring-state bad"><Icon name="lock" size={18} /><small>{lockEnd?.label ?? "Kilitli"}</small></span>
               </Ring>
             ) : (
               <Ring value={openLeft ?? 1} max={openLeft == null || unlimited ? 1 : Math.max(openLeft, hakUnl ? 1 : hak, 1)} color={openShort ? "var(--warn)" : "var(--accent)"} size={80}>

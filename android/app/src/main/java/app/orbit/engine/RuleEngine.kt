@@ -374,9 +374,9 @@ class RuleEngine(private val rules: Rules) {
 
     /** Son anlık durumda geçerli kısıtlıyken izinli uygulamalar */
     var raNow: Map<String, Int?> = emptyMap()
+        private set
     /** Telefon şu an kilit ekranında (Tam kilit / görevin Tam kilidi / kilitli profil): servis her turda ayarlar */
     @Volatile var kioskActive: Boolean = false
-        private set
     private var raDay: LocalDate? = null
 
     /** Görev oturumu (Göreve başla / ekran kaydı): görev uygulamaları her durumda açık, süre saymaz */

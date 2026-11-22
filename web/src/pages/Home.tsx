@@ -730,9 +730,15 @@ function ChildCard({ child }: { child: Child }) {
   const isLocked = kiosk || limited || closed;
   // Kilitliyken açık uygulamalar: kilitliyken verilen süreler + "kilitliyken açık" ayarı şu an geçerli olanlar
   const kioskItems = [
-    ...Object.entries(at.leftK).map(([p, m]) => ({ key: p, text: `${at.name(p)} ${minutesText(m)}`, min: m as number | null })),
-    ...at.kioskNow.filter((k) => !(k.package in at.leftK)).map((k) => ({ key: k.package, text: k.left != null ? `${k.label} ${minutesText(k.left)}` : k.until ? `${k.label} · ${k.until}'e kadar` : `${k.label} · açık`, min: k.left })),
+    ...Object.entries(at.leftK).map(([p, m]) => ({ key: p, label: at.name(p), rule: `Verilen süre ${minutesText(at.totalsK[p] ?? m)}`, left: minutesText(m), min: m as number | null })),
+    ...at.kioskNow.filter((k) => !(k.package in at.leftK)).map((k) => ({
+      key: k.package, label: k.label,
+      rule: k.left != null ? "Günde en fazla" : k.until ? `Saat aralığı · ${k.until}'e kadar` : "Sınırsız",
+      left: k.left != null ? minutesText(k.left) : k.until ? `${k.until}'e kadar` : "∞",
+      min: k.left,
+    })),
   ];
+  const [kioskList, setKioskList] = useState(false);
   const kioskOn = !!st && (isLocked || finished) && kioskItems.length > 0;
   const kioskMin = kioskItems.reduce((a, x) => a + (x.min ?? 0), 0);
   // Sol halka: gün bitişine kadar kalan hak (telefon kilitliyken de bildirir; eski sürümde kalan süre)
@@ -829,7 +835,7 @@ function ChildCard({ child }: { child: Child }) {
         >
           {kioskOn ? (
             <Ring value={1} max={1} color="#ff9f43" size={80}>
-              <span className="ring-state"><b>{kioskMin ? minutesText(kioskMin) : "açık"}</b><small>{kioskItems.length === 1 ? at.name(kioskItems[0].key) : `${kioskItems.length} uygulama`} · kilitte</small></span>
+              <span className="ring-state"><b>{kioskMin ? minutesText(kioskMin) : "açık"}</b><small>kilitte</small></span>
             </Ring>
           ) : (
           <Ring value={hakUnl ? 1 : hakTotal} max={hakUnl ? 1 : Math.max(st?.allowance_minutes ?? 0, hakTotal + (st?.used_minutes ?? 0), 1)} color={!hakUnl && hakTotal <= 10 ? "var(--warn)" : child.color} size={80}>
@@ -878,7 +884,30 @@ function ChildCard({ child }: { child: Child }) {
                 </span>
               )}
               <span className="muted small">Bugün {minutesText(st.used_minutes)} kullandı</span>
-              {kioskOn && <span className="small" style={{ color: "#ff9f43" }}>📱 Kilitliyken açık: {kioskItems.map((x) => x.text).join(" · ")}</span>}
+              {kioskOn && (
+                <button type="button" className="kiosk-chip" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setKioskList(true); }} aria-label="Kilitliyken açık uygulamalar">
+                  📱 {kioskItems.length} <span className="muted tiny">kilitte açık</span>
+                </button>
+              )}
+              {kioskList && createPortal(
+                <>
+                  <div className="pop-backdrop sheet-like" onClick={() => setKioskList(false)} />
+                  <div className="lock-pop sheet-pop" role="dialog" aria-label="Kilitliyken açık uygulamalar" style={{ maxHeight: "80vh", overflowY: "auto" }}>
+                    <div className="row between" style={{ alignItems: "center" }}>
+                      <b className="sheet-pop-title">📱 {child.name} · kilitliyken açık</b>
+                      <button type="button" className="pill-btn" onClick={() => setKioskList(false)}>Kapat</button>
+                    </div>
+                    <table className="kiosk-table">
+                      <thead><tr><th>Uygulama</th><th>İzin</th><th>Kalan</th></tr></thead>
+                      <tbody>
+                        {kioskItems.map((x) => <tr key={x.key}><td>{x.label}</td><td className="muted">{x.rule}</td><td><b>{x.left}</b></td></tr>)}
+                      </tbody>
+                    </table>
+                    <p className="muted tiny" style={{ margin: 0 }}>Kilit varken sadece bu uygulamalar açılır. Ayarlar: uygulamanın “🔒 Kilitliyken” seçeneği veya çarkta “🔒 Kilitliyken” süre.</p>
+                  </div>
+                </>,
+                document.body,
+              )}
               {(() => { const b = breakdownText(hak, hakUnl, at.left, at.name); return b ? <span className="small">⏱ {b}</span> : null; })()}
               {(() => { const t = limitText(at.limit, at.name, at.restrictedLeft); return t ? <span className="small warn-text">🎯 {t}</span> : null; })()}
               {timer && (
@@ -905,7 +934,7 @@ function ChildCard({ child }: { child: Child }) {
           >
             {isLocked ? (
               <Ring value={1} max={1} color={limited || closed ? "var(--warn)" : "var(--bad)"} size={80}>
-                <span className="ring-state bad"><Icon name="lock" size={18} /><small>{lockEnd?.label ?? "Kilitli"}</small>{kioskOn && <small className="kiosk-badge">+{kioskItems.length} uygulama</small>}</span>
+                <span className="ring-state bad"><Icon name="lock" size={18} /><small>{lockEnd?.label ?? "Kilitli"}</small>{kioskOn && <small className="kiosk-badge">+{kioskItems.length}</small>}</span>
               </Ring>
             ) : (
               <Ring value={openLeft ?? 1} max={openLeft == null || unlimited ? 1 : Math.max(openLeft, hakUnl ? 1 : hak, 1)} color={openShort ? "var(--warn)" : "var(--accent)"} size={80}>

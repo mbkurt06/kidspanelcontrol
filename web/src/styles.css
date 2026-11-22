@@ -2549,3 +2549,8 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .dial-delta { min-width: 34px; text-align: right; font-weight: 600; }
 .fav-star { background: none; border: 0; font-size: 20px; padding: 2px 6px; cursor: pointer; color: inherit; }
 .kiosk-badge { color: #ff9f43; font-weight: 600; }
+.kiosk-chip { align-self: flex-start; background: rgba(255,159,67,.14); color: #ff9f43; border: 1px solid rgba(255,159,67,.4); border-radius: 999px; padding: 3px 10px; font-size: 14px; font-weight: 600; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.kiosk-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.kiosk-table th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.kiosk-table td { padding: 8px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.kiosk-table td:last-child, .kiosk-table th:last-child { text-align: right; white-space: nowrap; }

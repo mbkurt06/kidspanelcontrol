@@ -58,7 +58,7 @@ object Sync {
             // Bu istekler birbirinden bağımsız. Seri çekim telefonda her değişikliği 5–7 sn geciktiriyordu.
             val bundle = coroutineScope {
                 val timeRules = async(Dispatchers.IO) { runCatching { Api.get("time_rules?select=*") }.getOrElse { JSONArray() } }
-                val apps = async(Dispatchers.IO) { Api.get("child_apps?child_id=eq.$child&select=package,label,app_group,approved,daily_limit_minutes,usage_rule_id,kiosk,kiosk_windows") }
+                val apps = async(Dispatchers.IO) { Api.get("child_apps?child_id=eq.$child&select=package,label,app_group,approved,daily_limit_minutes,usage_rule_id,kiosk,kiosk_windows,kiosk_minutes") }
                 val usageRules = async(Dispatchers.IO) { runCatching { Api.get("app_usage_rules?select=id,mode,max_minutes,counts_toward_daily,start_time,end_time") }.getOrElse { JSONArray() } }
                 val profiles = async(Dispatchers.IO) { Api.get("rule_profiles?select=*") }
                 val modes = async(Dispatchers.IO) { Api.get("modes?select=*") }
@@ -67,7 +67,7 @@ object Sync {
                 val overrides = async(Dispatchers.IO) { Api.get("day_overrides?child_id=eq.$child&select=*") }
                 val grants = async(Dispatchers.IO) { Api.get("time_grants?child_id=eq.$child&select=*&order=created_at.desc&limit=100") }
                 val dayFrom = java.time.LocalDate.parse(today).minusDays(1)
-                val appGrants = async(Dispatchers.IO) { runCatching { Api.get("app_grants?child_id=eq.$child&day=gte.$dayFrom&select=day,package,minutes") }.getOrElse { JSONArray() } }
+                val appGrants = async(Dispatchers.IO) { runCatching { Api.get("app_grants?child_id=eq.$child&day=gte.$dayFrom&select=day,package,minutes,scope") }.getOrElse { JSONArray() } }
                 val dayAppLimits = async(Dispatchers.IO) { runCatching { Api.get("day_app_limits?child_id=eq.$child&day=gte.$dayFrom&select=day,only_apps,apps,caps,scope,budget") }.getOrElse { JSONArray() } }
                 val commands = async(Dispatchers.IO) { Api.get("commands?child_id=eq.$child&select=*&order=created_at.desc&limit=60") }
                 val sections = async(Dispatchers.IO) { runCatching { Api.get("profile_sections?select=*") }.getOrElse { JSONArray() } }
@@ -259,7 +259,7 @@ object Sync {
         val m = HashMap<String, Long>()
         for ((k, v) in u.buckets) {
             val id = when {
-                k.startsWith("ap:") -> k.substringBefore("@")
+                k.startsWith("ap:") || k.startsWith("apk:") || k.startsWith("kq:") -> k.substringBefore("@")
                 k.startsWith("dl@") -> "dl"
                 k.startsWith("w:") -> k.removePrefix("w:")
                 k.startsWith("s:grant:") -> k.removePrefix("s:grant:").substringBefore("@")

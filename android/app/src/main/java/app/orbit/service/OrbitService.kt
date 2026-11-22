@@ -30,6 +30,7 @@ import app.orbit.engine.CommandType
 import app.orbit.engine.DayUsage
 import app.orbit.engine.RuleEngine
 import app.orbit.engine.Snapshot
+import app.orbit.engine.UNLIMITED_SECONDS
 import app.orbit.ui.LockActivity
 import app.orbit.ui.MainActivity
 import app.orbit.update.Updater
@@ -413,7 +414,7 @@ class OrbitService : Service() {
         }
         val captureOn = ScreenCaptureService.active(nowMs) || session != null
         // Kiosk uygulamaları (kendi saatlerinde): tam kilitte de açılabilir
-        val kioskPkgs = if (snap.parentMode) emptyList() else runCatching { engine.kioskApps(snap.now).map { it.pkg } }.getOrDefault(emptyList())
+        val kioskPkgs = if (snap.parentMode) emptyList() else runCatching { engine.kioskApps(snap.now, snap.day, usage).map { it.pkg } }.getOrDefault(emptyList())
         val kioskKey = if (kiosk != null) "on:$captureOn:${rules.kiosk.calls}:${(rules.taskAllowedPackages + kioskPkgs).sorted().joinToString(",")}" else "off"
         if (kioskKey != lastKioskKey) {
             lastKioskKey = kioskKey
@@ -544,7 +545,13 @@ class OrbitService : Service() {
         val walletBal = rules.grants.filter { !it.vault && it.validOn == null && it.activatedOn == null && it.window == null && (it.expiresOn == null || !it.expiresOn.isBefore(today)) }.sumOf { it.minutes }
         val vaultBal = rules.grants.filter { it.vault }.sumOf { it.minutes }
         Live.set(LiveState(snap, usage, allowed, lockReason, online, Store.lastSync, kiosk, pinUntil, kiosk != null && captureOn, locks, ready, walletBal.coerceAtLeast(0), vaultBal.coerceAtLeast(0),
-            kioskPkgs.map { it to (rules.apps[it]?.label ?: it) }))
+            kioskPkgs.map { p ->
+                // Kilit ekranı kutucuğu: süre sınırlıysa kalan dk da yazar ("WhatsApp · 10 dk")
+                val left = minOf(engine.kioskGrantLeft(p, snap.day, usage).takeIf { it > 0 } ?: UNLIMITED_SECONDS,
+                    rules.apps[p]?.let { a -> if (a.kiosk && engine.kioskOpen(a, snap.now)) engine.kioskMinutesLeft(a, snap.day, usage) else null } ?: UNLIMITED_SECONDS)
+                val label = rules.apps[p]?.label ?: p
+                p to (if (left < UNLIMITED_SECONDS) "$label · ${left / 60} dk" else label)
+            }))
         updateNotification(snap)
 
         // 7) Durum gönder

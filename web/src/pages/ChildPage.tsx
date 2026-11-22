@@ -19,7 +19,7 @@ import GradesTab from "./GradesTab";
 import PlanTab from "./PlanTab";
 import WebAppsCard from "./WebAppsCard";
 import VideosTab from "./VideosTab";
-import { KioskWindows, MODE3_LABEL, MODES, fromMode3, mode3, type Mode3 } from "../components/AppModes";
+import { KioskControl, MODE3_LABEL, MODES, fromMode3, mode3, type Mode3 } from "../components/AppModes";
 import PhoneSettingsTab from "./PhoneSettingsTab";
 import { AppTimeCard, DistributeSheet, raiseCaps, useAppTime } from "../components/AppTime";
 import { currentSectionFor, hm, mins, nowBerlin, suggestGroup, timedPossible } from "../lib/sections";
@@ -405,7 +405,7 @@ function AppsTab({ childId }: { childId: string }) {
       <WebAppsCard childId={childId} onChanged={() => { load(); fam.reload(); }} editId={webEdit} onEditDone={webDone} />
       {pending.length > 0 && (
         <div className="card attention">
-          <h2>Onay bekleyen ({pending.length}) <Info>Grubunu seçip onayla. “Kurallara göre” uygulamalar grubunun bölüm kurallarına uyar. “Kiosk” uygulamalar telefon kilitliyken de Orbit ekranından açılır ve süreden düşmez.</Info></h2>
+          <h2>Onay bekleyen ({pending.length}) <Info>Grubunu seçip onayla. “Kurallara göre” uygulamalar grubunun bölüm kurallarına uyar. Telefon kilitliyken ne olacağını her uygulamanın altındaki “🔒 Kilitliyken” ayarından ayrıca seçersin; normal durumu etkilemez.</Info></h2>
           {pending.map((a) => (
             <div className="app-setting-row" key={a.package}>
               <div className="app-setting-controls">
@@ -477,7 +477,7 @@ function AppsTab({ childId }: { childId: string }) {
                     />
                   ) : <span />}
                 </div>
-                {a.kiosk && <KioskWindows app={a} onSave={(w) => update(a, { kiosk_windows: w })} />}
+                <KioskControl app={a} onSave={(p) => update(a, p)} />
               </div>
             ))}
           </div>

@@ -198,6 +198,8 @@ function ChildCard({ child }: { child: Child }) {
   const [alloc, setAlloc] = useState<Record<string, number>>({});
   // Çarkta "+ Ver" / "− Geri al" yönü ve listeye sonradan eklenen (henüz süresi olmayan) uygulamalar
   const [extraApps, setExtraApps] = useState<string[]>([]);
+  // Çarkta süre nerede geçerli: normal (telefon açıkken) / kiosk (kilitliyken)
+  const [dialScope, setDialScope] = useState<"normal" | "kiosk">("normal");
   const GEN = "__general";
   const capsSet = !!at.limit && at.limit.scope !== "now" && at.limit.only_apps && at.limit.apps.some((p) => (at.limit!.caps?.[p] ?? 0) > 0);
   const [pendingGive, setPendingGive] = useState(0);
@@ -579,6 +581,20 @@ function ChildCard({ child }: { child: Child }) {
     if (!d && !Object.values(rowsNow).some(Boolean)) return;
     setDial(0);
     setAlloc({}); setDialApps([GEN]); setExtraApps([]);
+    if (dialScope === "kiosk") {
+      // Kilitliyken geçerli süre: sadece seçilen uygulamalar; telefon açıkken kullanılmaz
+      const km = Object.fromEntries(Object.entries(rowsNow).filter(([k, v]) => k !== GEN && v !== 0));
+      if (!Object.keys(km).length) return;
+      run("give", async () => {
+        await applyAppTimeMap(child.id, fam.familyId!, at.day, km, at.totalsK, at.usedK, "kiosk");
+        await at.reload();
+        return Object.entries(km).map(([p, v]) => `${at.name(p)} ${v < 0 ? "−" : "+"}${minutesText(Math.abs(v))}`).join(" · ");
+      }, (r) => `🔒 Kilitliyken · ${r}`);
+      if (dialThen === "unlock") setUnlockOpen(true);
+      else if (dialThen === "time") { setXDur("60"); setXOpen(true); }
+      else if (dialThen === "lock") { setLockKind("kiosk"); setLockOpen(true); }
+      return;
+    }
     const genD = rowsNow[GEN] ?? 0;
     const appMap = Object.fromEntries(Object.entries(rowsNow).filter(([k, v]) => k !== GEN && v !== 0));
     const onlyGen = !Object.keys(appMap).length;
@@ -712,6 +728,13 @@ function ChildCard({ child }: { child: Child }) {
   const dayEndHm = (fam.family?.day_end ?? "05:00").slice(0, 5);
   const dayEndMs = nextAtMs(dayEndHm);
   const isLocked = kiosk || limited || closed;
+  // Kilitliyken açık uygulamalar: kilitliyken verilen süreler + "kilitliyken açık" ayarı şu an geçerli olanlar
+  const kioskItems = [
+    ...Object.entries(at.leftK).map(([p, m]) => ({ key: p, text: `${at.name(p)} ${minutesText(m)}`, min: m as number | null })),
+    ...at.kioskNow.filter((k) => !(k.package in at.leftK)).map((k) => ({ key: k.package, text: k.left != null ? `${k.label} ${minutesText(k.left)}` : k.until ? `${k.label} · ${k.until}'e kadar` : `${k.label} · açık`, min: k.left })),
+  ];
+  const kioskOn = !!st && (isLocked || finished) && kioskItems.length > 0;
+  const kioskMin = kioskItems.reduce((a, x) => a + (x.min ?? 0), 0);
   // Sol halka: gün bitişine kadar kalan hak (telefon kilitliyken de bildirir; eski sürümde kalan süre)
   const hak = Math.max(0, (st?.day_left_minutes ?? st?.remaining_minutes ?? 0) + (st && (st.day_left_minutes ?? st.remaining_minutes) < 1440 ? pend.give : 0));
   const hakUnl = hak >= 1440;
@@ -720,12 +743,14 @@ function ChildCard({ child }: { child: Child }) {
   const hakTotal = hak + appLeftSum;
   // Çark listesi: Genel + bugün süre verilen uygulamalar + listeye eklenenler; işaretliler (dialApps) çarktan etkilenir
   // ⭐ sık kullanılanlar hep; bugün süresi kalanlar; listeye eklenenler (süresi biten, ⭐ olmayan çıkar)
-  const dialKeys = [GEN, ...Array.from(new Set([...Object.keys(at.left), ...extraApps]))];
+  const dialKeys = dialScope === "kiosk"
+    ? Array.from(new Set([...Object.keys(at.leftK), ...extraApps]))
+    : [GEN, ...Array.from(new Set([...Object.keys(at.left), ...extraApps]))];
   // ⭐ hızlı ekle: listede satırı olmayan sık kullanılanlar
   // ⭐ Yıldızlı uygulamalar: listede satırı yoksa hızlı ekle düğmesi (en çok kullanılan önce)
   const rk = (p: string) => { const i = at.ranked.indexOf(p); return i < 0 ? 9999 : i; };
   const quickFavs = at.favs.filter((p) => at.apps.some((a) => a.package === p) && !dialKeys.includes(p)).sort((a, b) => rk(a) - rk(b));
-  const leftOf = (k: string) => (k === GEN ? (hakUnl ? 600 : Math.max(0, remainingNow)) : at.left[k] ?? 0);
+  const leftOf = (k: string) => (k === GEN ? (hakUnl ? 600 : Math.max(0, remainingNow)) : dialScope === "kiosk" ? at.leftK[k] ?? 0 : at.left[k] ?? 0);
   // Çark değeri işaretlilere dağılır: + eşit bölünür, − her birinin mevcut süresi kadar azaltılır
   const allocFor = (v: number, keys: string[]): Record<string, number> => (v >= 0 ? splitEven(v, keys)
     : Object.fromEntries(Object.entries(fillEven(-v, keys.map((k) => ({ key: k, left: leftOf(k) })))).map(([k, x]) => [k, -x])));
@@ -800,11 +825,17 @@ function ChildCard({ child }: { child: Child }) {
           className="dial"
           role="button"
           aria-label="Süreyi çarkla ayarla"
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (st) { setDial(0); setDialThen("none"); setDialApps([GEN]); setExtraApps([]); setAlloc({}); setDialOpen(true); } }}
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (st) { setDial(0); setDialThen("none"); setDialScope(kiosk ? "kiosk" : "normal"); setDialApps(kiosk ? [] : [GEN]); setExtraApps([]); setAlloc({}); setDialOpen(true); } }}
         >
+          {kioskOn ? (
+            <Ring value={1} max={1} color="#ff9f43" size={80}>
+              <span className="ring-state"><b>{kioskMin ? minutesText(kioskMin) : "açık"}</b><small>{kioskItems.length === 1 ? at.name(kioskItems[0].key) : `${kioskItems.length} uygulama`} · kilitte</small></span>
+            </Ring>
+          ) : (
           <Ring value={hakUnl ? 1 : hakTotal} max={hakUnl ? 1 : Math.max(st?.allowance_minutes ?? 0, hakTotal + (st?.used_minutes ?? 0), 1)} color={!hakUnl && hakTotal <= 10 ? "var(--warn)" : child.color} size={80}>
             {!st ? <b>—</b> : hakUnl ? <span className="ring-state"><b>∞</b><small>süre</small></span> : <span className="ring-state"><b>{minutesText(hakTotal)}</b><small>{appLeftSum ? "toplam" : "süre"}</small></span>}
           </Ring>
+          )}
         </span>
         <div className="grow">
           <div className="row between name-row">
@@ -847,6 +878,7 @@ function ChildCard({ child }: { child: Child }) {
                 </span>
               )}
               <span className="muted small">Bugün {minutesText(st.used_minutes)} kullandı</span>
+              {kioskOn && <span className="small" style={{ color: "#ff9f43" }}>📱 Kilitliyken açık: {kioskItems.map((x) => x.text).join(" · ")}</span>}
               {(() => { const b = breakdownText(hak, hakUnl, at.left, at.name); return b ? <span className="small">⏱ {b}</span> : null; })()}
               {(() => { const t = limitText(at.limit, at.name, at.restrictedLeft); return t ? <span className="small warn-text">🎯 {t}</span> : null; })()}
               {timer && (
@@ -873,7 +905,7 @@ function ChildCard({ child }: { child: Child }) {
           >
             {isLocked ? (
               <Ring value={1} max={1} color={limited || closed ? "var(--warn)" : "var(--bad)"} size={80}>
-                <span className="ring-state bad"><Icon name="lock" size={18} /><small>{lockEnd?.label ?? "Kilitli"}</small></span>
+                <span className="ring-state bad"><Icon name="lock" size={18} /><small>{lockEnd?.label ?? "Kilitli"}</small>{kioskOn && <small className="kiosk-badge">+{kioskItems.length} uygulama</small>}</span>
               </Ring>
             ) : (
               <Ring value={openLeft ?? 1} max={openLeft == null || unlimited ? 1 : Math.max(openLeft, hakUnl ? 1 : hak, 1)} color={openShort ? "var(--warn)" : "var(--accent)"} size={80}>
@@ -1200,6 +1232,8 @@ function ChildCard({ child }: { child: Child }) {
           apps={dialApps.filter((k) => k !== GEN).map(at.name)}
           onPickApps={() => setPickApps(true)}
           onLimit={() => setLimitOpen(true)}
+          scope={dialScope}
+          onScope={(sc) => { setDialScope(sc); setDial(0); setAlloc({}); setExtraApps([]); setDialApps(sc === "kiosk" ? [] : [GEN]); }}
           rows={dialKeys.length > 0 ? dialKeys.map((k) => ({ key: k, label: k === GEN ? "Genel süre" : at.name(k), base: baseOf(k), unl: k === GEN && hakUnl, delta: alloc[k] ?? 0, on: dialApps.includes(k) })) : []}
           dirty={Object.values(alloc).some(Boolean)}
           suggest={[]}
@@ -1255,7 +1289,7 @@ function ChildCard({ child }: { child: Child }) {
       {pickApps && <AppPicker apps={at.apps} selected={dialApps.filter((k) => k !== GEN)} onChange={(picked) => {
         // Seçilen uygulamalar listeye eklenir ve işaretlenir; Genel işareti kalkar
         setExtraApps(Array.from(new Set([...extraApps, ...picked])));
-        const sel = picked.length ? picked : [GEN];
+        const sel = picked.length ? picked : dialScope === "kiosk" ? [] : [GEN];
         setDialApps(sel);
         setAlloc(allocFor(dial, sel));
       }} onClose={() => setPickApps(false)} title="Süre hangi uygulamalar için" rank={at.ranked} favs={at.favs} onFav={(p) => { void at.toggleFav(p); }} />}
@@ -1269,12 +1303,13 @@ function ChildCard({ child }: { child: Child }) {
 }
 
 /** Büyük süre çarkı: tam tur 60 dk, her çentik 1 dk; saat yönü artırır, ters yönü azaltır (kalan sürenin altına inmez). */
-function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, onApply, then, onThen, apps, onPickApps, onLimit, rows, dirty, suggest, onFav, quick, onQuick, onToggle, onAll, onRow, onEven, canReset, onReset }: {
+function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, onApply, then, onThen, apps, onPickApps, onLimit, rows, dirty, suggest, onFav, quick, onQuick, scope, onScope, onToggle, onAll, onRow, onEven, canReset, onReset }: {
   name: string; remaining: number; showRemaining: boolean; value: number;
   apps: string[]; onPickApps: () => void; onLimit: () => void;
   rows: { key: string; label: string; base: number; unl: boolean; delta: number; on: boolean }[]; dirty: boolean;
   suggest: { key: string; label: string }[]; onFav: (p: string) => void;
   quick: { key: string; label: string }[]; onQuick: (p: string) => void;
+  scope: "normal" | "kiosk"; onScope: (s: "normal" | "kiosk") => void;
   onToggle: (k: string) => void; onAll: (on: boolean) => void; onRow: (k: string, v: number) => void; onEven: () => void;
   canReset: boolean; onReset: () => void;
   onChange: (v: number) => void; onClose: () => void; onApply: () => void;
@@ -1286,6 +1321,7 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
   // Uygulama listesi kapalı gelir; ok ile açılır (bir uygulama işaretlenince kendiliğinden açılır)
   const anyApp = rows.some((x) => x.on && x.key !== "__general");
   const [listOpen, setListOpen] = useState(false);
+  useEffect(() => { if (scope === "kiosk") setListOpen(true); }, [scope]);
   useEffect(() => { if (anyApp) setListOpen(true); }, [anyApp]);
   const angle = (x: number, y: number) => {
     const r = ref.current!.getBoundingClientRect();
@@ -1340,6 +1376,14 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
             <button key={d} className="chip-btn" disabled={d < 0 && value + d < -remaining} onClick={() => onChange(clamp(value + d))}>{d > 0 ? "+" : "−"}{d === 60 ? "1 sa" : Math.abs(d)}</button>
           ))}
         </div>
+        <div className="row between" style={{ alignItems: "center" }}>
+          <span className="pop-label">SÜRE NEREDE GEÇERLİ</span>
+          <div className="chips">
+            <button type="button" className={`chip-btn ${scope === "normal" ? "on" : ""}`} onClick={() => onScope("normal")}>Normal</button>
+            <button type="button" className={`chip-btn ${scope === "kiosk" ? "on" : ""}`} onClick={() => onScope("kiosk")}>🔒 Kilitliyken</button>
+          </div>
+        </div>
+        {scope === "kiosk" && <p className="muted tiny" style={{ margin: 0 }}>Bu süreler sadece telefon kilitliyken (Tam kilit, kapalı saat, görev kilidi) geçerli; diğer uygulamalar kilitli kalır.</p>}
         {(
 
           <button type="button" className="row between dial-list-head" onClick={() => setListOpen(!listOpen)} aria-expanded={listOpen}>
@@ -1359,7 +1403,7 @@ function DialSheet({ name, remaining, showRemaining, value, onChange, onClose, o
             <div className="chips">{suggest.map((x) => <button key={x.key} type="button" className="chip-btn" onClick={() => onFav(x.key)}>☆ {x.label}</button>)}</div>
           </div>
         )}
-        {rows.length > 1 && listOpen && (
+        {rows.length > (scope === "kiosk" ? 0 : 1) && listOpen && (
           <div className="stack-s">
             <div className="row between" style={{ alignItems: "center" }}>
               <span />

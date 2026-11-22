@@ -654,8 +654,23 @@ class RuleEngine(private val rules: Rules) {
     /** Kiosk uygulaması şu an kilitliyken açılabilir mi (saat aralığı içinde) */
     fun kioskOpen(app: AppRule, t: LocalTime): Boolean = app.kiosk && app.approved && (app.kioskWindows.isEmpty() || app.kioskWindows.any { it.contains(t) })
 
-    /** Orbit kilit ekranında kutucuk olarak gösterilecek kiosk uygulamaları */
-    fun kioskApps(t: LocalTime): List<AppRule> = rules.apps.values.filter { kioskOpen(it, t) }.sortedBy { it.label.lowercase() }
+    /** Kilitliyken günlük dakika sınırından kalan (sn); sınır yoksa sınırsız */
+    fun kioskMinutesLeft(app: AppRule, day: LocalDate, usage: DayUsage?): Long =
+        app.kioskMinutes?.let { (it * 60L - (usage?.let { u -> bucket(u, "kq:${app.pkg}@$day") } ?: 0)).coerceAtLeast(0) } ?: UNLIMITED_SECONDS
+
+    /** Kilitliyken verilen uygulama süresinden kalan (sn) */
+    fun kioskGrantLeft(pkg: String, day: LocalDate, usage: DayUsage?): Long {
+        val m = rules.appGrantsKiosk[day]?.get(pkg) ?: return 0
+        return (m * 60L - (usage?.let { bucket(it, "apk:$pkg@$day") } ?: 0)).coerceAtLeast(0)
+    }
+
+    /** Orbit kilit ekranında kutucuk olarak gösterilecek uygulamalar: kilitliyken açık olanlar + kilitliyken süre verilenler */
+    fun kioskApps(t: LocalTime, day: LocalDate? = null, usage: DayUsage? = null): List<AppRule> {
+        val d = day ?: LocalDate.now(zone())
+        val byRule = rules.apps.values.filter { kioskOpen(it, t) && kioskMinutesLeft(it, d, usage) > 0 }
+        val byGrant = rules.appGrantsKiosk[d].orEmpty().keys.mapNotNull { p -> rules.apps[p]?.takeIf { it.approved && kioskGrantLeft(p, d, usage) > 0 } }
+        return (byRule + byGrant).distinctBy { it.pkg }.sortedBy { it.label.lowercase() }
+    }
 
     private fun inWindows(ws: List<TimeWindow>, t: LocalTime) = ws.isEmpty() || ws.any { it.contains(t) }
 
@@ -665,12 +680,15 @@ class RuleEngine(private val rules: Rules) {
         if (pkg in sessionPackages) return AppVerdict(true)
         // Zorunlu görev kısıtlaması sürerken izin verilen uygulamalar (isteğe bağlı günlük dakika)
         if (raNow.containsKey(pkg) && restrictedLeft(pkg, usage)) return AppVerdict(true, buckets = listOf("ra:$pkg@$raDay"))
-        // Kiosk uygulaması: kendi saatlerinde her kilitte açık; saat dışında sadece telefon açıkken. Hiçbir zaman süreden düşmez.
-        rules.apps[pkg]?.takeIf { it.kiosk && it.approved }?.let { app ->
-            if (kioskOpen(app, s.now)) return AppVerdict(true)
-            val closed = s.locked || s.activeMode?.othersBlocked == true || (s.sectionMode && (s.section == null || s.sectionClosed)) ||
-                s.remainingSeconds <= 0 || hasMandatoryBlock()
-            return if (closed) AppVerdict(false, "Kiosk saatleri dışında") else AppVerdict(true)
+        // Kilitliyken (kilit ekranındayken) ayrı izinler: kilitliyken süre verilen ve "kilitliyken açık" uygulamalar.
+        // Telefon açıkken bu izinler devrede değil; uygulama normal ayarına (kurallar / her zaman açık / kapalı) göre çalışır.
+        val lockedNow = s.locked || s.activeMode?.othersBlocked == true || (s.sectionMode && (s.section == null || s.sectionClosed)) ||
+            s.remainingSeconds <= 0 || hasMandatoryBlock()
+        if (lockedNow) {
+            if (rules.apps[pkg]?.approved == true && kioskGrantLeft(pkg, s.day, usage) > 0) return AppVerdict(true, buckets = listOf("apk:$pkg@${s.day}"))
+            rules.apps[pkg]?.takeIf { it.kiosk && it.approved && kioskOpen(it, s.now) }?.let { app ->
+                if (kioskMinutesLeft(app, s.day, usage) > 0) return AppVerdict(true, buckets = if (app.kioskMinutes != null) listOf("kq:$pkg@${s.day}") else emptyList())
+            }
         }
         var v = baseVerdict(pkg, s, usage)
         // Uygulamaya özel süre: önce o düşer (genel süre bitmiş olsa da); kilit / kapalı saat / görev kilidi yine geçerli
@@ -764,7 +782,7 @@ class RuleEngine(private val rules: Rules) {
                 perAppCounted = u.perAppCounted + (pkg to ((u.perAppCounted[pkg] ?: 0) + seconds)),
             )
         }
-        val raB = v.buckets.filter { it.startsWith("ra:") || it.startsWith("ap:") }
+        val raB = v.buckets.filter { it.startsWith("ra:") || it.startsWith("ap:") || it.startsWith("apk:") || it.startsWith("kq:") }
         if (v.allowed && raB.isNotEmpty()) {
             val m = u.buckets.toMutableMap()
             for (k in raB) m[k] = (m[k] ?: 0) + seconds

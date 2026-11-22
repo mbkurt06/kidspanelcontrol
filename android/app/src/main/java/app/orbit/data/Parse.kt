@@ -83,6 +83,11 @@ object Parse {
         runCatching { TimeWindow(time(o.getString("start")), time(o.getString("end"))) }.getOrNull()
     }
 
+    fun appGrantsOf(a: JSONArray, scope: String): Map<java.time.LocalDate, Map<String, Int>> =
+        (0 until a.length()).map { a.getJSONObject(it) }.filter { it.optString("scope", "normal").ifBlank { "normal" } == scope }
+            .groupBy { date(it.getString("day"))!! }
+            .mapValues { (_, l) -> l.groupBy { it.getString("package") }.mapValues { (_, x) -> x.sumOf { it.optInt("minutes") } } }
+
     fun apps(a: JSONArray): Map<String, AppRule> = (0 until a.length()).associate {
         val o = a.getJSONObject(it)
         val p = o.getString("package")
@@ -91,7 +96,7 @@ object Parse {
             runCatching { val w = kw.getJSONObject(i); TimeWindow(time(w.getString("start")), time(w.getString("end"))) }.getOrNull()
         }
         p to AppRule(p, o.optString("label", p), Group.of(o.str("app_group")), o.optBoolean("approved"), o.intOrNull("daily_limit_minutes"), o.str("usage_rule_id"),
-            kiosk = o.optBoolean("kiosk"), kioskWindows = wins)
+            kiosk = o.optBoolean("kiosk"), kioskWindows = wins, kioskMinutes = o.intOrNull("kiosk_minutes")?.takeIf { it > 0 })
     }
 
     fun usageRules(a: JSONArray): Map<String, AppUsageRule> = (0 until a.length()).associate { val o = a.getJSONObject(it); val w = runCatching { if (o.isNull("start_time") || !o.has("start_time")) null else TimeWindow(time(o.getString("start_time")), time(o.getString("end_time"))) }.getOrNull(); o.getString("id") to AppUsageRule(o.getString("id"), o.optString("mode", "timed"), o.intOrNull("max_minutes"), o.optBoolean("counts_toward_daily", true), w) }
@@ -218,10 +223,8 @@ object Parse {
         assignments = assignments(b.optJSONArray("assignments") ?: JSONArray()),
         overrides = overrides(b.optJSONArray("overrides") ?: JSONArray()),
         grants = grants(b.optJSONArray("grants") ?: JSONArray()),
-        appGrants = (b.optJSONArray("app_grants") ?: JSONArray()).let { a ->
-            (0 until a.length()).map { a.getJSONObject(it) }.groupBy { date(it.getString("day"))!! }
-                .mapValues { (_, l) -> l.groupBy { it.getString("package") }.mapValues { (_, x) -> x.sumOf { it.optInt("minutes") } } }
-        },
+        appGrants = appGrantsOf(b.optJSONArray("app_grants") ?: JSONArray(), "normal"),
+        appGrantsKiosk = appGrantsOf(b.optJSONArray("app_grants") ?: JSONArray(), "kiosk"),
         dayAppLimits = (b.optJSONArray("day_app_limits") ?: JSONArray()).let { a ->
             (0 until a.length()).map { a.getJSONObject(it) }.associate { o ->
                 date(o.getString("day"))!! to app.orbit.engine.DayAppLimit(

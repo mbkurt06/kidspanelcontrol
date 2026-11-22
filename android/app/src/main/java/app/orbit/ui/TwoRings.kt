@@ -116,7 +116,9 @@ private fun AppTimeBreakdown(s: Snapshot, unlimited: Boolean, hak: Long) {
     val rules = Store.rules()
     val left = app.orbit.engine.RuleEngine(rules).appGrantsLeft(s.day, usage).filterValues { it.second > 0 }
     val lim = rules.dayAppLimits[s.day]
-    if (left.isEmpty() && lim == null) return
+    val eng = app.orbit.engine.RuleEngine(rules)
+    val leftK = rules.appGrantsKiosk[s.day].orEmpty().keys.associateWith { eng.kioskGrantLeft(it, s.day, usage) }.filterValues { it > 0 }
+    if (left.isEmpty() && lim == null && leftK.isEmpty()) return
     val name = { p: String -> rules.apps[p]?.label ?: p.substringAfterLast('.') }
     val parts = mutableListOf<String>()
     val appSum = left.values.sumOf { it.second } / 60
@@ -124,8 +126,10 @@ private fun AppTimeBreakdown(s: Snapshot, unlimited: Boolean, hak: Long) {
     parts += if (unlimited) "genel süre sınırsız" else "genel ${minutesText(hak / 60)}"
     for ((p, v) in left.entries.sortedByDescending { it.value.second }) parts += "${name(p)} ${minutesText(v.second / 60)}"
     Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(parts.joinToString(" · "), color = C.text, fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        if (left.isNotEmpty() || lim != null) Text(parts.joinToString(" · "), color = C.text, fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         if (left.isNotEmpty()) Muted("Bir uygulamaya ayrılan süre önce o uygulamada düşer", 12)
+        if (leftK.isNotEmpty()) Text("🔒 Kilitliyken açık: " + leftK.entries.joinToString(" · ") { "${name(it.key)} ${minutesText(it.value / 60)}" },
+            color = C.warn, fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         if (lim != null) {
             val caps = lim.caps.entries.joinToString(", ") { "${name(it.key)} en fazla ${it.value} dk" }
             val list = lim.apps.map { a -> name(a) + (lim.caps[a]?.let { " (en fazla $it dk)" } ?: "") }.joinToString(", ")

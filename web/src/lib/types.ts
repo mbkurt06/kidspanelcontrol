@@ -43,6 +43,8 @@ export type ChildApp = {
   usage_rule_id?: string | null;
   kiosk?: boolean;
   kiosk_windows?: KioskWindow[];
+  /** Kilitliyken günde en fazla dk (null = sınırsız) */
+  kiosk_minutes?: number | null;
 };
 
 export type KioskWindow = { start: string; end: string };

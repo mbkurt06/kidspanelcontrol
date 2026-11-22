@@ -13,6 +13,9 @@ export type ChildApp = { package: string; label: string };
 export function useAppTime(childId: string, st: DeviceStatus | undefined) {
   const [apps, setApps] = useState<ChildApp[]>([]);
   const [totals, setTotals] = useState<Record<string, number>>({});
+  // Kilitliyken geçerli uygulama süreleri ve "kilitliyken açık" uygulama ayarları
+  const [totalsK, setTotalsK] = useState<Record<string, number>>({});
+  const [kioskRules, setKioskRules] = useState<{ package: string; label: string; windows: { start: string; end: string }[]; minutes: number | null }[]>([]);
   const [limit, setLimit] = useState<AppLimit | null>(null);
   // ⭐ Sık kullanılanlar (çocuk başına) ve öneri: son 14 günde en çok kullanılanlar
   const [favs, setFavs] = useState<string[]>([]);
@@ -20,12 +23,16 @@ export function useAppTime(childId: string, st: DeviceStatus | undefined) {
   const day = orbitTodayISO();
   const reload = useCallback(async () => {
     const [g, l] = await Promise.all([
-      supabase.from("app_grants").select("package,minutes").eq("child_id", childId).eq("day", day),
+      supabase.from("app_grants").select("package,minutes,scope").eq("child_id", childId).eq("day", day),
       supabase.from("day_app_limits").select("only_apps,apps,caps,scope,budget").eq("child_id", childId).eq("day", day).maybeSingle(),
     ]);
-    const t: Record<string, number> = {};
-    for (const r of (g.data ?? []) as { package: string; minutes: number }[]) t[r.package] = (t[r.package] ?? 0) + r.minutes;
+    const t: Record<string, number> = {}, tk: Record<string, number> = {};
+    for (const r of (g.data ?? []) as { package: string; minutes: number; scope?: string }[]) {
+      const o = r.scope === "kiosk" ? tk : t;
+      o[r.package] = (o[r.package] ?? 0) + r.minutes;
+    }
     setTotals(t);
+    setTotalsK(tk);
     setLimit((l.data as AppLimit | null) ?? null);
   }, [childId, day]);
   useEffect(() => { void reload(); }, [reload, st?.updated_at]);
@@ -44,7 +51,9 @@ export function useAppTime(childId: string, st: DeviceStatus | undefined) {
     await supabase.from("children").update({ fav_apps: next }).eq("id", childId);
   }, [favs, childId]);
   useEffect(() => {
-    supabase.from("child_apps").select("package,label,approved").eq("child_id", childId).then(({ data }) => {
+    supabase.from("child_apps").select("package,label,approved,kiosk,kiosk_windows,kiosk_minutes").eq("child_id", childId).then(({ data }) => {
+      type Row = ChildApp & { approved: boolean; kiosk?: boolean; kiosk_windows?: { start: string; end: string }[] | null; kiosk_minutes?: number | null };
+      setKioskRules(((data ?? []) as Row[]).filter((a) => a.approved && a.kiosk).map((a) => ({ package: a.package, label: a.label || a.package, windows: a.kiosk_windows ?? [], minutes: a.kiosk_minutes ?? null })));
       const list = ((data ?? []) as (ChildApp & { approved: boolean })[])
         .filter((a) => a.approved && !a.package.startsWith("web:") && !a.package.startsWith("video:"))
         .map((a) => ({ package: a.package, label: a.label || a.package }))
@@ -58,12 +67,31 @@ export function useAppTime(childId: string, st: DeviceStatus | undefined) {
     for (const [p, m] of Object.entries(totals)) { const x = Math.max(0, m - used(p)); if (x > 0) o[p] = x; }
     return o;
   }, [totals, st?.grant_used]); // eslint-disable-line react-hooks/exhaustive-deps
+  const gu = (k: string) => Number((st?.grant_used as Record<string, number> | null | undefined)?.[k] ?? 0);
+  const usedK = (p: string) => gu(`apk:${p}`);
+  const leftK = useMemo(() => {
+    const o: Record<string, number> = {};
+    for (const [p, m] of Object.entries(totalsK)) { const x = Math.max(0, m - usedK(p)); if (x > 0) o[p] = x; }
+    return o;
+  }, [totalsK, st?.grant_used]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Şu an kilitliyken açık olan uygulamalar (ayarından): saat aralığı içinde ve günlük dk bitmemiş
+  const kioskNow = useMemo(() => {
+    const now = new Date().toLocaleTimeString("en-GB", { timeZone: "Europe/Berlin", hour: "2-digit", minute: "2-digit", hour12: false });
+    const inWin = (w: { start: string; end: string }) => (w.start <= w.end ? now >= w.start.slice(0, 5) && now < w.end.slice(0, 5) : now >= w.start.slice(0, 5) || now < w.end.slice(0, 5));
+    return kioskRules.flatMap((k) => {
+      const win = k.windows.length ? k.windows.find(inWin) : null;
+      if (k.windows.length && !win) return [];
+      const left = k.minutes != null ? Math.max(0, k.minutes - gu(`kq:${k.package}`)) : null;
+      if (left === 0) return [];
+      return [{ package: k.package, label: k.label, until: win ? win.end.slice(0, 5) : null, left }];
+    });
+  }, [kioskRules, st?.grant_used, st?.updated_at]); // eslint-disable-line react-hooks/exhaustive-deps
   const name = useCallback((p: string) => apps.find((a) => a.package === p)?.label ?? p.split(".").pop() ?? p, [apps]);
   // "Sadece şu anki süre" kısıtından kalan dk (telefon kısıtlı uygulamalarda harcananı "dl" olarak bildirir)
   const restrictedLeft = limit?.scope === "now" ? Math.max(0, (limit.budget ?? 0) - Number((st?.grant_used as Record<string, number> | null | undefined)?.dl ?? 0)) : 0;
   // Öneri: en çok kullanılan, onaylı, henüz ⭐ olmayan ilk 5
   const suggest = topUsed.filter((p) => !favs.includes(p) && apps.some((a) => a.package === p)).slice(0, 5);
-  return { apps, totals, left, limit, reload, name, used, day, restrictedLeft, favs, toggleFav, suggest, ranked: topUsed };
+  return { apps, totals, left, limit, reload, name, used, day, restrictedLeft, favs, toggleFav, suggest, ranked: topUsed, totalsK, leftK, usedK, kioskNow };
 }
 
 /** Seçilen uygulamalara süre ver / geri al (kullanılanın altına inmez) */
@@ -326,10 +354,10 @@ export async function resetAppTime(childId: string, familyId: string, day: strin
 }
 
 /** Uygulama başına farklı dakika: + verir, − geri alır (kullanılanın altına inmez) */
-export async function applyAppTimeMap(childId: string, familyId: string, day: string, map: Record<string, number>, totals: Record<string, number>, used: (p: string) => number) {
+export async function applyAppTimeMap(childId: string, familyId: string, day: string, map: Record<string, number>, totals: Record<string, number>, used: (p: string) => number, scope: "normal" | "kiosk" = "normal") {
   const rows = Object.entries(map).map(([p, d]) => {
     const m = d > 0 ? d : -Math.min(-d, Math.max(0, (totals[p] ?? 0) - used(p)));
-    return { family_id: familyId, child_id: childId, day, package: p, minutes: m };
+    return { family_id: familyId, child_id: childId, day, package: p, minutes: m, scope };
   }).filter((r) => r.minutes !== 0);
   if (!rows.length) return "değişiklik yok";
   const { error } = await supabase.from("app_grants").insert(rows);

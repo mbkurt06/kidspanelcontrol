@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Info } from "../components/Info";
-import { KioskWindows, MODE3_LABEL, MODES, fromMode3, mode3, type Mode3 } from "../components/AppModes";
+import { KioskControl, MODE3_LABEL, MODES, fromMode3, mode3, type Mode3 } from "../components/AppModes";
 import { useFamily } from "../lib/family";
 import { errorText, supabase } from "../lib/supabase";
 import type { ChildApp } from "../lib/types";
@@ -182,7 +182,7 @@ export default function VideosTab({ childId }: { childId: string }) {
                   </select>
                 </div>
               ) : <p className="muted tiny">Bu çocuk için satır bulunamadı</p>}
-              {row?.kiosk && <KioskWindows app={row} onSave={(w) => updateRow(l.id, { kiosk_windows: w })} />}
+              {row && <KioskControl app={row} onSave={(p) => updateRow(l.id, p)} />}
               {open === l.id && (
                 <div className="video-items">
                   {vids.map((v, i) => {

@@ -29,10 +29,12 @@ data class AppRule(
     val approved: Boolean,
     val dailyLimitMinutes: Int?,
     val usageRuleId: String? = null,
-    /** Kiosk: kilitliyken de Orbit ekranından açılır, hiçbir zaman süreden düşmez */
+    /** Kilitliyken açık: kilit ekranından açılır, genel süreden düşmez. Normal durumdaki davranış [group]'tan gelir. */
     val kiosk: Boolean = false,
-    /** Kiosk saatleri; boş = her zaman */
+    /** Kilitliyken açık saatler; boş = her zaman */
     val kioskWindows: List<TimeWindow> = emptyList(),
+    /** Kilitliyken günde en fazla dk (null = sınırsız) */
+    val kioskMinutes: Int? = null,
 )
 
 data class AppUsageRule(val id: String, val mode: String, val maxMinutes: Int?, val countsTowardDaily: Boolean, val window: TimeWindow? = null)
@@ -218,6 +220,8 @@ data class Rules(
     val grants: List<Grant> = emptyList(),
     /** Uygulamaya özel süreler: gün → (paket → dk). Kullandıkça düşer, genel süreden ayrı. */
     val appGrants: Map<java.time.LocalDate, Map<String, Int>> = emptyMap(),
+    /** Kilitliyken geçerli uygulama süreleri: gün → (paket → dk) */
+    val appGrantsKiosk: Map<java.time.LocalDate, Map<String, Int>> = emptyMap(),
     /** Bugünlük genel süre kısıtı: gün → kısıt */
     val dayAppLimits: Map<java.time.LocalDate, DayAppLimit> = emptyMap(),
     val commands: List<Command> = emptyList(),

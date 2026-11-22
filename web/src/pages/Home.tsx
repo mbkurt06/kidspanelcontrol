@@ -835,7 +835,9 @@ function ChildCard({ child }: { child: Child }) {
         >
           {kioskOn ? (
             <Ring value={1} max={1} color="#ff9f43" size={80}>
-              <span className="ring-state"><b>{kioskMin ? minutesText(kioskMin) : "açık"}</b><small>kilitte</small></span>
+              {kioskMin
+                ? <span className="ring-state"><b>{minutesText(kioskMin)}</b><small>kiosk</small></span>
+                : <span className="ring-state" style={{ color: "#ff9f43" }}><Icon name="lock" size={18} /><small>kiosk</small></span>}
             </Ring>
           ) : (
           <Ring value={hakUnl ? 1 : hakTotal} max={hakUnl ? 1 : Math.max(st?.allowance_minutes ?? 0, hakTotal + (st?.used_minutes ?? 0), 1)} color={!hakUnl && hakTotal <= 10 ? "var(--warn)" : child.color} size={80}>

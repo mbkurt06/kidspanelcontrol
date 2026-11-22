@@ -18,7 +18,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 
-/** Kiosk uygulaması: kilitliyken (kapalı saat) de açık, saat aralığı dışında kilitliyken kapalı, süreden düşmez */
+/** Kilitliyken açık uygulama: kilitliyken (kapalı saat) de açık, saat aralığı dışında kilitliyken kapalı, süreden düşmez; telefon açıkken normal ayarı (kurallar) geçerli */
 class KioskAppTest {
     private val zone = ZoneId.of("Europe/Berlin")
     private val day = LocalDate.of(2026, 10, 21)
@@ -33,8 +33,8 @@ class KioskAppTest {
     private val rules = Rules(
         apps = mapOf(
             "com.insta" to AppRule("com.insta", "Insta", Group.TIMED, true, null),
-            "com.quran" to AppRule("com.quran", "Kuran", Group.ALWAYS_OPEN, true, null, kiosk = true),
-            "com.duo" to AppRule("com.duo", "Duolingo", Group.ALWAYS_OPEN, true, null, kiosk = true,
+            "com.quran" to AppRule("com.quran", "Kuran", Group.TIMED, true, null, kiosk = true),
+            "com.duo" to AppRule("com.duo", "Duolingo", Group.TIMED, true, null, kiosk = true,
                 kioskWindows = listOf(TimeWindow(t("07:00"), t("22:00")))),
         ),
         profiles = mapOf("p1" to Profile("p1", "Hafta içi", 0, null, emptyList(), emptyList(), listOf(10, 2))),
@@ -61,5 +61,30 @@ class KioskAppTest {
         assertTrue("saatsiz kiosk her zaman açık", v(e, "com.quran", 23).allowed)
         assertEquals(listOf("com.quran"), e.kioskApps(t("23:00")).map { it.pkg })
         assertEquals(listOf("com.duo", "com.quran"), e.kioskApps(t("12:00")).map { it.pkg })
+    }
+
+    @Test
+    fun kioskGrantOnlyWhileLocked() {
+        val r = rules.copy(appGrantsKiosk = mapOf(day to mapOf("com.insta" to 10)))
+        val e = RuleEngine(r)
+        val locked = v(e, "com.insta", 21, 30)
+        assertTrue("kilitliyken verilen süre kilitte açar", locked.allowed)
+        assertFalse(locked.countsDaily)
+        assertTrue(locked.buckets.any { it.startsWith("apk:") })
+        val open = v(e, "com.insta", 12)
+        assertTrue("telefon açıkken normal kurallar", open.allowed)
+        assertTrue(open.buckets.none { it.startsWith("apk:") })
+    }
+
+    @Test
+    fun kioskMinutesCap() {
+        val r = rules.copy(apps = rules.apps + ("com.quran" to AppRule("com.quran", "Kuran", Group.TIMED, true, null, kiosk = true, kioskMinutes = 1)))
+        val e = RuleEngine(r)
+        val u = DayUsage(day)
+        val q = e.verdict("com.quran", e.snapshot(at(21, 30), u), u)
+        assertTrue(q.allowed)
+        assertTrue(q.buckets.any { it.startsWith("kq:") })
+        val u2 = e.account(u, "com.quran", q, 70)
+        assertFalse("günlük kilitliyken dk bitti", e.verdict("com.quran", e.snapshot(at(21, 31), u2), u2).allowed)
     }
 }

@@ -2554,3 +2554,5 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .kiosk-table th { text-align: left; font-weight: 600; color: var(--muted); font-size: 12px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
 .kiosk-table td { padding: 8px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .kiosk-table td:last-child, .kiosk-table th:last-child { text-align: right; white-space: nowrap; }
+.rec-wait { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.6); color: #fff; padding: 6px 12px; border-radius: 10px; font-size: 13px; pointer-events: none; }
+.rec-bar { touch-action: none; cursor: pointer; }

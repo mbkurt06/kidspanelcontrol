@@ -80,7 +80,9 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
   const [idx, setIdx] = useState(0);
   // Gerçek zamanlı video (yeni kayıtlar) ya da zaman atlamalı (eski kayıtlar)
   const realtime = (rec.video_fps || 40) === (rec.capture_fps || 2);
-  const [speed, setSpeed] = useState(realtime ? 10 : 20);
+  // Gerçek zamanlı kayıtlar 1x'ten başlar (eskiden 10x ileri atlayarak oynuyordu: sürekli yeniden yükleme, geç açılma)
+  const [speed, setSpeed] = useState(realtime ? 1 : 20);
+  const [waiting, setWaiting] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [nowMs, setNowMs] = useState<number | null>(null);
   const seekTo = useRef<number | null>(null);
@@ -97,18 +99,19 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
     return { start, end, len: Math.max(1, end - start) };
   }, [rec, segs]);
 
-  // Tarayıcılar videoyu en fazla 2–16 kat hızlı oynatır; daha hızlısı için oynatırken ileri atlanır
+  // Tarayıcı videoyu kendi hızlandırır (16x'e kadar); sadece daha hızlısı için oynatırken ileri atlanır
   const want = speed / ratio;
+  const MAXR = 16;
   const applyRate = (v: HTMLVideoElement) => {
-    try { v.playbackRate = Math.min(want, 2); } catch { v.playbackRate = 1; }
+    try { v.playbackRate = Math.min(want, MAXR); } catch { try { v.playbackRate = Math.min(want, 2); } catch { v.playbackRate = 1; } }
   };
   useEffect(() => {
     const v = video.current;
     if (v) applyRate(v);
   }, [speed, ratio, idx]);
   useEffect(() => {
-    if (!playing || want <= 2) return;
-    const step = (want - Math.min(want, 2)) * 0.25;
+    if (!playing || want <= MAXR) return;
+    const step = (want - MAXR) * 0.25;
     const t = setInterval(() => {
       const v = video.current;
       if (!v || v.paused || v.seeking) return;
@@ -177,6 +180,15 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
     }
   }
 
+  /** İleri / geri sar (gerçek saniye) */
+  function seekRel(sec: number) {
+    if (nowMs == null) return;
+    const firstStart = segs[0]?.startMs ?? span.start;
+    seekReal(Math.max(firstStart, nowMs + sec * 1000));
+    const v = video.current;
+    if (v && playing && v.paused) v.play().catch(() => setPlaying(false));
+  }
+
   const pct = (ms: number) => `${(((ms - span.start) / span.len) * 100).toFixed(2)}%`;
   const evs = (rec.events ?? []).filter((e) => e.type !== "start");
   const alerts = evs.filter((e) => e.type === "gap" || e.type === "leave").length;
@@ -216,6 +228,9 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
                       preload="auto"
                       style={idx % 2 === k ? undefined : { display: "none" }}
                       onLoadedMetadata={onLoaded}
+                      onWaiting={() => setWaiting(true)}
+                      onPlaying={() => setWaiting(false)}
+                      onCanPlay={() => setWaiting(false)}
                       onTimeUpdate={onTime}
                       onEnded={onEnded}
                       onClick={toggle}
@@ -232,12 +247,27 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
                     ▶
                   </button>
                 )}
+                {playing && waiting && <span className="rec-wait">Yükleniyor…</span>}
+              </div>
+              <div className="row gap-xs" style={{ alignItems: "center", justifyContent: "center" }}>
+                <button className="chip small" onClick={() => seekRel(-60)} aria-label="1 dk geri">⏪ 1 dk</button>
+                <button className="chip small" onClick={() => seekRel(-10)} aria-label="10 sn geri">↺ 10 sn</button>
+                <button className="chip small" onClick={toggle} aria-label={playing ? "Duraklat" : "Oynat"}>{playing ? "⏸" : "▶"}</button>
+                <button className="chip small" onClick={() => seekRel(10)} aria-label="10 sn ileri">10 sn ↻</button>
+                <button className="chip small" onClick={() => seekRel(60)} aria-label="1 dk ileri">1 dk ⏩</button>
               </div>
               <div
                 className="rec-bar"
-                onClick={(e) => {
-                  const r = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-                  seekReal(span.start + ((e.clientX - r.left) / r.width) * span.len);
+                onPointerDown={(e) => {
+                  // Çubuğa basıp sürükleyerek ileri / geri
+                  const el = e.currentTarget as HTMLDivElement;
+                  const go = (x: number) => { const r = el.getBoundingClientRect(); seekReal(span.start + Math.min(1, Math.max(0, (x - r.left) / r.width)) * span.len); };
+                  go(e.clientX);
+                  el.setPointerCapture(e.pointerId);
+                  const move = (ev: PointerEvent) => go(ev.clientX);
+                  const up = () => { el.removeEventListener("pointermove", move); el.removeEventListener("pointerup", up); };
+                  el.addEventListener("pointermove", move);
+                  el.addEventListener("pointerup", up);
                 }}
               >
                 {segs.map((s) => (
@@ -253,7 +283,7 @@ function RecordingPlayer({ rec, segs, label, last }: { rec: TaskRecording; segs:
               <div className="row gap-xs wrap" style={{ alignItems: "center" }}>
                 <span className="muted tiny">{clock(span.start)}</span>
                 <span className="grow" />
-                {(realtime ? [1, 2, 5, 10, 20, 40] : SPEEDS).map((x) => (
+                {(realtime ? [1, 2, 4, 8, 16] : SPEEDS).map((x) => (
                   <button key={x} className={`chip small ${speed === x ? "on" : ""}`} onClick={() => setSpeed(x)}>
                     {x}x
                   </button>

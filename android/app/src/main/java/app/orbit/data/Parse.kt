@@ -122,6 +122,11 @@ object Parse {
             o.optBoolean("extra_time_allowed"), ints(o.optJSONArray("warn_minutes")), o.optInt("priority", 50),
             o.optBoolean("kiosk_enabled", false), strings(o.optJSONArray("kiosk_screens")).toSet(), o.optString("kiosk_calls", "emergency"),
             o.str("builtin"), o.str("kiosk_message")?.takeIf { it.isNotBlank() },
+            budgetUse = o.optString("budget_use", "any").ifBlank { "any" },
+            budgetWithinMinutes = o.intOrNull("budget_within_minutes"),
+            budgetRangeStart = o.str("budget_range_start")?.let { s -> runCatching { time(s) }.getOrNull() },
+            budgetRangeEnd = o.str("budget_range_end")?.let { s -> runCatching { time(s) }.getOrNull() },
+            appCaps = o.optJSONObject("app_caps")?.let { c -> c.keys().asSequence().associateWith { k -> c.optInt(k) }.filterValues { it > 0 } } ?: emptyMap(),
         )
     }
 
@@ -254,6 +259,7 @@ object Parse {
         } ?: app.orbit.engine.KioskSettings(),
         timeRules = timeRules(b.optJSONArray("time_rules") ?: JSONArray(), b.optString("child_id")),
         musicMode = b.optJSONObject("child")?.optString("music_mode", "rules") ?: "rules",
+        orbitScreens = b.optJSONObject("child")?.takeIf { it.has("orbit_screens") && !it.isNull("orbit_screens") }?.optJSONArray("orbit_screens")?.let { strings(it).toSet() },
         musicFolder = b.optJSONObject("child")?.str("music_folder")?.takeIf { it.isNotBlank() },
         pinHash = b.optJSONObject("child")?.takeIf { it.optBoolean("parent_pin_enabled") }
             ?.let { b.optJSONObject("family")?.str("parent_pin_hash")?.takeIf { h -> h.isNotBlank() } },

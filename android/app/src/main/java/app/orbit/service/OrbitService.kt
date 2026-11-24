@@ -140,6 +140,8 @@ class OrbitService : Service() {
      * tam kilit ekranları, odak profili, görev kısıtlaması ekranları, etkin kullanım profilinin Orbit ekranları.
      */
     private fun orbitScreenBlocked(key: String, kiosk: app.orbit.engine.KioskNow?, snap: app.orbit.engine.Snapshot, rules: app.orbit.engine.Rules, engine: app.orbit.engine.RuleEngine? = null): String? {
+        // Temel ayar (çocuk başına): kapalı ekran hiçbir durumda açılmaz
+        if (rules.orbitScreens != null && key != "today" && key !in rules.orbitScreens) return "Bu ekran kapalı"
         if (kiosk != null) return if (key in kiosk.screens) null else "${kiosk.name}: kapalı"
         app.orbit.data.Timers.activeFocus()?.takeIf { it.screens.isNotEmpty() && key !in it.screens }?.let { return "${it.name}: kapalı" }
         // Kazanılan / elle verilen süre sürerken görev kısıtlaması kalkar (taskRestrictionNow ile aynı kural)

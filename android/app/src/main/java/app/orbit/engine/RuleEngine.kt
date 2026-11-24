@@ -70,6 +70,8 @@ data class Snapshot(
     val windowBuckets: List<String> = emptyList(),
     /** Bugünkü (Orbit günü, gün bitişine kadar) kalan hak: kilitliyken de görünür; null = remainingSeconds */
     val dayLeftSeconds: Long? = null,
+    /** Profilin kendi süresi şu an kullanılabilir mi (saat aralığı / ilk açılıştan sonra N dk) */
+    val modeUsable: Boolean = true,
 )
 
 /** "Sınırsız" kalan süre (bölüm süresi ve günlük sınır yok) */
@@ -244,7 +246,9 @@ class RuleEngine(private val rules: Rules) {
         profile.maxTotalMinutes?.let { allowance = minOf(allowance, it) }
         val used = usage.countedSeconds
         val remaining = (allowance * 60L - used).coerceAtLeast(0)
-        val modeRemaining = active?.budgetMinutes?.let { (it * 60L - (usage.perMode[active.id] ?: 0)).coerceAtLeast(0) }
+        val nowEp = nowZ.toEpochSecond()
+        val modeRemaining = active?.budgetMinutes?.let { b -> modeLeft(active, b, nowEp, usage) }
+        val modeUsable = active?.let { modeUsableNow(it, t, nowEp, usage) } ?: true
 
         val wallet = rules.grants.filter {
             !it.vault && it.minutes > 0 && it.validOn == null && it.activatedOn == null && (it.expiresOn == null || !it.expiresOn.isBefore(day))
@@ -255,7 +259,7 @@ class RuleEngine(private val rules: Rules) {
             return sectionSnapshot(
                 now, day, t, profile, todaySections, usage, dayStart, dayEnd, wallet,
                 manual, active, modeEnds, modeRemaining, locked, lockUntil, free, parentUntil,
-            ).copy(limitName = limit?.first, freeName = freeRule?.first)
+            ).copy(limitName = limit?.first, freeName = freeRule?.first, modeUsable = modeUsable)
         }
 
         return Snapshot(
@@ -264,8 +268,22 @@ class RuleEngine(private val rules: Rules) {
             allowanceMinutes = allowance, usedMinutes = (used / 60).toInt(), remainingSeconds = remaining,
             modeRemainingSeconds = modeRemaining, extraMinutesToday = extra, walletGrants = wallet,
             parentMode = parentUntil != null, parentModeUntil = parentUntil,
-            limitName = limit?.first, freeName = freeRule?.first,
+            limitName = limit?.first, freeName = freeRule?.first, modeUsable = modeUsable,
         )
+    }
+
+    /** Profilin kendi süresinden kalan (sn): kullanılan düşülür; "saat gibi"de ilk açılıştan beri geçen süre düşülür */
+    fun modeLeft(m: Mode, budget: Int, nowEp: Long, usage: DayUsage): Long {
+        val first = usage.buckets["mf:${m.id}"]
+        val spent = if (m.budgetUse == "clock" && first != null) (nowEp - first).coerceAtLeast(0) else usage.perMode[m.id] ?: 0
+        return (budget * 60L - spent).coerceAtLeast(0)
+    }
+
+    /** Profil süresi şu an kullanılabilir mi (saat aralığı / ilk açılıştan sonra N dk içinde) */
+    fun modeUsableNow(m: Mode, t: LocalTime, nowEp: Long, usage: DayUsage): Boolean = when (m.budgetUse) {
+        "range" -> m.budgetRangeStart == null || m.budgetRangeEnd == null || TimeWindow(m.budgetRangeStart, m.budgetRangeEnd).contains(t)
+        "within" -> usage.buckets["mf:${m.id}"]?.let { first -> m.budgetWithinMinutes == null || nowEp - first < m.budgetWithinMinutes * 60L } ?: true
+        else -> true
     }
 
     // --- Bölümler ---
@@ -724,14 +742,27 @@ class RuleEngine(private val rules: Rules) {
         if (mode != null) {
             val inMode = pkg in mode.allowedPackages || (approved && group in mode.allowedGroups && group != Group.BLOCKED)
             if (inMode) {
-                val budgetLeft = s.modeRemainingSeconds?.let { it > 0 } ?: true
+                // Paylaştırma: bu uygulamanın (ya da grubunun) profil süresinden en fazla payı
+                val capKey = when {
+                    mode.appCaps.containsKey(pkg) -> pkg
+                    mode.appCaps.containsKey("group:${group.key}") -> "group:${group.key}"
+                    else -> null
+                }
+                val capOk = capKey == null || bucket(usage, "mc:${mode.id}:$capKey") < (mode.appCaps[capKey] ?: 0) * 60L
+                val budgetLeft = (s.modeRemainingSeconds?.let { it > 0 } ?: true) && (mode.budgetMinutes == null || s.modeUsable) && capOk
                 if (budgetLeft) {
                     val countsDaily = mode.countsTowardDaily && group != Group.UNLIMITED
                     if (countsDaily && hasMandatoryBlock()) return AppVerdict(false, mandatoryReason())
                     if (countsDaily && s.remainingSeconds <= 0) return AppVerdict(false, "Günlük süren bitti")
-                    return AppVerdict(true, countsDaily = countsDaily, countsMode = if (mode.budgetMinutes != null) mode.id else null)
+                    return AppVerdict(true, countsDaily = countsDaily, countsMode = if (mode.budgetMinutes != null) mode.id else null,
+                        buckets = if (capKey != null) listOf("mc:${mode.id}:$capKey") else emptyList())
                 }
-                if (mode.othersBlocked) return AppVerdict(false, "${mode.name} süresi bitti")
+                // Profilin süresi bitti / şu an kullanılamıyor: görevden kazandığı ya da verilen normal süreyle devam eder
+                if (mode.othersBlocked) {
+                    val normal = (s.dayLeftSeconds ?: s.remainingSeconds) > 0
+                    if (normal && !hasMandatoryBlock()) return AppVerdict(true, countsDaily = true)
+                    return AppVerdict(false, if (!capOk) "Bu uygulamanın ${mode.name} payı bitti" else "${mode.name} süresi bitti")
+                }
             } else if (mode.othersBlocked) {
                 return AppVerdict(false, "Şu an ${mode.name}")
             }
@@ -775,16 +806,18 @@ class RuleEngine(private val rules: Rules) {
     }
 
     /** Ön planda geçen süreyi sayaçlara ekler. */
-    fun account(usage: DayUsage, pkg: String, v: AppVerdict, seconds: Long): DayUsage {
+    fun account(usage: DayUsage, pkg: String, v: AppVerdict, seconds: Long, nowEpoch: Long = System.currentTimeMillis() / 1000): DayUsage {
         if (seconds <= 0) return usage
         var u = usage.copy(perAppTotal = usage.perAppTotal + (pkg to ((usage.perAppTotal[pkg] ?: 0) + seconds)))
+        // Profil süresinin ilk kullanıldığı an ("ilk açtıktan sonra N dk içinde" / "saat gibi" için)
+        v.countsMode?.let { id -> if (v.allowed && !u.buckets.containsKey("mf:$id")) u = u.copy(buckets = u.buckets + ("mf:$id" to nowEpoch - seconds)) }
         if (v.allowed && v.countsDaily) {
             u = u.copy(
                 countedSeconds = u.countedSeconds + seconds,
                 perAppCounted = u.perAppCounted + (pkg to ((u.perAppCounted[pkg] ?: 0) + seconds)),
             )
         }
-        val raB = v.buckets.filter { it.startsWith("ra:") || it.startsWith("ap:") || it.startsWith("apk:") || it.startsWith("kq:") }
+        val raB = v.buckets.filter { it.startsWith("ra:") || it.startsWith("ap:") || it.startsWith("apk:") || it.startsWith("kq:") || it.startsWith("mc:") }
         if (v.allowed && raB.isNotEmpty()) {
             val m = u.buckets.toMutableMap()
             for (k in raB) m[k] = (m[k] ?: 0) + seconds

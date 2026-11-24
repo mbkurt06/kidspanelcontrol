@@ -43,7 +43,7 @@ object Sync {
                         .getOrElse { Api.get("families?select=timezone&limit=1") }
                 }
                 val kidJob = async(Dispatchers.IO) {
-                    runCatching { Api.get("children?select=name,wallet_daily_max,kiosk_settings,parent_pin_hash,parent_pin_enabled,music_mode,music_folder,profile_nickname,profile_avatar,wifi_settings&id=eq.$child") }
+                    runCatching { Api.get("children?select=name,wallet_daily_max,kiosk_settings,parent_pin_hash,parent_pin_enabled,music_mode,music_folder,profile_nickname,profile_avatar,wifi_settings,orbit_screens&id=eq.$child") }
                         .getOrElse { Api.get("children?select=name&id=eq.$child") }
                 }
                 famJob.await() to kidJob.await()

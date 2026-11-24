@@ -67,6 +67,13 @@ data class Mode(
     /** Hazır profil: open | timed | blocked | kiosk (gün profili bölüm türleri) */
     val builtin: String? = null,
     val kioskMessage: String? = null,
+    /** Profilin kendi süresi ne zaman kullanılabilir: any | within (ilk açılıştan sonra N dk içinde) | range (saatler arası) | clock (saat gibi akar) */
+    val budgetUse: String = "any",
+    val budgetWithinMinutes: Int? = null,
+    val budgetRangeStart: LocalTime? = null,
+    val budgetRangeEnd: LocalTime? = null,
+    /** Profil süresinin paylaştırılması: paket ya da "group:<grup>" → en fazla dk */
+    val appCaps: Map<String, Int> = emptyMap(),
 )
 
 data class ModeSlot(
@@ -218,6 +225,8 @@ data class Rules(
     val assignments: Map<Int, String> = emptyMap(),
     val overrides: List<DayOverride> = emptyList(),
     val grants: List<Grant> = emptyList(),
+    /** Çocuğun temel Orbit ekranları (null = hepsi); durumlar (profil, kilit, görev…) sadece kapatabilir */
+    val orbitScreens: Set<String>? = null,
     /** Uygulamaya özel süreler: gün → (paket → dk). Kullandıkça düşer, genel süreden ayrı. */
     val appGrants: Map<java.time.LocalDate, Map<String, Int>> = emptyMap(),
     /** Kilitliyken geçerli uygulama süreleri: gün → (paket → dk) */

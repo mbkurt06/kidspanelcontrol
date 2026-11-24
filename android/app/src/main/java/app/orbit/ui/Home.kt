@@ -114,7 +114,10 @@ fun OrbitHome(request: Pair<Screen, Long>? = null) {
     }
     // "Hakkında" (sürüm, son güncelleme) her durumda görünür
     // "Hakkında" ve "Wi-Fi" (kilitliyken de internete bağlanabilmek için) her durumda görünür
+    // Çocuğun temel Orbit ekranları (panel → çocuk → Orbit): durumlar sadece daha fazlasını kapatabilir
+    val baseScreens = profileRules.orbitScreens
     fun visible(s: Screen) = s == Screen.ABOUT || s == Screen.WIFI ||
+        (baseScreens == null || s == Screen.TODAY || s.kioskKey() in baseScreens) &&
         (kiosk == null || s == Screen.TODAY || s.kioskKey() in kiosk.screens) &&
             (focusNow == null || focusNow.screens.isEmpty() || s == Screen.TODAY || s.kioskKey() in focusNow.screens) &&
             (taskScreens == null || s == Screen.TODAY || s.kioskKey() in taskScreens) &&

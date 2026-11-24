@@ -65,6 +65,11 @@ export default function ModeEdit() {
         allowed_packages: m!.allowed_packages,
         allowed_groups: m!.allowed_groups,
         budget_minutes: m!.budget_minutes,
+        budget_use: m!.budget_use ?? "any",
+        budget_within_minutes: m!.budget_use === "within" ? m!.budget_within_minutes ?? 60 : null,
+        budget_range_start: m!.budget_use === "range" ? m!.budget_range_start ?? null : null,
+        budget_range_end: m!.budget_use === "range" ? m!.budget_range_end ?? null : null,
+        app_caps: m!.budget_minutes != null ? m!.app_caps ?? {} : {},
         counts_toward_daily: m!.counts_toward_daily,
         others_blocked: m!.others_blocked,
         extra_time_allowed: m!.grant_mode !== "none",
@@ -135,12 +140,6 @@ export default function ModeEdit() {
       start: x.start_time.slice(0, 5), end: x.end_time.slice(0, 5), text: `${x.start_time.slice(0, 5)}–${x.end_time.slice(0, 5)}`, profId: x.profile_id,
     })),
   ];
-  // Saat aralığını buradan değiştir (gün profilindeki bölümün saati)
-  async function setTimes(u: (typeof usedIn)[number], start: string, end: string) {
-    const { error } = await supabase.from(u.table).update({ start_time: start, end_time: end }).eq("id", u.key);
-    if (error) setErr(errorText(error));
-    await fam.reload();
-  }
   const showKiosk = true;
   const showApps = true;
   const showTime = true;
@@ -172,7 +171,7 @@ export default function ModeEdit() {
 
       {showKiosk && (
         <div className="card">
-          <h2>Orbit ekranları <Info>Bu profil sürerken çocuğun Orbit uygulamasında hangi ekranların açık olacağı. Hepsi seçiliyse kısıtlama yok. "Günüm" her zaman açıktır.</Info></h2>
+          <h2>Orbit ekranları <Info>Bu profil sürerken açık kalacak ekranlar; kaldırdıkların bu saatte kapanır (ör. gece Müzik). Çocuğun temel ayarında (çocuk sayfası → Orbit) kapalı olan ekranlar burada seçili olsa da açılmaz: kapalı her zaman kazanır. "Günüm" her zaman açıktır.</Info></h2>
           <ScreenPicker
             value={m.kiosk_screens?.length ? m.kiosk_screens : KIOSK_SCREENS.map(([id]) => id)}
             onChange={(v) => setM({ ...m, kiosk_screens: v })}
@@ -208,31 +207,54 @@ export default function ModeEdit() {
 
       {showTime && (
         <div className="card">
-          <h2>⏱ Saat aralığı ve süre <Info>Saat aralığı: bu profilin geçerli olduğu saatler (gün profilindeki bölüm de aynı anda değişir). Kullanma süresi: bu aralıkta seçili uygulamaların toplam kullanılabileceği dakika; ana ekranda sol halkada görünür.</Info></h2>
-          <span className="pop-label">SAAT ARALIĞI</span>
-          {usedIn.length === 0 && <p className="muted small">Henüz hiçbir saatte kullanılmıyor. Gün profilinde (Kurallar → gün profili) bir bölümün türünü “{m.name || "bu profil"}” yap.</p>}
+          <h2>🕘 Kullanıldığı yerler <Info>Bu profilin hangi gün profillerinde ve saatlerde geçerli olduğu. Saati değiştirmek için satıra dokun: gün profiline gider.</Info></h2>
+          {usedIn.length === 0 && <p className="muted small">Henüz hiçbir saatte kullanılmıyor. Kurallar → gün profilinde bir bölümün türünü “{m.name || "bu profil"}” yap.</p>}
           {usedIn.map((u) => (
-            <div key={u.key} className="stack-s mode-range">
-              <span className="small"><b>{u.prof}</b>{u.name ? ` · ${u.name}` : ""}</span>
-              <div className="row gap-s wrap" style={{ alignItems: "center" }}>
-                <TimeField value={u.start} onChange={(v) => setTimes(u, v, u.end)} label="Başlangıç" />
-                <span className="small muted">–</span>
-                <TimeField value={u.end} onChange={(v) => setTimes(u, u.start, v)} label="Bitiş" />
-              </div>
-            </div>
+            <Link key={u.key} to={`/rules/profile/${u.profId}`} className="row between used-in-row">
+              <span><b>{u.prof}</b> · {u.text}</span>
+              <Icon name="chevron" size={16} />
+            </Link>
           ))}
-          <span className="pop-label">BU ARALIKTA KULLANMA SÜRESİ</span>
-          {<>
-            <label className="check">
-              <input type="checkbox" checked={m.budget_minutes == null} onChange={(e) => setM({ ...m, budget_minutes: e.target.checked ? null : 30 })} />
-              Sınırsız (aralık boyunca istediği kadar)
+        </div>
+      )}
+
+      {showTime && (
+        <div className="card">
+          <h2>⏱ Profilin kendi süresi <Info>Profil başlayınca çocuğa bu profile özel süre gelir (ör. 10 dk). Görevden kazandığı ya da senin verdiğin normal süreyi de aynı saatte kullanabilir: önce profilin süresi düşer, bitince normal süreye geçer. “Yok” seçilirse sadece normal süre kullanılır. Kalan süre ana ekranda sol halkada görünür.</Info></h2>
+          {(() => {
+            const kind = m.budget_minutes != null ? "own" : m.counts_toward_daily ? "none" : "unl";
+            return (
+              <div className="stack-s">
+                <label className="check"><input type="radio" checked={kind === "none"} onChange={() => setM({ ...m, budget_minutes: null, counts_toward_daily: true })} /> Yok: çocuk normal süresini kullanır (görev / elle verilen)</label>
+                <label className="check"><input type="radio" checked={kind === "own"} onChange={() => setM({ ...m, budget_minutes: m.budget_minutes ?? 10, counts_toward_daily: false })} /> Var: bu profile özel süre</label>
+                <label className="check"><input type="radio" checked={kind === "unl"} onChange={() => setM({ ...m, budget_minutes: null, counts_toward_daily: false })} /> Sınırsız: profil boyunca istediği kadar</label>
+              </div>
+            );
+          })()}
+          {m.budget_minutes != null && (<>
+            <label className="field">
+              <span>Süre (dk)</span>
+              <input type="number" min={1} value={m.budget_minutes} onChange={(e) => setM({ ...m, budget_minutes: Math.max(1, Number(e.target.value) || 1) })} />
             </label>
-            {m.budget_minutes != null && (
-              <label className="field">
-                <span>Toplam kullanma süresi (dk)</span>
-                <input type="number" min={0} value={m.budget_minutes} onChange={(e) => setM({ ...m, budget_minutes: Number(e.target.value) })} />
-              </label>
+            <span className="pop-label">NE ZAMAN KULLANILABİLİR</span>
+            <label className="check"><input type="radio" checked={(m.budget_use ?? "any") === "any"} onChange={() => setM({ ...m, budget_use: "any" })} /> Profil boyunca, istediği zaman (kullandıkça düşer)</label>
+            <label className="check"><input type="radio" checked={m.budget_use === "within"} onChange={() => setM({ ...m, budget_use: "within", budget_within_minutes: m.budget_within_minutes ?? 60 })} /> İlk açtıktan sonra … içinde</label>
+            {m.budget_use === "within" && (
+              <div className="row gap-xs wrap" style={{ alignItems: "center", paddingLeft: 28 }}>
+                {[60, 120, 180].map((x) => <button key={x} type="button" className={`chip-btn ${m.budget_within_minutes === x ? "on" : ""}`} onClick={() => setM({ ...m, budget_within_minutes: x })}>{x / 60} sa</button>)}
+                <input className="mini" type="number" min={1} value={m.budget_within_minutes ?? 60} onChange={(e) => setM({ ...m, budget_within_minutes: Math.max(1, Number(e.target.value) || 1) })} aria-label="dk" />
+                <span className="muted tiny">dk</span>
+              </div>
             )}
+            <label className="check"><input type="radio" checked={m.budget_use === "range"} onChange={() => setM({ ...m, budget_use: "range", budget_range_start: m.budget_range_start ?? "07:00", budget_range_end: m.budget_range_end ?? "08:00" })} /> Sadece şu saatler arasında</label>
+            {m.budget_use === "range" && (
+              <div className="row gap-s wrap" style={{ alignItems: "center", paddingLeft: 28 }}>
+                <TimeField value={(m.budget_range_start ?? "07:00").slice(0, 5)} onChange={(v) => setM({ ...m, budget_range_start: v })} label="Başlangıç" />
+                <span className="small muted">–</span>
+                <TimeField value={(m.budget_range_end ?? "08:00").slice(0, 5)} onChange={(v) => setM({ ...m, budget_range_end: v })} label="Bitiş" />
+              </div>
+            )}
+            <label className="check"><input type="radio" checked={m.budget_use === "clock"} onChange={() => setM({ ...m, budget_use: "clock" })} /> Saat gibi: ilk açınca durmadan akar</label>
             <label className="check">
               <input type="checkbox" checked={m.counts_toward_daily} onChange={(e) => setM({ ...m, counts_toward_daily: e.target.checked })} />
               Kullanılan süre günlük süreden de düşsün
@@ -265,6 +287,31 @@ export default function ModeEdit() {
               Profil boyunca diğer uygulamalar kapalı
             </label>
           )}
+          {m.budget_minutes != null && (m.allowed_groups.length > 0 || m.allowed_packages.length > 0) && (() => {
+            const caps = m.app_caps ?? {};
+            const share = Object.keys(caps).length > 0;
+            const keys = [...m.allowed_groups.filter((g) => g !== "always_open").map((g) => `group:${g}`), ...m.allowed_packages];
+            const label = (k: string) => (k.startsWith("group:") ? (k === "group:timed" ? "Kurallara göre (grup)" : `${GROUP_LABEL[k.slice(6) as AppGroup]} (grup)`) : apps.find((a) => a.package === k)?.label ?? k);
+            return (
+              <div className="stack-s">
+                <span className="pop-label">{m.budget_minutes} DK NASIL KULLANILSIN</span>
+                <label className="check"><input type="radio" checked={!share} onChange={() => setM({ ...m, app_caps: {} })} /> Hepsi ortak: seçili uygulamalar {m.budget_minutes} dakikayı birlikte kullanır</label>
+                <label className="check"><input type="radio" checked={share} onChange={() => setM({ ...m, app_caps: Object.fromEntries(keys.slice(0, 1).map((k) => [k, Math.min(m.budget_minutes!, 5)])) })} /> Paylaştır: her birine en fazla</label>
+                {share && keys.map((k) => (
+                  <div key={k} className="row between" style={{ alignItems: "center", gap: 8, paddingLeft: 28 }}>
+                    <span className="small">{label(k)}</span>
+                    <span className="row gap-xs" style={{ alignItems: "center" }}>
+                      <span className="muted tiny">en fazla</span>
+                      <input className="mini" type="number" min={0} max={m.budget_minutes!} value={caps[k] ?? ""} placeholder="—"
+                        onChange={(e) => { const v = Number(e.target.value); const n = { ...caps }; if (v > 0) n[k] = Math.min(v, m.budget_minutes!); else delete n[k]; setM({ ...m, app_caps: n }); }} />
+                      <span className="muted tiny">dk</span>
+                    </span>
+                  </div>
+                ))}
+                {share && <p className="muted tiny" style={{ margin: 0, paddingLeft: 28 }}>Boş = sınır yok. Toplam yine {m.budget_minutes} dakikayı geçmez.</p>}
+              </div>
+            );
+          })()}
           {lists.length > 0 && (
             <div className="row gap-xs wrap">
               <span className="muted small">Kayıtlı listeler:</span>
@@ -302,17 +349,6 @@ export default function ModeEdit() {
           </label>
         </div>
       )}
-
-      <div className="card">
-        <h2>Kullanıldığı yerler</h2>
-        {usedIn.length === 0 && <p className="muted small">Henüz hiçbir gün profilinde kullanılmıyor. Gün profilinde bir bölümün türünü bu profil yaparak kullanabilirsin.</p>}
-        {usedIn.map((u) => (
-          <Link key={u.key} to={`/rules/profile/${u.profId}`} className="row between used-in-row">
-            <span><b>{u.prof}</b> · {u.text}</span>
-            <Icon name="chevron" size={16} />
-          </Link>
-        ))}
-      </div>
 
       <button className="btn primary wide" onClick={save}>
         {saved ? "Kaydedildi" : "Kaydet"}

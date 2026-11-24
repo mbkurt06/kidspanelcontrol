@@ -3,7 +3,7 @@ export type AppGroup = "always_open" | "unlimited" | "timed" | "blocked";
 export type Window = { start: string; end: string };
 
 export type ExtraTarget = "now" | "current" | "pool" | "wallet";
-export type Child = { id: string; family_id: string; name: string; color: string; sort_order: number; grade_level?: number | null; extra_default: ExtraTarget; wallet_daily_max?: number | null;
+export type Child = { id: string; family_id: string; name: string; color: string; sort_order: number; orbit_screens?: string[] | null; grade_level?: number | null; extra_default: ExtraTarget; wallet_daily_max?: number | null;
   closed_grant_mode?: "clock" | "usage" | "within"; closed_grant_within_minutes?: number | null; closed_grant_within_factor?: number | null;
   profile_nickname?: string | null; profile_avatar?: string | null;
   kiosk_settings?: KioskSettings; parent_pin_enabled?: boolean;
@@ -271,6 +271,13 @@ export type Mode = {
   /** Bu profildeyken süre verilince: null = çocuğun varsayılanı, none = kasaya */
   grant_mode?: "none" | "clock" | "usage" | "within" | "open" | null;
   grant_within_minutes?: number | null;
+  /** Profilin kendi süresi ne zaman kullanılabilir */
+  budget_use?: "any" | "within" | "range" | "clock";
+  budget_within_minutes?: number | null;
+  budget_range_start?: string | null;
+  budget_range_end?: string | null;
+  /** Paylaştırma: paket ya da "group:<grup>" → en fazla dk */
+  app_caps?: Record<string, number>;
 };
 
 export type ModeSlot = {

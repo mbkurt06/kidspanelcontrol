@@ -838,7 +838,7 @@ function ChildCard({ child }: { child: Child }) {
             const budget = fam.modes.find((m) => m.id === st.current_mode_id)?.budget_minutes ?? st.mode_left_minutes;
             return (
               <Ring value={st.mode_left_minutes} max={Math.max(budget ?? 1, st.mode_left_minutes, 1)} color={st.mode_left_minutes <= 3 ? "var(--warn)" : child.color} size={80}>
-                <span className="ring-state"><b>{minutesText(st.mode_left_minutes)}</b><small>{st.current_mode_name ?? "profil"}</small></span>
+                <span className="ring-state"><b>{minutesText(st.mode_left_minutes)}</b><small>{st.current_mode_name ?? "profil"}{!hakUnl && hak > 0 ? ` + ${minutesText(hak)}` : ""}</small></span>
               </Ring>
             );
           })() : kioskOn ? (

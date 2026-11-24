@@ -22,9 +22,11 @@ import VideosTab from "./VideosTab";
 import { KioskControl, MODE3_LABEL, MODES, fromMode3, mode3, type Mode3 } from "../components/AppModes";
 import PhoneSettingsTab from "./PhoneSettingsTab";
 import { AppTimeCard, DistributeSheet, raiseCaps, useAppTime } from "../components/AppTime";
+import { ScreenPicker } from "../components/RuleEditor";
+import { KIOSK_SCREENS, type KioskScreen } from "../lib/types";
 import { currentSectionFor, hm, mins, nowBerlin, suggestGroup, timedPossible } from "../lib/sections";
 
-type Tab = "apps" | "program" | "time" | "videos" | "plan" | "timer" | "alarms" | "report" | "grades" | "phone" | "device";
+type Tab = "apps" | "program" | "time" | "videos" | "plan" | "timer" | "alarms" | "report" | "grades" | "orbit" | "phone" | "device";
 
 export default function ChildPage() {
   const { id } = useParams();
@@ -34,7 +36,7 @@ export default function ChildPage() {
   const [tab, setTab] = useState<Tab>(() => {
     let stored: string | null = null;
     try { stored = localStorage.getItem("orbit.childTab") ?? localStorage.getItem(`orbit.childTab.${id}`); } catch { /* yok */ }
-    return stored && ["apps", "program", "time", "videos", "plan", "timer", "alarms", "report", "grades", "phone", "device"].includes(stored) ? stored as Tab : "apps";
+    return stored && ["apps", "program", "time", "videos", "plan", "timer", "alarms", "report", "grades", "orbit", "phone", "device"].includes(stored) ? stored as Tab : "apps";
   });
   // Çocuk değişince aynı sekme açık kalır
   useEffect(() => { try { localStorage.setItem("orbit.childTab", tab); } catch { /* yok */ } }, [tab]);
@@ -149,6 +151,7 @@ export default function ChildPage() {
             ["alarms", "Hatırlatıcılar"],
             ["report", "Rapor"],
             ["grades", "Notlar"],
+            ["orbit", "Orbit"],
             ["phone", "Telefon ayarları"],
             ["device", "Telefon"],
           ] as [Tab, string][]
@@ -167,6 +170,7 @@ export default function ChildPage() {
       {tab === "plan" && <PlanTab childId={child.id} />}
       {tab === "report" && <ReportTab childId={child.id} />}
       {tab === "grades" && <GradesTab childId={child.id} />}
+      {tab === "orbit" && <OrbitScreensTab childId={child.id} />}
       {tab === "timer" && <TimerTab childId={child.id} />}
       {tab === "alarms" && <TimerTab childId={child.id} only="alarms" />}
       {tab === "phone" && <PhoneSettingsTab childId={child.id} />}
@@ -1825,6 +1829,30 @@ function ReportTab({ childId }: { childId: string }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/** Çocuğun temel Orbit ekranları: burada kapalı olan hiçbir durumda (profil, kilit, görev) açılmaz */
+function OrbitScreensTab({ childId }: { childId: string }) {
+  const fam = useFamily();
+  const child = fam.children.find((c) => c.id === childId);
+  const all = KIOSK_SCREENS.map(([id]) => id) as KioskScreen[];
+  const [val, setVal] = useState<KioskScreen[]>(((child?.orbit_screens ?? null) as KioskScreen[] | null) ?? all);
+  const [msg, setMsg] = useState("");
+  async function save(v: KioskScreen[]) {
+    setVal(v);
+    const full = all.every((x) => v.includes(x));
+    const { error } = await supabase.from("children").update({ orbit_screens: full ? null : v }).eq("id", childId);
+    setMsg(error ? errorText(error) : "Kaydedildi · telefona iletiliyor");
+    if (!error) { await sendCommand(childId, "resync", {}); fam.reload(); }
+  }
+  return (
+    <div className="card">
+      <h2>Orbit ekranları <Info>{child?.name ?? "Çocuğun"} Orbit uygulamasında hangi ekranların hiç olacağı (temel ayar). Kullanım profilleri, Tam kilit, görev kilidi ve sayaç bunlardan sadece kapatabilir; burada kapalı olan bir ekranı hiçbir durum açamaz. “Günüm” her zaman açık.</Info></h2>
+      <ScreenPicker value={val} onChange={save} />
+      <p className="muted tiny">{all.every((x) => val.includes(x)) ? "Bütün ekranlar açık." : `${val.length} ekran açık, diğerleri ${child?.name ?? "çocukta"} hiç görünmez.`}</p>
+      {msg && <p className="muted small">{msg}</p>}
     </div>
   );
 }

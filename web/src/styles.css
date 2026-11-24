@@ -2556,3 +2556,4 @@ code.copy { cursor: pointer; word-break: break-all; background: var(--surface-2)
 .kiosk-table td:last-child, .kiosk-table th:last-child { text-align: right; white-space: nowrap; }
 .rec-wait { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(0,0,0,.6); color: #fff; padding: 6px 12px; border-radius: 10px; font-size: 13px; pointer-events: none; }
 .rec-bar { touch-action: none; cursor: pointer; }
+.mode-range { padding: 6px 0; border-bottom: 1px solid var(--line); }

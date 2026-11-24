@@ -170,19 +170,6 @@ export default function ModeEdit() {
         </div>
       </div>
 
-      <div className="card">
-        <h2>🕘 Saat aralığı <Info>Bu profil, gün profillerinde bu saatlerde geçerli. Saati buradan değiştirebilirsin; gün profilindeki bölüm de aynı anda değişir. Yeni bir saat eklemek için gün profilinde bir bölümün türünü bu profil yap.</Info></h2>
-        {usedIn.length === 0 && <p className="muted small">Henüz hiçbir saatte kullanılmıyor. Gün profilinde (Kurallar → gün profili) bir bölümün türünü “{m.name || "bu profil"}” yap.</p>}
-        {usedIn.map((u) => (
-          <div key={u.key} className="row gap-s wrap" style={{ alignItems: "center" }}>
-            <span className="small grow"><b>{u.prof}</b>{u.name ? ` · ${u.name}` : ""}</span>
-            <TimeField value={u.start} onChange={(v) => setTimes(u, v, u.end)} label="Başlangıç" />
-            <span className="small muted">–</span>
-            <TimeField value={u.end} onChange={(v) => setTimes(u, u.start, v)} label="Bitiş" />
-          </div>
-        ))}
-      </div>
-
       {showKiosk && (
         <div className="card">
           <h2>Orbit ekranları <Info>Bu profil sürerken çocuğun Orbit uygulamasında hangi ekranların açık olacağı. Hepsi seçiliyse kısıtlama yok. "Günüm" her zaman açıktır.</Info></h2>
@@ -221,15 +208,28 @@ export default function ModeEdit() {
 
       {showTime && (
         <div className="card">
-          <h2>Süre</h2>
+          <h2>⏱ Saat aralığı ve süre <Info>Saat aralığı: bu profilin geçerli olduğu saatler (gün profilindeki bölüm de aynı anda değişir). Kullanma süresi: bu aralıkta seçili uygulamaların toplam kullanılabileceği dakika; ana ekranda sol halkada görünür.</Info></h2>
+          <span className="pop-label">SAAT ARALIĞI</span>
+          {usedIn.length === 0 && <p className="muted small">Henüz hiçbir saatte kullanılmıyor. Gün profilinde (Kurallar → gün profili) bir bölümün türünü “{m.name || "bu profil"}” yap.</p>}
+          {usedIn.map((u) => (
+            <div key={u.key} className="stack-s mode-range">
+              <span className="small"><b>{u.prof}</b>{u.name ? ` · ${u.name}` : ""}</span>
+              <div className="row gap-s wrap" style={{ alignItems: "center" }}>
+                <TimeField value={u.start} onChange={(v) => setTimes(u, v, u.end)} label="Başlangıç" />
+                <span className="small muted">–</span>
+                <TimeField value={u.end} onChange={(v) => setTimes(u, u.start, v)} label="Bitiş" />
+              </div>
+            </div>
+          ))}
+          <span className="pop-label">BU ARALIKTA KULLANMA SÜRESİ</span>
           {<>
             <label className="check">
               <input type="checkbox" checked={m.budget_minutes == null} onChange={(e) => setM({ ...m, budget_minutes: e.target.checked ? null : 30 })} />
-              Saat aralığı boyunca sınırsız
+              Sınırsız (aralık boyunca istediği kadar)
             </label>
             {m.budget_minutes != null && (
               <label className="field">
-                <span>Bu profilin kendi süresi (dk)</span>
+                <span>Toplam kullanma süresi (dk)</span>
                 <input type="number" min={0} value={m.budget_minutes} onChange={(e) => setM({ ...m, budget_minutes: Number(e.target.value) })} />
               </label>
             )}

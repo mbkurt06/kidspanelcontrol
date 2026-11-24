@@ -6,8 +6,7 @@ import { GROUP_LABEL, type AppGroup, type Mode } from "../lib/types";
 import { Icon } from "../components/Icon";
 import { Info } from "../components/Info";
 import { ScreenPicker } from "../components/RuleEditor";
-import { ClosedModePicker } from "../components/ClosedModePicker";
-import type { ClosedMode } from "../lib/actions";
+import { TimeField } from "../components/DateTime";
 import { KIOSK_SCREENS } from "../lib/types";
 
 type AppOpt = { package: string; label: string };
@@ -128,12 +127,20 @@ export default function ModeEdit() {
   // Bu profili kullanan gün profili bölümleri ve zaman dilimleri
   const usedIn = [
     ...fam.sections.filter((x) => x.mode_id === m.id).map((x) => ({
-      key: x.id, prof: fam.profiles.find((p) => p.id === x.profile_id)?.name ?? "Gün profili", text: `${x.name} · ${x.start_time.slice(0, 5)}–${x.end_time.slice(0, 5)}`, profId: x.profile_id,
+      key: x.id, table: "profile_sections" as const, prof: fam.profiles.find((p) => p.id === x.profile_id)?.name ?? "Gün profili", name: x.name,
+      start: x.start_time.slice(0, 5), end: x.end_time.slice(0, 5), text: `${x.name} · ${x.start_time.slice(0, 5)}–${x.end_time.slice(0, 5)}`, profId: x.profile_id,
     })),
     ...fam.slots.filter((x) => x.mode_id === m.id).map((x) => ({
-      key: x.id, prof: fam.profiles.find((p) => p.id === x.profile_id)?.name ?? "Gün profili", text: `${x.start_time.slice(0, 5)}–${x.end_time.slice(0, 5)}`, profId: x.profile_id,
+      key: x.id, table: "mode_slots" as const, prof: fam.profiles.find((p) => p.id === x.profile_id)?.name ?? "Gün profili", name: "",
+      start: x.start_time.slice(0, 5), end: x.end_time.slice(0, 5), text: `${x.start_time.slice(0, 5)}–${x.end_time.slice(0, 5)}`, profId: x.profile_id,
     })),
   ];
+  // Saat aralığını buradan değiştir (gün profilindeki bölümün saati)
+  async function setTimes(u: (typeof usedIn)[number], start: string, end: string) {
+    const { error } = await supabase.from(u.table).update({ start_time: start, end_time: end }).eq("id", u.key);
+    if (error) setErr(errorText(error));
+    await fam.reload();
+  }
   const showKiosk = true;
   const showApps = true;
   const showTime = true;
@@ -161,6 +168,19 @@ export default function ModeEdit() {
             <button key={c} className={`swatch ${m.color === c ? "on" : ""}`} style={{ background: c }} onClick={() => setM({ ...m, color: c })} aria-label={c} />
           ))}
         </div>
+      </div>
+
+      <div className="card">
+        <h2>🕘 Saat aralığı <Info>Bu profil, gün profillerinde bu saatlerde geçerli. Saati buradan değiştirebilirsin; gün profilindeki bölüm de aynı anda değişir. Yeni bir saat eklemek için gün profilinde bir bölümün türünü bu profil yap.</Info></h2>
+        {usedIn.length === 0 && <p className="muted small">Henüz hiçbir saatte kullanılmıyor. Gün profilinde (Kurallar → gün profili) bir bölümün türünü “{m.name || "bu profil"}” yap.</p>}
+        {usedIn.map((u) => (
+          <div key={u.key} className="row gap-s wrap" style={{ alignItems: "center" }}>
+            <span className="small grow"><b>{u.prof}</b>{u.name ? ` · ${u.name}` : ""}</span>
+            <TimeField value={u.start} onChange={(v) => setTimes(u, v, u.end)} label="Başlangıç" />
+            <span className="small muted">–</span>
+            <TimeField value={u.end} onChange={(v) => setTimes(u, u.start, v)} label="Bitiş" />
+          </div>
+        ))}
       </div>
 
       {showKiosk && (
@@ -219,23 +239,6 @@ export default function ModeEdit() {
             </label>
           </>}
           {b === "timed" && <p className="muted small">Ne kadar süre olacağı, bu profili kullanan her bölümün kendi süre kutusunda yazılır (0 = süre yok, boş = sınırsız).</p>}
-          <div className="field">
-            <span>
-              Bu profildeyken süre verirsem{" "}
-              <Info>Ana ekrandan ya da çocuk sayfasından “hemen” süre verdiğinde, telefon o an bu profildeyse süre buna göre işler. “Varsayılan” seçiliyse çocuğun Kurallar’daki ayarı geçerli olur. Bu profil Tam kilit ya da kilitli saatteyse süre her zaman saat gibi akar.</Info>
-            </span>
-            <div className="chips">
-              <button type="button" className={`chip-btn ${!m.grant_mode ? "on" : ""}`} onClick={() => setM({ ...m, grant_mode: null })}>
-                Varsayılan
-              </button>
-            </div>
-            <ClosedModePicker
-              allowNone
-              noFactor
-              value={{ mode: m.grant_mode ?? ("" as ClosedMode["mode"]), withinMinutes: m.grant_within_minutes ?? 120, withinFactor: null }}
-              onChange={(v) => setM({ ...m, grant_mode: v.mode, grant_within_minutes: v.withinMinutes ?? 120 })}
-            />
-          </div>
           <label className="field">
             <span>Bitmeden önce uyarı (dk, virgülle)</span>
             <input
@@ -248,11 +251,11 @@ export default function ModeEdit() {
 
       {showApps && (
         <div className="card">
-          <h2>Açık olanlar <Info>Grupları veya tek tek uygulamaları bu profile dahil edebilirsin.</Info></h2>
+          <h2>Açık olanlar <Info>Bir gruba basınca o gruptaki bütün uygulamalar bu profilde açılır (ör. “Kurallara göre”: uygulama ayarında Durum'u “Kurallara göre” olanların hepsi). İstersen aşağıdan tek tek de ekleyebilirsin. “Her zaman açık” uygulamalar zaten hep açık ve süreden düşmez.</Info></h2>
           <div className="row gap-xs wrap">
             {(["always_open", "unlimited", "timed"] as AppGroup[]).map((g) => (
               <button key={g} className={`chip ${m.allowed_groups.includes(g) ? "on" : ""}`} onClick={() => toggleGroup(g)}>
-                {GROUP_LABEL[g]}
+                {g === "timed" ? "Kurallara göre" : GROUP_LABEL[g]}
               </button>
             ))}
           </div>

@@ -227,6 +227,8 @@ object Sync {
                 .put("remaining_minutes", (s.remainingSeconds / 60).toInt())
                 .put("day_left_minutes", ((s.dayLeftSeconds ?: s.remainingSeconds) / 60).toInt())
                 .put("current_mode_id", s.activeMode?.id ?: JSONObject.NULL)
+                // Kullanım profilinin kendi süresinden kalan (ör. Sabah 10 dk); yoksa boş
+                .put("mode_left_minutes", s.modeRemainingSeconds?.let { ((it + 59) / 60).toInt() } ?: JSONObject.NULL)
                 .put("current_mode_name", s.activeMode?.name ?: s.section?.section?.name ?: JSONObject.NULL)
                 .put("locked", s.locked).put("lock_reason", lockReason ?: JSONObject.NULL)
                 .put("foreground_package", foreground ?: JSONObject.NULL)

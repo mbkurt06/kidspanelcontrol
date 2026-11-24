@@ -833,7 +833,15 @@ function ChildCard({ child }: { child: Child }) {
           aria-label="Süreyi çarkla ayarla"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (st) { setDial(0); setDialThen("none"); setDialScope(kiosk ? "kiosk" : "normal"); setDialApps(kiosk ? [] : [GEN]); setExtraApps([]); setAlloc({}); setDialOpen(true); } }}
         >
-          {kioskOn ? (
+          {!kioskOn && st?.mode_left_minutes != null && st.current_mode_id ? (() => {
+            // Kullanım profilinin kendi süresi (ör. Sabah 10 dk): genel süre yerine bunu göster
+            const budget = fam.modes.find((m) => m.id === st.current_mode_id)?.budget_minutes ?? st.mode_left_minutes;
+            return (
+              <Ring value={st.mode_left_minutes} max={Math.max(budget ?? 1, st.mode_left_minutes, 1)} color={st.mode_left_minutes <= 3 ? "var(--warn)" : child.color} size={80}>
+                <span className="ring-state"><b>{minutesText(st.mode_left_minutes)}</b><small>{st.current_mode_name ?? "profil"}</small></span>
+              </Ring>
+            );
+          })() : kioskOn ? (
             <Ring value={1} max={1} color="#ff9f43" size={80}>
               {kioskMin
                 ? <span className="ring-state"><b>{minutesText(kioskMin)}</b><small>kiosk</small></span>

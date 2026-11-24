@@ -259,7 +259,7 @@ export default function ModeEdit() {
               <input type="checkbox" checked={m.counts_toward_daily} onChange={(e) => setM({ ...m, counts_toward_daily: e.target.checked })} />
               Kullanılan süre günlük süreden de düşsün
             </label>
-          </>}
+          </>)}
           {b === "timed" && <p className="muted small">Ne kadar süre olacağı, bu profili kullanan her bölümün kendi süre kutusunda yazılır (0 = süre yok, boş = sınırsız).</p>}
           <label className="field">
             <span>Bitmeden önce uyarı (dk, virgülle)</span>

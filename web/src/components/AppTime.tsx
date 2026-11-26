@@ -20,6 +20,9 @@ export function useAppTime(childId: string, st: DeviceStatus | undefined) {
   // ⭐ Sık kullanılanlar (çocuk başına) ve öneri: son 14 günde en çok kullanılanlar
   const [favs, setFavs] = useState<string[]>([]);
   const [topUsed, setTopUsed] = useState<string[]>([]);
+  // İlk yükleme bitene kadar kart kiosk/normal halkayı seçmesin (yanıp sönmesin)
+  const [grantsReady, setGrantsReady] = useState(false);
+  const [appsReady, setAppsReady] = useState(false);
   const day = orbitTodayISO();
   const reload = useCallback(async () => {
     const [g, l] = await Promise.all([
@@ -34,6 +37,7 @@ export function useAppTime(childId: string, st: DeviceStatus | undefined) {
     setTotals(t);
     setTotalsK(tk);
     setLimit((l.data as AppLimit | null) ?? null);
+    setGrantsReady(true);
   }, [childId, day]);
   useEffect(() => { void reload(); }, [reload, st?.updated_at]);
   useEffect(() => {
@@ -59,6 +63,7 @@ export function useAppTime(childId: string, st: DeviceStatus | undefined) {
         .map((a) => ({ package: a.package, label: a.label || a.package }))
         .sort((a, b) => a.label.localeCompare(b.label, "tr"));
       setApps(list);
+      setAppsReady(true);
     });
   }, [childId]);
   const used = (p: string) => Number((st?.grant_used as Record<string, number> | null | undefined)?.[`ap:${p}`] ?? 0);
@@ -91,7 +96,7 @@ export function useAppTime(childId: string, st: DeviceStatus | undefined) {
   const restrictedLeft = limit?.scope === "now" ? Math.max(0, (limit.budget ?? 0) - Number((st?.grant_used as Record<string, number> | null | undefined)?.dl ?? 0)) : 0;
   // Öneri: en çok kullanılan, onaylı, henüz ⭐ olmayan ilk 5
   const suggest = topUsed.filter((p) => !favs.includes(p) && apps.some((a) => a.package === p)).slice(0, 5);
-  return { apps, totals, left, limit, reload, name, used, day, restrictedLeft, favs, toggleFav, suggest, ranked: topUsed, totalsK, leftK, usedK, kioskNow };
+  return { apps, totals, left, limit, reload, name, used, day, restrictedLeft, favs, toggleFav, suggest, ranked: topUsed, totalsK, leftK, usedK, kioskNow, ready: grantsReady && appsReady };
 }
 
 /** Seçilen uygulamalara süre ver / geri al (kullanılanın altına inmez) */

@@ -833,7 +833,9 @@ function ChildCard({ child }: { child: Child }) {
           aria-label="Süreyi çarkla ayarla"
           onClick={(e) => { e.preventDefault(); e.stopPropagation(); if (st) { setDial(0); setDialThen("none"); setDialScope(kiosk ? "kiosk" : "normal"); setDialApps(kiosk ? [] : [GEN]); setExtraApps([]); setAlloc({}); setDialOpen(true); } }}
         >
-          {!kioskOn && st?.mode_left_minutes != null && st.current_mode_id ? (() => {
+          {st && !at.ready ? (
+            <Ring value={0} max={1} color={child.color} size={80}><b className="muted">…</b></Ring>
+          ) : !kioskOn && st?.mode_left_minutes != null && st.current_mode_id ? (() => {
             // Kullanım profilinin kendi süresi (ör. Sabah 10 dk): genel süre yerine bunu göster
             const budget = fam.modes.find((m) => m.id === st.current_mode_id)?.budget_minutes ?? st.mode_left_minutes;
             return (

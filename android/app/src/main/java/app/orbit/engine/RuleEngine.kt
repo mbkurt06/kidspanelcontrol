@@ -732,7 +732,8 @@ class RuleEngine(private val rules: Rules) {
         val approved = app?.approved == true
 
         if (s.parentMode) return AppVerdict(true)
-        if (approved && group == Group.ALWAYS_OPEN) return AppVerdict(true)
+        // Her zaman açık + özel kural (ör. 30 dk): özel kuralın süresi/saati geçerli
+        if (approved && group == Group.ALWAYS_OPEN) return customAppRule(app, pkg, s, usage) ?: AppVerdict(true)
         if (s.free) {
             return if (approved && group != Group.BLOCKED) AppVerdict(true) else AppVerdict(false, if (!approved) "Ebeveyn onayı bekliyor" else "Bu uygulama kapalı")
         }

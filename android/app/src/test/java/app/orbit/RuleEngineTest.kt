@@ -105,6 +105,19 @@ class RuleEngineTest {
     }
 
     @Test
+    fun alwaysOpenAppWithNamedRuleClosesWhenTimeIsUp() {
+        val customId = "rule-30"
+        val app = AppRule("com.capcut", "CapCut", Group.ALWAYS_OPEN, true, null, customId)
+        val r = rules().copy(apps = apps + (app.pkg to app), usageRules = mapOf(customId to AppUsageRule(customId, "timed", 30, false)))
+        val e = RuleEngine(r)
+        var u = DayUsage(day)
+        val v = e.verdict("com.capcut", e.snapshot(at(15), u), u)
+        assertTrue(v.allowed)
+        u = e.account(u, "com.capcut", v, 30 * 60)
+        assertFalse(e.verdict("com.capcut", e.snapshot(at(15, 31), u), u).allowed)
+    }
+
+    @Test
     fun perAppLimit() {
         val e = RuleEngine(rules())
         var u = DayUsage(day)

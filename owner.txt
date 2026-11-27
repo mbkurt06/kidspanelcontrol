@@ -1,0 +1,5 @@
+Success: Device owner set to package ComponentInfo{app.orbit/app.orbit.device.AdminReceiver}
+Active admin set to component {app.orbit/app.orbit.device.AdminReceiver}
+  Device Owner: 
+    admin=ComponentInfo{app.orbit/app.orbit.device.AdminReceiver}
+      testOnlyAdmin=false

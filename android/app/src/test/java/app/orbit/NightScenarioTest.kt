@@ -122,4 +122,23 @@ class NightScenarioTest {
         val e = RuleEngine(rules(listOf(g("t30", 30, next, w("16:28", "23:59")))).copy(commands = listOf(cut)))
         assertEquals(30 * 60L, dayLeft(e, at(22, 0, next), DayUsage(next)))
     }
+    @Test
+    fun movedGrantAfterMidnightIsNotChargedForYesterdaysUse() {
+        // Her gün: Açık saatler 10–21 (bölüm süresi 0, sadece verilen süre), gece kilit. 16:44'te 300 dk verildi (23:59'a kadar)
+        val secs = listOf(
+            Section("acik", "p1", "Açık saatler", t("10:00"), t("21:00"), 0, false, SecRule.TIMED, 0),
+            Section("kilit", "p1", "Tam Kilitli", t("21:00"), t("06:40"), 0, true, SecRule.BLOCKED, 1),
+        )
+        val give = g("g300", 300, day, w("16:44", "23:59"))
+        val open1 = Grant("t1", 435, day, null, null, "Geçici açma · Kapalı saat", window = w("16:44", "23:59"), source = "manual")
+        val e1 = RuleEngine(rules(listOf(give, open1)).copy(sections = secs))
+        var u = use(e1, DayUsage(day), at(17), 165)
+        // Gece yarısı: kalan 135 dk yeni güne (00:00–05:00) aktarıldı; ebeveyn 01:00'e kadar açtı
+        val moved = g("g135", 135, next, w("00:00", "05:00"))
+        val open2 = Grant("t2", 60, next, null, null, "Geçici açma · Kapalı saat", window = w("00:00", "01:00"), source = "manual")
+        val e2 = RuleEngine(rules(listOf(give.copy(settled = true), moved, open2)).copy(sections = secs))
+        assertEquals(135 * 60L, e2.snapshot(at(0, 5, next), u).remainingSeconds)
+        u = use(e2, u, at(0, 5, next), 10)
+        assertEquals(125 * 60L, e2.snapshot(at(0, 16, next), u).remainingSeconds)
+    }
 }

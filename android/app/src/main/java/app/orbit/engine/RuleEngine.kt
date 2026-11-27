@@ -522,7 +522,10 @@ class RuleEngine(private val rules: Rules) {
             // Dünden taşan gece bölümü: kendi süresi (devretme yok)
             val eff = cur.section.budgetMinutes * 60L
             val used = bucket(usage, "s:${cur.key}")
-            poolUsed += (used - eff).coerceAtLeast(0)
+            // Gece yarısından önceki taşma dünün verilen sürelerinden ödendi (kalanları bugüne aktarıldı):
+            // bugünün havuzundan sadece gece yarısından sonraki taşma düşer
+            val before = (used - bucket(usage, "s:${cur.key}~$day")).coerceAtLeast(0)
+            poolUsed += (used - eff).coerceAtLeast(0) - (before - eff).coerceAtLeast(0)
             curLeft = (eff - used).coerceAtLeast(0); curEff = eff
         }
         val poolRaw = poolMin * 60L + winCredit - poolUsed
@@ -614,6 +617,8 @@ class RuleEngine(private val rules: Rules) {
                 }
                 app.dailyLimitMinutes?.let { if ((usage.perAppCounted[pkg] ?: 0) >= it * 60L) return AppVerdict(false, "Bu uygulamanın günlük sınırı doldu") }
                 val b = mutableListOf("s:$k", "sa:$k|$pkg")
+                // Dünden süren bölümde gece yarısından sonraki kullanım ayrıca sayılır (dünkü taşma dünün süresinden ödendi)
+                if (cur.startDay != s.day) b += "s:$k~${s.day}"
                 b += s.windowBuckets
                 if (grp != null) { b += "g:$grp"; b += "sg:$k|$grp" }
                 AppVerdict(true, countsDaily = true, buckets = b)

@@ -35,7 +35,17 @@ fun openness(s: Snapshot, k: KioskNow?): Openness {
     val sec = s.section
     if (s.locked) return Openness(true, s.lockUntil ?: sec?.let { nextAt(it.endsAt) }, null)
     if (s.sectionMode && (sec == null || s.sectionClosed)) return Openness(true, sec?.let { nextAt(it.endsAt) }, null)
-    val end = s.modeEndsAt ?: sec?.endsAt ?: return Openness(false, null, null)
+    val end0 = s.modeEndsAt ?: sec?.endsAt
+    // Ebeveynin "geçici açma"sı bölümün bitişini aşıyorsa telefon o saate kadar açık kalır
+    val tempEnd = Store.rules().grants.filter {
+        it.source == "manual" && it.note?.startsWith("Geçici açma") == true && it.window != null &&
+            (it.validOn == null || it.validOn == s.day) && it.window.contains(s.now)
+    }.maxOfOrNull { it.window!!.end }
+    val end = when {
+        end0 == null -> tempEnd
+        tempEnd != null && end0.isAfter(s.now) && tempEnd.isAfter(end0) -> tempEnd
+        else -> end0
+    } ?: return Openness(false, null, null)
     val ms = nextAt(end)
     return Openness(false, ms, ((ms - System.currentTimeMillis()) / 1000).coerceAtLeast(0))
 }
